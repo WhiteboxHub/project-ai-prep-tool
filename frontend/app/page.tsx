@@ -63,10 +63,10 @@ export default function HomePage() {
             background: "linear-gradient(135deg, #7c3aed, #a78bfa)",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
-            <Brain size={20} color="white" />
+            <img src="/logo.png" alt="WBL Logo" style={{ width: 22, height: 22, objectFit: 'contain' }} />
           </div>
           <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: 20 }}>
-            AI<span style={{ color: "var(--accent-light)" }}>Prep</span>
+            WBL <span style={{ color: "var(--accent-light)" }}>PrepHub</span>
           </span>
         </div>
         <div style={{ display: "flex", gap: 12 }}>
@@ -185,7 +185,7 @@ export default function HomePage() {
         borderTop: "1px solid var(--border)", padding: "24px 48px", textAlign: "center",
         color: "var(--text-muted)", fontSize: 14,
       }}>
-        © 2026 AIPrepPlatform — Built with AI for candidates who want to succeed.
+        © 2026 WBL PrepHub — Built with AI for candidates who want to succeed.
       </footer>
     </div>
   );

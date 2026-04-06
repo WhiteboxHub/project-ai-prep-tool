@@ -11,12 +11,14 @@ class SetupResponse(BaseModel):
     session_id: str
     message: str
     models_available: dict
+    candidate_name: Optional[str] = None
 
 
 class ResumeSummaryResponse(BaseModel):
     session_id: str
     resume_text: str
     word_count: int
+    candidate_name: Optional[str] = None
 
 
 class CaseStudyRequest(BaseModel):

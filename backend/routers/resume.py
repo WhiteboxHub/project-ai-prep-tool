@@ -49,7 +49,16 @@ async def upload_resume(
     if not resume_text or len(resume_text.strip()) < 50:
         raise HTTPException(status_code=422, detail="Resume appears empty or unreadable.")
 
-    # Update candidate record
+    # Try to extract candidate name
+    try:
+        from services.ai_client import generate_text
+        prompt = "Extract the candidate's full name from the beginning of this resume text. Return ONLY the name. Do not include titles or other text. Resume: " + resume_text[:1500]
+        name = await generate_text(prompt, candidate.api_key, candidate.api_provider)
+        candidate.candidate_name = name.strip()
+    except Exception as e:
+        candidate.candidate_name = "Candidate"
+        print("Failed to extract name:", e)
+
     candidate.resume_text = resume_text
     candidate.resume_path = file_path
     db.commit()
@@ -58,6 +67,7 @@ async def upload_resume(
         session_id=session_id,
         resume_text=resume_text,
         word_count=len(resume_text.split()),
+        candidate_name=candidate.candidate_name,
     )
 
 
@@ -71,4 +81,5 @@ async def get_resume_summary(session_id: str, db: Session = Depends(get_db)):
         session_id=session_id,
         resume_text=candidate.resume_text,
         word_count=len(candidate.resume_text.split()),
+        candidate_name=candidate.candidate_name,
     )

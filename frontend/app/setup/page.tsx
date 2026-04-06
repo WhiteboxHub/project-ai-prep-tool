@@ -69,6 +69,7 @@ export default function SetupPage() {
     try {
       const data = await uploadResume(sessionId, resumeFile);
       setWordCount(data.word_count);
+      if (data.candidate_name) localStorage.setItem("candidate_name", data.candidate_name);
       toast.success(`Resume parsed! ${data.word_count} words extracted.`);
       setStep("done");
     } catch (err: any) {
@@ -113,10 +114,10 @@ export default function SetupPage() {
             background: "linear-gradient(135deg, #7c3aed, #a78bfa)",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
-            <Brain size={20} color="white" />
+            <img src="/logo.png" alt="WBL Logo" style={{ width: 22, height: 22, objectFit: 'contain' }} />
           </div>
           <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: 20, color: "var(--text-primary)" }}>
-            AI<span style={{ color: "var(--accent-light)" }}>Prep</span>
+            WBL <span style={{ color: "var(--accent-light)" }}>PrepHub</span>
           </span>
         </Link>
       </nav>

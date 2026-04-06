@@ -13,6 +13,7 @@ class Candidate(Base):
     api_provider = Column(String(255), default="openai")        # "openai" | "gemini"
     resume_text = Column(Text, nullable=True)
     resume_path = Column(String(255), nullable=True)
+    candidate_name = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
