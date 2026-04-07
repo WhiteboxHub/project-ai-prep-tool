@@ -5,14 +5,14 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import Webcam from "react-webcam";
 import { 
-  Send, Brain, Video, CameraOff, Camera, Play, Settings, Download, Loader2
+  Send, Brain, Video, CameraOff, Camera, Play, Settings, Download, Loader2, ArrowLeft, Lightbulb
 } from "lucide-react";
-import { sendQuickChat, getStageQuestions } from "@/lib/api";
+import { sendQuickChat, getStageQuestions, saveProjectBrief, getResumeSummary, getResumeAnalytics } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 
 const STAGES = [
   { id: 1, name: "AI Intro Test" },
-  { id: 2, name: "Topic Mocks" },
+  { id: 2, name: "Mock Section" },
   { id: 3, name: "Hiring Manager" },
   { id: 4, name: "Technical Panel" },
   { id: 5, name: "System Design" },
@@ -20,6 +20,12 @@ const STAGES = [
 ];
 
 export default function RealisticInterviewPage() {
+  const normalizeName = (name: string) => {
+    const bad = ["candidate", "professional experience", "experience", "resume"];
+    const n = (name || "").trim();
+    if (!n || bad.includes(n.toLowerCase())) return "Candidate";
+    return n;
+  };
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [sessionId, setSessionId] = useState("");
@@ -38,6 +44,16 @@ export default function RealisticInterviewPage() {
   const [dynamicStageQuestions, setDynamicStageQuestions] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [transcript, setTranscript] = useState<any[]>([]);
+  const [stageCounts, setStageCounts] = useState<Record<number, number>>({
+    1: 1,   // intro always 1
+    2: 10,  // mock section
+    3: 5,   // hiring manager
+    4: 10,  // technical panel
+    5: 1,   // system design
+    6: 1,   // coding
+  });
+  const [answeredInStage, setAnsweredInStage] = useState(0);
+  const [readyForNextStage, setReadyForNextStage] = useState(false);
   
   // Timer State
   const [timeLeft, setTimeLeft] = useState(120);
@@ -57,16 +73,61 @@ export default function RealisticInterviewPage() {
     const sid = localStorage.getItem("session_id");
     if (!sid) { router.push("/setup"); return; }
     setSessionId(sid);
-    setCandidateName(localStorage.getItem("candidate_name") || "Candidate");
+    const localName = normalizeName(localStorage.getItem("candidate_name") || "");
+    if (localName) setCandidateName(localName);
+    getResumeSummary(sid)
+      .then((data) => {
+        const cleaned = normalizeName(data?.candidate_name || "");
+        if (cleaned && cleaned !== "Candidate") {
+          localStorage.setItem("candidate_name", cleaned);
+          setCandidateName(cleaned);
+        } else {
+          getResumeAnalytics(sid)
+            .then((a) => {
+              const intro = (a?.sample_intro || "") as string;
+              const m = intro.match(/my name is\s+([A-Za-z ]+)\./i);
+              const inferred = normalizeName((m?.[1] || "").trim());
+              if (inferred !== "Candidate") {
+                localStorage.setItem("candidate_name", inferred);
+                setCandidateName(inferred);
+              } else {
+                setCandidateName(localName || "Candidate");
+              }
+            })
+            .catch(() => setCandidateName(localName || "Candidate"));
+        }
+      })
+      .catch(() => setCandidateName(localName || "Candidate"));
   }, [router]);
 
   const handleStart = async () => {
     setIsGenerating(true);
     try {
       const data = await getStageQuestions(sessionId);
+      if (data?.needs_project_brief) {
+        const userBrief = window.prompt(
+          data.briefing_prompt ||
+          "Please share your first project details: problem, stack, your role, and impact."
+        );
+        if (!userBrief || userBrief.trim().length < 40) {
+          toast.error("Please provide a detailed project brief to continue.");
+          return;
+        }
+        await saveProjectBrief(sessionId, userBrief.trim());
+        const refreshed = await getStageQuestions(sessionId);
+        if (!refreshed?.questions || refreshed.questions.length === 0) {
+          throw new Error("Could not generate questions after project brief.");
+        }
+        setDynamicStageQuestions(refreshed.questions);
+        setCurrentStage(1);
+        addBotMessage(refreshed.questions[0]);
+        return;
+      }
       if (data && data.questions && data.questions.length > 0) {
         setDynamicStageQuestions(data.questions);
         setCurrentStage(1);
+        setAnsweredInStage(0);
+        setReadyForNextStage(false);
         addBotMessage(data.questions[0]);
       } else {
         throw new Error("Empty questions returned");
@@ -102,6 +163,8 @@ export default function RealisticInterviewPage() {
       setCurrentStage(next);
       setMessages([]);
       setTimeLeft(120);
+      setAnsweredInStage(0);
+      setReadyForNextStage(false);
       addBotMessage(dynamicStageQuestions[next - 1]);
     } else {
       setCurrentStage(7);
@@ -118,6 +181,9 @@ export default function RealisticInterviewPage() {
     const lastBotMsg = reversedMsgs.find(m => m.sender === "bot")?.content || dynamicStageQuestions[currentStage - 1];
     
     const currentAnswer = answer;
+    const lowerAnswer = currentAnswer.toLowerCase();
+    const unsure = ["not sure", "don't know", "do not know", "no idea", "unable to answer", "can't answer", "cannot answer"]
+      .some((k) => lowerAnswer.includes(k));
     setAnswer("");
     setLoading(true);
 
@@ -126,21 +192,49 @@ export default function RealisticInterviewPage() {
       const data = await sendQuickChat(sessionId, lastBotMsg, currentAnswer, STAGES[currentStage-1].name, prevContext);
       
       // Push AI reply and Evaluation Metadata
-      setMessages(prev => [...prev, { 
+      let replyText = data.reply;
+      if (unsure && data?.evaluation?.improved_answer) {
+        replyText = `I understand you were unsure about this one. An expected answer could be:\n\n${data.evaluation.improved_answer}\n\n${data.reply}`;
+      }
+
+      const target = stageCounts[currentStage] || 1;
+      const newCount = answeredInStage + 1;
+      let finalReply = replyText;
+
+      if (currentStage === 1) {
+        finalReply = `${replyText}\n\nGreat. Intro evaluation is complete. Please click "Next Stage" to continue.`;
+        setReadyForNextStage(true);
+      } else if (newCount >= target) {
+        finalReply = `${replyText}\n\nSection complete (${newCount}/${target}). Click "Next Stage" when ready.`;
+        setReadyForNextStage(true);
+      } else {
+        finalReply = `${replyText}\n\nQuestion ${newCount + 1}/${target}: ${data.reply}`;
+        setReadyForNextStage(false);
+      }
+
+      setMessages(prev => [...prev, {
           sender: "bot", 
-          content: data.reply,
+          content: finalReply,
           evaluation: data.evaluation // Store strict scores in chat
       }]);
+      setAnsweredInStage(newCount);
       
       if (typeof window !== "undefined" && window.speechSynthesis) {
-        const utterance = new SpeechSynthesisUtterance(data.reply);
+        const utterance = new SpeechSynthesisUtterance(replyText);
         window.speechSynthesis.speak(utterance);
       }
-    } catch (err) {
-      toast.error("Failed to process answer.");
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      toast.error(detail || "Failed to process answer.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleNeedHelp = async () => {
+    if (loading || currentStage < 1 || currentStage > 6) return;
+    setAnswer("I am not sure about this answer. Please suggest a good answer.");
+    setTimeout(() => handleSend(), 0);
   };
 
   if (!mounted) return null;
@@ -149,33 +243,28 @@ export default function RealisticInterviewPage() {
     <div className="bg-surface text-on-surface min-h-screen flex flex-col font-['Inter']">
       
       {/* TopNavBar Implementation (as requested) */}
-      <header className="bg-surface/80 backdrop-blur-xl border-b border-outline-variant/30 sticky top-0 z-50 transition-colors">
-        <div className="flex justify-between items-center w-full px-8 py-4 max-w-screen-2xl mx-auto">
+      <header className="bg-surface/90 backdrop-blur-xl border-b border-outline-variant/30 sticky top-0 z-50 transition-colors">
+        <div className="flex justify-between items-center w-full px-6 py-3 max-w-screen-2xl mx-auto">
           <Link href="/dashboard" className="flex items-center gap-3 text-2xl font-bold tracking-tighter text-on-surface no-underline">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-container to-secondary-container flex items-center justify-center shadow-[0_0_20px_rgba(139,92,246,0.3)]">
               <img src="/logo.png" alt="WBL Logo" className="w-6 h-6 object-contain" />
             </div>
             <span>WBL <span className="text-primary-container">PrepHub</span></span>
           </Link>
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium tracking-tight">
-            <Link href="/dashboard" className="text-on-surface-variant hover:text-on-surface transition-colors duration-200">
-              Prep Dashboard
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-outline-variant/40 hover:border-primary-container/50">
+              <ArrowLeft size={14} /> Dashboard
             </Link>
-            <Link href="/case-study" className="text-on-surface-variant hover:text-on-surface transition-colors duration-200">
-              Case Studies
-            </Link>
-            <Link href="/report" className="text-on-surface-variant hover:text-on-surface transition-colors duration-200">
-              My Progress
-            </Link>
-          <Link href="/setup" className="text-on-surface-variant hover:text-on-surface transition-colors duration-200">
-              Settings
-            </Link>
-          </nav>
-          <div className="flex items-center gap-4">
             <Link href="/setup"><Settings className="text-on-surface-variant cursor-pointer hover:text-on-surface transition-colors" size={24} /></Link>
-            <div className="w-10 h-10 rounded-full bg-surface-container-high overflow-hidden border-2 border-primary-container">
-              <div className="w-full h-full bg-gradient-to-br from-primary-container to-secondary-container flex items-center justify-center text-white font-bold shadow-inner">
-                {candidateName ? candidateName.charAt(0).toUpperCase() : "U"}
+            <div className="flex items-center gap-2 px-2 py-1 rounded-full border border-outline-variant/40 bg-surface-container-high">
+              <div className="w-9 h-9 rounded-full bg-surface-container-high overflow-hidden border border-primary-container/60">
+                <div className="w-full h-full bg-gradient-to-br from-primary-container to-secondary-container flex items-center justify-center text-white font-bold shadow-inner">
+                  {candidateName ? candidateName.charAt(0).toUpperCase() : "U"}
+                </div>
+              </div>
+              <div className="hidden md:flex flex-col leading-tight pr-2">
+                <span className="text-[11px] text-on-surface-variant">Candidate</span>
+                <span className="text-sm text-on-surface">{candidateName || "Candidate"}</span>
               </div>
             </div>
           </div>
@@ -249,6 +338,34 @@ export default function RealisticInterviewPage() {
               <p className="text-on-surface-variant mb-12 max-w-xl text-lg leading-relaxed mix-blend-plus-lighter">
                 Experience the "Agentic Aceternity" environment. This hyper-realistic simulation adapts to your explicit resume context and crafts a flawless 6-stage technical loop instantaneously.
               </p>
+              <div className="w-full max-w-2xl mb-8 grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
+                <label className="text-sm">Mock Section Questions
+                  <select className="w-full mt-1 p-2 rounded-lg bg-surface-container-high border border-outline-variant/40" value={stageCounts[2]} onChange={(e) => setStageCounts((p) => ({ ...p, 2: Number(e.target.value) }))}>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={30}>30</option>
+                  </select>
+                </label>
+                <label className="text-sm">Hiring Manager Questions
+                  <select className="w-full mt-1 p-2 rounded-lg bg-surface-container-high border border-outline-variant/40" value={stageCounts[3]} onChange={(e) => setStageCounts((p) => ({ ...p, 3: Number(e.target.value) }))}>
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                  </select>
+                </label>
+                <label className="text-sm">Technical Panel Questions
+                  <select className="w-full mt-1 p-2 rounded-lg bg-surface-container-high border border-outline-variant/40" value={stageCounts[4]} onChange={(e) => setStageCounts((p) => ({ ...p, 4: Number(e.target.value) }))}>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={30}>30</option>
+                  </select>
+                </label>
+                <label className="text-sm">System Design / Coding Questions
+                  <select className="w-full mt-1 p-2 rounded-lg bg-surface-container-high border border-outline-variant/40" value={stageCounts[5]} onChange={(e) => setStageCounts((p) => ({ ...p, 5: Number(e.target.value), 6: Number(e.target.value) }))}>
+                    <option value={1}>1 each</option>
+                    <option value={2}>2 each</option>
+                  </select>
+                </label>
+              </div>
               <button disabled={isGenerating} onClick={handleStart} className="relative group flex gap-3 items-center justify-center bg-surface-container-high border border-outline-variant text-on-surface px-10 py-5 rounded-2xl text-lg font-bold hover:border-primary-container hover:shadow-[0_0_30px_rgba(139,92,246,0.4)] transition-all duration-300 disabled:opacity-50 disabled:transform-none">
                 <div className="absolute inset-0 bg-gradient-to-r from-primary-container/20 to-secondary-container/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                 <span className="relative z-10 flex items-center gap-2">
@@ -325,15 +442,36 @@ export default function RealisticInterviewPage() {
                 {/* Chat History Header */}
                 <div className="p-5 border-b border-outline-variant/30 flex justify-between items-center bg-surface-container-lowest/50 z-10 backdrop-blur-xl">
                   <h3 className="font-bold text-on-surface tracking-wide">Live Feed Context</h3>
-                  <button onClick={nextStage} disabled={loading} className="text-[11px] uppercase tracking-widest font-bold text-primary-container hover:text-white px-3 py-1.5 rounded-lg border border-primary-container/30 hover:bg-primary-container/20 disabled:opacity-50 transition-all">
+                  <button
+                    onClick={nextStage}
+                    disabled={loading}
+                    className={`text-[11px] uppercase tracking-widest font-bold px-3 py-1.5 rounded-lg border transition-all ${
+                      readyForNextStage
+                        ? "text-white border-primary-container bg-primary-container/70 shadow-[0_0_20px_rgba(139,92,246,0.6)] animate-pulse"
+                        : "text-primary-container border-primary-container/30 hover:text-white hover:bg-primary-container/20"
+                    } disabled:opacity-50`}
+                  >
                     Next Stage
                   </button>
+                </div>
+                <div className="px-5 py-3 border-b border-outline-variant/20 text-xs text-on-surface-variant flex items-center gap-2">
+                  <Lightbulb size={14} />
+                  {currentStage === 1 && "Intro round only: just give your self-introduction (name, experience, strengths, goal)."}
+                  {currentStage === 3 && "Hiring Manager: mixed IT-style behavioral + practical project questions."}
+                  {currentStage === 4 && "Technical Panel: strict evaluation with real interview standards."}
+                  {currentStage !== 1 && currentStage !== 3 && currentStage !== 4 && "Answer naturally and with clear structure."}
                 </div>
 
                 {/* Messages Container */}
                 <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 bg-transparent">
                   {messages.map((m, i) => (
                     <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} key={i} className={`max-w-[88%] p-4 text-[14.5px] font-medium leading-relaxed shadow-lg flex flex-col gap-2 ${m.sender === 'user' ? 'self-end bg-gradient-to-br from-primary-container to-secondary-container text-white rounded-t-2xl rounded-bl-2xl border border-white/10' : 'self-start bg-surface-container-lowest/80 text-on-surface rounded-t-2xl rounded-br-2xl border border-outline-variant/50 backdrop-blur-md'}`}>
+                      {m.sender === "bot" && (
+                        <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-on-surface-variant">
+                          <img src="/logo.png" alt="WBL bot" className="w-5 h-5 rounded-full border border-primary-container/40 bg-surface p-0.5" />
+                          WBL Interview Bot
+                        </div>
+                      )}
                       <div>{m.content}</div>
                       
                       {/* Strictly Scored Evaluation Render */}
@@ -362,11 +500,25 @@ export default function RealisticInterviewPage() {
 
                 {/* Input Area */}
                 <div className="p-5 bg-surface-container-lowest/50 backdrop-blur-xl border-t border-outline-variant/30">
+                  {(currentStage === 5 || currentStage === 6) && (
+                    <div className="mb-3 flex gap-2">
+                      {currentStage === 5 && (
+                        <a href="https://excalidraw.com/" target="_blank" rel="noreferrer" className="text-xs px-3 py-2 rounded-lg border border-outline-variant/40 hover:border-primary-container/50">
+                          Open Drawing Board (Excalidraw)
+                        </a>
+                      )}
+                      {currentStage === 6 && (
+                        <a href="https://www.onlinegdb.com/" target="_blank" rel="noreferrer" className="text-xs px-3 py-2 rounded-lg border border-outline-variant/40 hover:border-primary-container/50">
+                          Open Coding Playground
+                        </a>
+                      )}
+                    </div>
+                  )}
                   <div className="relative group">
                     <textarea 
                       value={answer}
                       onChange={(e) => setAnswer(e.target.value)}
-                      placeholder="Compile response..."
+                      placeholder={currentStage === 1 ? "Give your intro..." : "Type your response..."}
                       className="w-full bg-surface-container-high border border-outline-variant/50 rounded-2xl py-4 pl-5 pr-14 text-[15px] font-medium text-on-surface focus:ring-2 focus:ring-primary-container focus:border-transparent transition-all outline-none resize-none shadow-inner"
                       rows={2}
                       disabled={loading}
@@ -376,6 +528,14 @@ export default function RealisticInterviewPage() {
                       <Send size={16} />
                     </button>
                   </div>
+                  <button onClick={handleNeedHelp} disabled={loading} className="mt-2 text-xs px-3 py-2 rounded-lg border border-outline-variant/40 hover:border-primary-container/50">
+                    I am not sure - suggest a good answer
+                  </button>
+                  {messages.length > 0 && (
+                    <p className="mt-2 text-[11px] text-on-surface-variant">
+                      Previous: {messages[messages.length - 1]?.content?.toString().slice(0, 120)}
+                    </p>
+                  )}
                 </div>
 
               </div>

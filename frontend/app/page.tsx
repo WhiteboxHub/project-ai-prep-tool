@@ -5,9 +5,15 @@ import { Brain, Zap, Mic, FileText, ArrowRight, CheckCircle, Star } from "lucide
 
 export default function HomePage() {
   const [mounted, setMounted] = useState(false);
+  const [candidateName, setCandidateName] = useState("");
+  const [hasSession, setHasSession] = useState(false);
   useEffect(() => {
     setMounted(true);
-    if (localStorage.getItem("session_id")) {
+    const sid = localStorage.getItem("session_id");
+    const storedName = localStorage.getItem("candidate_name") || "";
+    setCandidateName(storedName);
+    setHasSession(Boolean(sid));
+    if (sid) {
       window.location.href = "/dashboard";
     }
   }, []);
@@ -69,7 +75,12 @@ export default function HomePage() {
             WBL <span style={{ color: "var(--accent-light)" }}>PrepHub</span>
           </span>
         </div>
-        <div style={{ display: "flex", gap: 12 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          {hasSession && candidateName && (
+            <span style={{ color: "var(--text-secondary)", fontSize: 14 }}>
+              {candidateName}
+            </span>
+          )}
           <Link href="/setup">
             <button className="btn-primary" style={{ padding: "10px 24px" }}>
               Get Started — Free

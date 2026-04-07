@@ -6,6 +6,7 @@ GET  /api/mock-interview/session         — Get existing session with questions
 GET  /api/mock-interview/answers         — Get all evaluated answers for a session
 """
 import json
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -178,7 +179,7 @@ class EvaluateAnswerRequest(BaseModel):
     stage_name: str
     previous_context: str = ""
 
-@router.post("/evaluate-answer")
+@router.post("/evaluate-live")
 async def evaluate_answer_and_followup(request: EvaluateAnswerRequest, db: Session = Depends(get_db)):
     """Evaluate candidate answer structurally and provide 'Ideal Answer', Gap Analysis, and follow-up."""
     candidate = db.query(Candidate).filter(Candidate.session_id == request.session_id).first()
@@ -189,7 +190,8 @@ async def evaluate_answer_and_followup(request: EvaluateAnswerRequest, db: Sessi
     import json
     
     prompt = f"""
-    You are a strict, enterprise-tier Technical Interview Evaluator.
+    You are a supportive but rigorous senior interviewer.
+    Keep the tone constructive, specific, and professional (never robotic or harsh).
     
     Stage: {request.stage_name}
     Previous Context: {request.previous_context}
@@ -198,6 +200,9 @@ async def evaluate_answer_and_followup(request: EvaluateAnswerRequest, db: Sessi
     Candidate Answer: "{request.user_answer}"
     
     Evaluate the candidate's answer structurally. Generate a concise Ideal Answer first, then compare.
+    If the candidate seems unsure, blank, or asks for help, acknowledge that naturally and provide an expected answer before moving forward.
+    For stage "Technical Panel", be stricter and score like a real top-company panel.
+    For stage "AI Intro Test", only evaluate intro quality against intro expectations (name, role, experience, strengths, goal).
     Return ONLY valid JSON matching this exact schema (no markdown formatting):
     {{
       "scores": {{
@@ -211,7 +216,7 @@ async def evaluate_answer_and_followup(request: EvaluateAnswerRequest, db: Sessi
       "weaknesses": ["...", "..."],
       "improved_answer": "...",
       "gap_analysis": ["...", "..."],
-      "follow_up_question": "<A spoken, natural follow up question or acknowledgment (1-3 sentences) acting as the recruiter>"
+      "follow_up_question": "<A spoken, natural follow up question or acknowledgment (1-3 sentences) acting as the interviewer. Do NOT repeat any prior question from Previous Context.>"
     }}
     """
     
@@ -269,7 +274,16 @@ async def get_stage_questions(session_id: str, db: Session = Depends(get_db)):
         .order_by(ProjectExtraction.created_at.desc())
         .first()
     )
-    project_details = extraction.project_details if extraction else "Unknown specific project"
+    project_details = extraction.project_details if extraction else ""
+    if not project_details or len(project_details.strip()) < 60:
+        return {
+            "questions": [],
+            "needs_project_brief": True,
+            "briefing_prompt": (
+                "I could not confidently identify your first major project from your resume. "
+                "Please share a brief (problem, stack, your role, and impact) so I can generate tailored interview rounds."
+            ),
+        }
 
     from services.ai_client import generate_text
     import json
@@ -282,16 +296,27 @@ async def get_stage_questions(session_id: str, db: Session = Depends(get_db)):
     
     Candidate Major Project Highlight:
     {project_details}
+
+    Generation Seed (for question variety): {datetime.utcnow().isoformat()}
     
-    Based on the exact company mentioned in their project highlight or their latest role, craft exactly 6 tailored interview questions as a pure JSON array containing 6 strings.
+    Based on the first project in the project highlight, craft exactly 6 tailored interview questions as a pure JSON array containing 6 strings.
+    Avoid generic wording. Questions must be concrete and tied to this candidate context.
+    The 6 questions must all be different from each other (no repeats, no paraphrased duplicates).
+    Stage rules:
+    1) AI Intro Test: intro only, no technical deep-dive.
+    2) Topic Mocks: technical concept from project stack.
+    3) Hiring Manager: generic IT company style questions; can mix technical + behavioral and must reference project context.
+    4) Technical Panel: realistic, strict, standard-company technical interview style.
+    5) System Design: realistic architecture/tradeoff question tied to project domain.
+    6) Coding: practical coding task tied to project stack; can be solved in 10-20 minutes.
     
     [
-      "Intro: State what you currently know about [Company from resume] based on your vast internal knowledge base context. Ask them to confirm if your understanding of the company is correct, and prompt them to elaborate on their specific role there.",
-      "Topic Mock: Ask a specific conceptual question about [Key Framework from resume like React or Django]",
-      "Hiring Manager: Ask a behavioral question about a time they faced a challenge while building [Exact Project Name from their summary]",
-      "Technical Panel: Ask how they would scale or optimize a specific component of [Exact Project Name]",
-      "System Design: Ask them to architect a system conceptually related to the domain of their recent experience",
-      "Coding: A concise algorithm problem based on [Their primary language]"
+      "AI Intro Test: Ask them to explain the first project in one minute including business problem and measurable impact.",
+      "Topic Mocks: Ask a deep conceptual question tied to one key framework from the project.",
+      "Hiring Manager: Ask a behavioral ownership/conflict tradeoff question from that project context.",
+      "Technical Panel: Ask how they would improve precision/recall and scalability for retrieval/search in that project (semantic, keyword, and hybrid where relevant).",
+      "System Design: Ask for a high-level architecture evolution for scale/reliability based on that project domain.",
+      "Coding: Ask a concise coding/algorithm question that reflects a practical challenge from that project stack."
     ]
     
     Return ONLY valid JSON array of 6 strings. No markdown, no prefixes.
@@ -308,8 +333,24 @@ async def get_stage_questions(session_id: str, db: Session = Depends(get_db)):
         questions = json.loads(response.strip())
         if type(questions) != list or len(questions) < 6:
             raise ValueError("LLM returned malformed question list.")
-            
-        return {"questions": questions[:6]}
+
+        unique_questions = []
+        seen_norm = set()
+        for q in questions:
+            if not isinstance(q, str):
+                continue
+            norm = " ".join(q.lower().split())
+            if norm in seen_norm:
+                continue
+            seen_norm.add(norm)
+            unique_questions.append(q.strip())
+            if len(unique_questions) == 6:
+                break
+
+        if len(unique_questions) < 6:
+            raise ValueError("Insufficient unique questions returned by model.")
+
+        return {"questions": unique_questions, "needs_project_brief": False}
     except Exception as e:
         print("Failed to gen dynamic questions:", e)
         # Fallback to hardcoded generic but functional
@@ -320,5 +361,5 @@ async def get_stage_questions(session_id: str, db: Session = Depends(get_db)):
             "Technical Panel. How would you troubleshoot a failing microservice?",
             "System Design. Design a scalable URL shortener.",
             "Coding. How would you detect a cycle in a directed graph?"
-        ]}
+        ], "needs_project_brief": False}
 

@@ -18,6 +18,11 @@ class ExtractRequest(BaseModel):
     session_id: str
 
 
+class ProjectBriefRequest(BaseModel):
+    session_id: str
+    project_brief: str
+
+
 @router.post("/extract-project")
 async def extract_project(request: ExtractRequest, db: Session = Depends(get_db)):
     """
@@ -44,6 +49,26 @@ async def extract_project(request: ExtractRequest, db: Session = Depends(get_db)
     db.commit()
 
     return {"session_id": request.session_id, "project_details": project_details}
+
+
+@router.post("/project-brief")
+async def save_project_brief(request: ProjectBriefRequest, db: Session = Depends(get_db)):
+    """
+    Save a user-provided project brief when resume extraction is insufficient.
+    """
+    candidate = db.query(Candidate).filter(Candidate.session_id == request.session_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    if not request.project_brief or len(request.project_brief.strip()) < 40:
+        raise HTTPException(status_code=400, detail="Project brief is too short. Please add more detail.")
+
+    extraction = ProjectExtraction(
+        session_id=request.session_id,
+        project_details=request.project_brief.strip(),
+    )
+    db.add(extraction)
+    db.commit()
+    return {"session_id": request.session_id, "project_details": extraction.project_details}
 
 
 @router.get("/latest-project")

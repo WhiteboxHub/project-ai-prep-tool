@@ -13,6 +13,7 @@ You are a senior technical interviewer preparing interview questions for a candi
 
 Based on the resume and project details below, generate exactly 10 interview questions 
 with increasing difficulty.
+Questions must be specific, natural, and non-repetitive. Do not repeat or paraphrase the same question.
 
 Focus on these question types:
 - 2 Project-related questions (explain your project, what was your role)
@@ -44,6 +45,7 @@ Candidate Project Details:
 
 ANSWER_EVALUATION_PROMPT = """
 You are a senior technical interviewer evaluating a candidate's answer.
+Use a constructive, coaching tone. Be specific and actionable, not generic.
 
 Question:
 {question}

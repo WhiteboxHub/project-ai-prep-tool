@@ -105,6 +105,14 @@ export async function getIntroTraining(sessionId: string) {
   return res.data;
 }
 
+export async function saveProjectBrief(sessionId: string, projectBrief: string) {
+  const res = await api.post("/api/resume/project-brief", {
+    session_id: sessionId,
+    project_brief: projectBrief,
+  });
+  return res.data;
+}
+
 // ─── Mock Interview ───────────────────────────────────────────
 export async function startMockInterview(sessionId: string) {
   const res = await api.post("/api/mock-interview/start", { session_id: sessionId });
@@ -156,7 +164,7 @@ export async function getStageQuestions(sessionId: string) {
 }
 
 export async function sendQuickChat(sessionId: string, currentQuestion: string, userAnswer: string, stageName: string, previousContext: string = "") {
-  const res = await api.post("/api/mock-interview/evaluate-answer", {
+  const res = await api.post("/api/mock-interview/evaluate-live", {
     session_id: sessionId,
     current_question: currentQuestion,
     user_answer: userAnswer,

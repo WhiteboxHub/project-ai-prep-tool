@@ -15,6 +15,7 @@ export default function ReportPage() {
   const [sessionId, setSessionId] = useState("");
   const [content, setContent] = useState("");
   const [summary, setSummary] = useState<any>(null);
+  const [candidateName, setCandidateName] = useState("");
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
 
@@ -22,6 +23,7 @@ export default function ReportPage() {
     const sid = localStorage.getItem("session_id");
     if (!sid) { router.push("/setup"); return; }
     setSessionId(sid);
+    setCandidateName(localStorage.getItem("candidate_name") || "");
     // Try to load existing report
     getLatestReport(sid)
       .then((d) => {
@@ -71,6 +73,11 @@ export default function ReportPage() {
           </span>
         </Link>
         <div style={{ display: "flex", gap: 10 }}>
+          {candidateName && (
+            <span style={{ color: "var(--text-secondary)", fontSize: 14, alignSelf: "center", marginRight: 8 }}>
+              {candidateName}
+            </span>
+          )}
           {content && (
             <button className="btn-secondary" onClick={handleDownload} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", fontSize: 13 }}>
               <Download size={14} /> Download Report

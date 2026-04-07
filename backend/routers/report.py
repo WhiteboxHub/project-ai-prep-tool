@@ -18,6 +18,14 @@ class ReportRequest(BaseModel):
     session_id: str
 
 
+def _normalize_report_payload(data: dict) -> dict:
+    normalized = {}
+    for key, value in data.items():
+        clean_key = str(key).strip().replace("\n", "").replace("\r", "").replace('"', "")
+        normalized[clean_key] = value
+    return normalized
+
+
 @router.post("/generate")
 async def generate_report(request: ReportRequest, db: Session = Depends(get_db)):
     """
@@ -78,7 +86,19 @@ async def generate_report(request: ReportRequest, db: Session = Depends(get_db))
         elif raw.startswith("```"):
             raw = raw.split("```")[1]
             
-        data = json.loads(raw.strip())
+        data = _normalize_report_payload(json.loads(raw.strip()))
+
+        if "overall_score" not in data:
+            score = 0
+            if answer_scores:
+                score = int(round((sum(answer_scores) / len(answer_scores)) * 10))
+            data["overall_score"] = str(score)
+        if "hire_readiness" not in data:
+            numeric = int(str(data.get("overall_score", "0")).strip() or 0)
+            data["hire_readiness"] = "High" if numeric >= 75 else "Medium" if numeric >= 50 else "Low"
+        data.setdefault("top_strengths", ["Good consistency across interview attempts."])
+        data.setdefault("top_weaknesses", ["Need more role-specific depth in some answers."])
+        data.setdefault("improvement_plan", ["Practice project-centric STAR responses daily."])
         
         report_content = f"""
 ## 1. Interview Readiness Verdict

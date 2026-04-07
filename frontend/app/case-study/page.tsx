@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { generateCaseStudy, getTopics, getCaseStudyHistory, generateCaseStudyFromTemplate, getLatestProject, extractProject } from "@/lib/api";
+import { generateCaseStudy, getTopics, getCaseStudyHistory, generateCaseStudyFromTemplate, getLatestProject, extractProject, saveProjectBrief } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import toast from "react-hot-toast";
 import Link from "next/link";
@@ -52,6 +52,27 @@ export default function CaseStudyPage() {
         } catch (err) {
           toast.dismiss("extract");
           throw new Error("Failed to extract project from resume. Did you upload one?");
+        }
+
+        const inferred = projectDetails.slice(0, 220).replace(/\s+/g, " ");
+        const ok = window.confirm(
+          `This is what I understood from your first project:\n\n${inferred}...\n\nProceed with this context?`
+        );
+        if (!ok) {
+          const userBrief = window.prompt(
+            "Please explain your project and company briefly (problem, users, workflow, stack, your role)."
+          );
+          if (!userBrief || userBrief.trim().length < 40) {
+            throw new Error("Please provide a more detailed project/company brief.");
+          }
+          await saveProjectBrief(sessionId, userBrief.trim());
+          projectDetails = userBrief.trim();
+          const confirmAgain = window.confirm(
+            `Updated understanding:\n\n${projectDetails.slice(0, 220)}...\n\nProceed now?`
+          );
+          if (!confirmAgain) {
+            throw new Error("Generation canceled by user.");
+          }
         }
         
         data = await generateCaseStudyFromTemplate(sessionId, projectDetails, templateKey);

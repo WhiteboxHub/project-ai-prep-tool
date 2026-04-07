@@ -24,6 +24,7 @@ export default function IntroPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
+  const [candidateName, setCandidateName] = useState("");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -35,6 +36,7 @@ export default function IntroPage() {
     if (!sid) { router.push("/setup"); return; }
     setSessionId(sid);
     setProvider(prov);
+    setCandidateName(localStorage.getItem("candidate_name") || "");
     getIntroHistory(sid).then((d) => setHistory(d.attempts || [])).catch(() => {});
   }, [router]);
 
@@ -81,10 +83,19 @@ export default function IntroPage() {
     setLoading(true);
     try {
       const data = await evaluateIntro(sessionId, audioBlob);
-      setResult(data);
+      const normalized = {
+        ...data,
+        score: Math.round((data?.overall_score || 0) * 10),
+        passed: data?.status === "PASS",
+        scores_breakdown: data?.scores || {},
+        feedback: (data?.suggestions || []).join(" "),
+        strengths: data?.status === "PASS" ? "Clear overall interview-ready introduction structure." : "",
+        improvements: (data?.suggestions || []).join(" "),
+      };
+      setResult(normalized);
       const h = await getIntroHistory(sessionId);
       setHistory(h.attempts || []);
-      toast.success(data.passed ? "🎉 You Passed!" : "Keep practicing — you'll get there!");
+      toast.success(normalized.passed ? "🎉 You Passed!" : "Keep practicing — you'll get there!");
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Evaluation failed. Please try again.");
     } finally {
@@ -124,6 +135,9 @@ export default function IntroPage() {
             <ChevronLeft size={14} /> Dashboard
           </button>
         </Link>
+        {candidateName && (
+          <span style={{ color: "var(--text-secondary)", fontSize: 14 }}>{candidateName}</span>
+        )}
       </nav>
 
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "48px 24px" }}>

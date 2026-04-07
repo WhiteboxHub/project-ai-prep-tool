@@ -18,6 +18,13 @@ import {
 } from "lucide-react";
 
 export default function DashboardPage() {
+  const normalizeName = (name: string) => {
+    const bad = ["candidate", "professional experience", "experience", "resume"];
+    const n = (name || "").trim();
+    if (!n) return "";
+    if (bad.includes(n.toLowerCase())) return "";
+    return n;
+  };
   const router = useRouter();
   const [sessionId, setSessionId] = useState("");
   const [provider, setProvider] = useState("openai");
@@ -27,6 +34,13 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState<any>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const normalizeProjects = (projects: any[] = []) =>
+    projects.map((p) => ({
+      company: p?.company || "",
+      name: p?.name || "",
+      date: p?.date || "",
+      desc: (p?.desc || "").split("\n").slice(0, 2).join(" ").trim(),
+    }));
 
   useEffect(() => {
     const sid = localStorage.getItem("session_id");
@@ -42,22 +56,24 @@ export default function DashboardPage() {
       .then((data) => {
         setWordCount(data.word_count);
         setResumePreview(data.resume_text.slice(0, 400));
-        if (data.candidate_name) {
-          localStorage.setItem("candidate_name", data.candidate_name);
-          setCandidateName(data.candidate_name);
+        const cleaned = normalizeName(data.candidate_name || "");
+        if (cleaned) {
+          localStorage.setItem("candidate_name", cleaned);
+          setCandidateName(cleaned);
         } else {
-          setCandidateName(localStorage.getItem("candidate_name") || "");
+          setCandidateName(normalizeName(localStorage.getItem("candidate_name") || ""));
         }
         setLoading(false);
       })
       .catch(() => {
-        setCandidateName(localStorage.getItem("candidate_name") || "");
+        setCandidateName(normalizeName(localStorage.getItem("candidate_name") || ""));
         setLoading(false);
       });
 
     // Load rich analytics
     getResumeAnalytics(sid)
       .then((data) => {
+        if (data?.projects) data.projects = normalizeProjects(data.projects);
         setAnalytics(data);
         setAnalyticsLoading(false);
       })
@@ -334,6 +350,20 @@ export default function DashboardPage() {
                 <div
                   style={{ display: "flex", flexDirection: "column", gap: 16 }}
                 >
+                  {analytics.projects && analytics.projects.length > 0 && (
+                    <div
+                      style={{
+                        background: "rgba(124,58,237,0.12)",
+                        border: "1px solid rgba(139,92,246,0.35)",
+                        padding: 14,
+                        borderRadius: 12,
+                        fontSize: 13,
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      Primary project focus is derived from your first major resume project and used for interview guidance.
+                    </div>
+                  )}
                   {analytics.projects && analytics.projects.length > 0 ? (
                     analytics.projects.map((proj: any, idx: number) => (
                       <div
@@ -354,7 +384,7 @@ export default function DashboardPage() {
                           }}
                         >
                           <h4 style={{ fontSize: 15, fontWeight: 600 }}>
-                            {proj.name}
+                            {proj.company ? `${proj.company} — ${proj.name || ""}` : (proj.name || "")}
                           </h4>
                           <span
                             style={{
@@ -364,9 +394,7 @@ export default function DashboardPage() {
                               padding: "2px 8px",
                               borderRadius: 10,
                             }}
-                          >
-                            {proj.date}
-                          </span>
+                          >{proj.date || ""}</span>
                         </div>
                         <p
                           style={{
@@ -375,7 +403,7 @@ export default function DashboardPage() {
                             lineHeight: 1.5,
                           }}
                         >
-                          {proj.desc}
+                          {proj.desc || ""}
                         </p>
                       </div>
                     ))
@@ -431,7 +459,7 @@ export default function DashboardPage() {
                   <Zap size={16} color="var(--success)" /> Detected Keywords
                 </h3>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {analytics.keywords &&
+                  {analytics.keywords && analytics.keywords.length > 0 ? (
                     analytics.keywords.map((kw: string, i: number) => (
                       <span
                         key={i}
@@ -447,7 +475,12 @@ export default function DashboardPage() {
                       >
                         {kw}
                       </span>
-                    ))}
+                    ))
+                  ) : (
+                    <span style={{ color: "var(--text-muted)", fontSize: 13 }}>
+                      No keywords extracted yet. Re-upload resume for richer analysis.
+                    </span>
+                  )}
                 </div>
               </div>
 

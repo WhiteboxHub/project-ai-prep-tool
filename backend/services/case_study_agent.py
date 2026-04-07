@@ -19,6 +19,16 @@ Your goal is to write a deeply technical case study that keeps the EXACT technic
 2. COMPANY & NAMES: You MUST extract the Candidate's most recent/current Company Name and Product/Project Name from the Resume below. Completely replace "XYZ Corp" and any template placeholder names with the Candidate's REAL Company Name.
 3. ADAPTATION: Write the case study as if the Candidate built this exact Template system at their REAL company.
 4. HEADINGS: Use EVERY section heading provided in the Template's structure.
+5. DOMAIN STORY ADAPTATION (MANDATORY): infer the most likely business workflow from project/company context and adapt examples accordingly.
+   - If context looks like healthcare/insurance, use scenarios like policy enquiry, claims, billing, authorization workflows.
+   - If context looks like recruitment/hr-tech, use scenarios like resume screening, best-fit ranking, recruiter feedback loops.
+   - For other domains, adapt scenarios to that domain explicitly.
+6. Add a short section named "Context Validation" near the top:
+   - "What I understood about your project/company"
+   - "Assumptions I used"
+   Keep this concise and concrete.
+7. For agentic template, include named agents relevant to domain (e.g., resume analyst agent, policy query agent, claim triage agent, feedback agent).
+8. Keep it interview-ready and practical; avoid generic template-only text.
 
 Case Study Template (USE THIS FOR HEADINGS, STRUCTURE, & THE SYSTEM'S CORE ARCHITECTURE):
 {template_text}
