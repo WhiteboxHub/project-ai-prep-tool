@@ -7,127 +7,11 @@ import toast from "react-hot-toast";
 import Webcam from "react-webcam";
 import { 
   Send, Video, CameraOff, Camera, Play, Settings, Download, Loader2, ArrowLeft, Lightbulb, Volume2, VolumeX,
-  Sparkles, MessageSquare, Mic, MicOff, UserRound, Headphones, PenSquare, Code2, HelpCircle, Copy
+  Sparkles, MessageSquare, Mic, MicOff, UserRound, Headphones, PenSquare, Code2, HelpCircle
 } from "lucide-react";
 import { sendQuickChat, getStageQuestions, saveProjectBrief, getResumeSummary, getResumeAnalytics } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/Navbar";
-import ReactMarkdown from "react-markdown";
-import type { Components } from "react-markdown";
-
-const CHAT_GREEN = "#008a3e";
-const CHAT_BG = "#1a1a1a";
-const CHAT_ASSISTANT_SURFACE = "#252525";
-
-function InterviewCodeBlock({ code, lang }: { code: string; lang: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    void navigator.clipboard.writeText(code);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
-  };
-  return (
-    <div className="my-5 overflow-hidden rounded-xl border border-white/[0.08] bg-[#2d2d2d]">
-      <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-3 py-2.5 text-xs text-white/50">
-        <span className="inline-flex items-center gap-2 font-medium text-white/70">
-          <Code2 size={14} className="shrink-0 text-white/55" aria-hidden />
-          <span className="capitalize">{lang || "code"}</span>
-        </span>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-white/65 transition-colors hover:bg-white/10 hover:text-white"
-        >
-          <Copy size={14} className="shrink-0" aria-hidden />
-          {copied ? "Copied" : "Copy"}
-        </button>
-      </div>
-      <pre className="overflow-x-auto p-4 text-[13px] leading-relaxed">
-        <code className="font-mono text-[#d4d4d4]">{code}</code>
-      </pre>
-    </div>
-  );
-}
-
-const interviewChatMarkdownComponents: Partial<Components> = {
-  p: ({ children, ...props }) => (
-    <p className="mb-4 text-[15px] leading-[1.7] text-[#cccccc] last:mb-0" {...props}>
-      {children}
-    </p>
-  ),
-  strong: ({ children, ...props }) => (
-    <strong className="font-semibold text-white" {...props}>
-      {children}
-    </strong>
-  ),
-  em: ({ children, ...props }) => (
-    <em className="italic text-[#d0d0d0]" {...props}>
-      {children}
-    </em>
-  ),
-  ul: ({ children, ...props }) => (
-    <ul className="mb-4 list-disc space-y-2 pl-5 text-[#cccccc] last:mb-0 marker:text-white/75" {...props}>
-      {children}
-    </ul>
-  ),
-  ol: ({ children, ...props }) => (
-    <ol className="mb-4 list-decimal space-y-2 pl-5 text-[#cccccc] last:mb-0 marker:text-white/55" {...props}>
-      {children}
-    </ol>
-  ),
-  li: ({ children, ...props }) => (
-    <li className="leading-relaxed" {...props}>
-      {children}
-    </li>
-  ),
-  h1: ({ children, ...props }) => (
-    <h3 className="mb-3 mt-7 text-xl font-semibold tracking-tight text-white first:mt-0" {...props}>
-      {children}
-    </h3>
-  ),
-  h2: ({ children, ...props }) => (
-    <h3 className="mb-3 mt-6 flex items-center gap-2 text-lg font-semibold tracking-tight text-white first:mt-0" {...props}>
-      <span className="inline-block h-2 w-2 rotate-45 bg-sky-500/90 shadow-[0_0_8px_rgba(56,189,248,0.45)]" aria-hidden />
-      {children}
-    </h3>
-  ),
-  h3: ({ children, ...props }) => (
-    <h3 className="mb-2 mt-5 flex items-center gap-2 text-base font-semibold text-white first:mt-0" {...props}>
-      <span className="inline-block h-1.5 w-1.5 rotate-45 bg-sky-500/90" aria-hidden />
-      {children}
-    </h3>
-  ),
-  hr: () => <hr className="my-6 border-0 border-t border-[#333333]" />,
-  blockquote: ({ children, ...props }) => (
-    <blockquote className="my-4 border-l-2 pl-4 text-[#bbbbbb]" style={{ borderColor: `${CHAT_GREEN}99` }} {...props}>
-      {children}
-    </blockquote>
-  ),
-  a: ({ children, href, ...props }) => (
-    <a
-      href={href}
-      className="text-white underline decoration-dotted decoration-white/40 underline-offset-[3px] transition-colors hover:decoration-white/70"
-      {...props}
-    >
-      {children}
-    </a>
-  ),
-  pre: ({ children }) => <>{children}</>,
-  code: ({ className, children, ...props }) => {
-    const inline = !className;
-    if (inline) {
-      return (
-        <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[0.9em] text-[#e8e8e8]" {...props}>
-          {children}
-        </code>
-      );
-    }
-    const match = /language-(\w+)/.exec(className || "");
-    const lang = match?.[1] || "code";
-    const codeString = String(children).replace(/\n$/, "");
-    return <InterviewCodeBlock code={codeString} lang={lang} />;
-  },
-};
 
 const STAGES = [
   { id: 1, name: "AI Intro Test" },
@@ -181,14 +65,6 @@ export default function RealisticInterviewPage() {
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [isRecordingAnswer, setIsRecordingAnswer] = useState(false);
   const speechRecognitionRef = useRef<any>(null);
-  const answerTextareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    const el = answerTextareaRef.current;
-    if (!el) return;
-    el.style.height = "0px";
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, 48), 200)}px`;
-  }, [answer]);
 
   // Timer State
   const [timeLeft, setTimeLeft] = useState(120);
@@ -661,203 +537,195 @@ export default function RealisticInterviewPage() {
             </motion.div>
           ) : (
             <motion.div key="stageActive" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="grid grid-cols-1 items-start gap-6 xl:col-span-12 xl:grid-cols-12 xl:gap-8">
-              <div className="order-1 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#111118]/95 shadow-2xl backdrop-blur-xl xl:col-span-8 xl:h-[min(72vh,820px)] xl:max-h-[calc(100vh-9rem)]">
-                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.08] px-4 py-3 md:px-5">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06]">
-                      <MessageSquare size={18} className="text-[#008a3e]" aria-hidden />
+              <div className="order-1 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-3xl border border-outline-variant/35 bg-surface-container-high/45 shadow-2xl backdrop-blur-xl xl:col-span-8 xl:min-h-[620px]">
+                <div className="flex shrink-0 flex-col gap-6 border-b border-outline-variant/25 bg-surface-container-lowest/40 px-6 py-8 sm:flex-row sm:items-start sm:justify-between sm:gap-7 md:px-8 md:py-9">
+                  <div className="flex min-w-0 gap-4 md:gap-5">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-secondary-container/40 bg-secondary-container/25 md:h-[3.25rem] md:w-[3.25rem]">
+                      <MessageSquare size={22} className="text-primary-container" aria-hidden />
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="font-['Outfit'] text-sm font-semibold tracking-tight text-white">Conversation</h3>
-                      <p className="truncate text-xs text-white/45">Enter to send · Shift+Enter new line</p>
+                    <div className="min-w-0 space-y-3.5 pt-0.5 md:space-y-4">
+                      <h3 className="font-['Outfit'] text-lg font-semibold text-on-surface md:text-xl">Conversation</h3>
+                      <p className="text-sm leading-relaxed text-on-surface-variant md:text-[15px] md:leading-relaxed">Type or use the mic — speech becomes text in the box.</p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={nextStage}
-                    disabled={loading}
-                    className={`shrink-0 rounded-full border px-4 py-2 text-center text-[10px] font-bold uppercase tracking-wide transition-all ${
-                      readyForNextStage
-                        ? "border-[#008a3e] bg-[#008a3e] text-white shadow-md shadow-[#008a3e]/25"
-                        : "border-white/15 bg-white/[0.06] text-white/80 hover:bg-white/10"
-                    } disabled:opacity-45`}
-                  >
+                  <button type="button" onClick={nextStage} disabled={loading} className={`w-full shrink-0 whitespace-normal rounded-xl border px-6 py-4 text-center text-[11px] font-bold uppercase leading-snug tracking-wide transition-all sm:w-auto sm:min-w-[8.5rem] sm:self-start md:px-7 ${readyForNextStage ? "border-primary-container bg-primary-container text-on-primary-container shadow-lg ring-1 ring-primary-container/50" : "border-primary-container/35 bg-surface-container-high/50 text-primary-container hover:bg-primary-container/15"} disabled:opacity-45`}>
                     Next stage
                   </button>
                 </div>
-
-                <div className="shrink-0 px-4 pt-2 pb-1 md:px-5">
-                  <div className="flex items-start gap-2 rounded-lg border border-primary-container/25 bg-primary-container/[0.12] px-3 py-2">
-                    <Lightbulb size={15} className="mt-0.5 shrink-0 text-primary-container" aria-hidden />
-                    <p className="min-w-0 text-xs leading-snug text-white/65">
-                      {currentStage === 1 && "Intro only: your name, background, strengths, and goal."}
-                      {currentStage === 3 && "Hiring manager: behavioral and project-focused questions."}
-                      {currentStage === 4 && "Technical panel: rigorous, interview-standard depth."}
-                      {currentStage !== 1 && currentStage !== 3 && currentStage !== 4 && "Answer with a clear structure."}
-                    </p>
-                  </div>
+                <div className="mx-5 mb-2 mt-7 flex shrink-0 items-start gap-4 rounded-xl border border-primary-container/20 bg-primary-container/8 px-5 py-5 md:mx-8 md:mb-3 md:mt-9 md:gap-5 md:px-7 md:py-6">
+                  <Lightbulb size={20} className="mt-0.5 shrink-0 text-primary-container" aria-hidden />
+                  <p className="min-w-0 text-sm leading-relaxed text-on-surface-variant md:text-[15px] md:leading-relaxed">
+                    {currentStage === 1 && "Intro only: your name, background, strengths, and goal."}
+                    {currentStage === 3 && "Hiring manager: behavioral and project-focused questions."}
+                    {currentStage === 4 && "Technical panel: rigorous, interview-standard depth."}
+                    {currentStage !== 1 && currentStage !== 3 && currentStage !== 4 && "Answer with a clear structure."}
+                  </p>
                 </div>
-
-                <div className="flex min-h-0 flex-1 flex-col px-3 pb-2 pt-2 md:px-4">
-                  <div
-                    className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/8"
-                    style={{ backgroundColor: CHAT_BG }}
-                  >
-                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-5 md:space-y-5 md:px-5 md:py-6">
-                      {messages.length === 0 && !loading && (
-                        <p className="text-center text-sm text-white/35">Messages will appear here.</p>
-                      )}
-                      {messages.map((m, i) => (
-                        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} key={i} className="w-full min-w-0">
-                          {m.sender === "user" ? (
-                            <div className="flex w-full justify-end">
-                              <div
-                                className="inline-block max-w-[min(90%,32rem)] rounded-2xl rounded-br-md px-4 py-2.5 text-left text-[15px] leading-relaxed text-white shadow-md"
-                                style={{ backgroundColor: CHAT_GREEN }}
-                              >
-                                <p className="whitespace-pre-wrap break-words">{m.content}</p>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex w-full justify-start">
-                              <div
-                                className="w-full max-w-full rounded-2xl rounded-bl-md border border-white/10 px-4 py-3.5 shadow-sm sm:max-w-[min(100%,42rem)] md:px-5 md:py-4"
-                                style={{ backgroundColor: CHAT_ASSISTANT_SURFACE }}
-                              >
-                                <div className="mb-2.5 flex items-center gap-2">
-                                  <div
-                                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10"
-                                    style={{ backgroundColor: `${CHAT_GREEN}26` }}
-                                  >
-                                    <img src="/logo.png" alt="" className="h-4 w-4 object-contain opacity-95" />
-                                  </div>
-                                  <span className="text-xs font-semibold text-white/80">PrepAI</span>
-                                </div>
-                                <div className="min-w-0 text-[15px] leading-relaxed text-[#d4d4d4]">
-                                  <ReactMarkdown components={interviewChatMarkdownComponents}>{m.content}</ReactMarkdown>
-                                </div>
-                                {m.evaluation && (
-                                  <div className="mt-4 space-y-2.5 rounded-xl border border-white/10 bg-black/30 px-3.5 py-3.5">
-                                    <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
-                                      <span>Score</span>
-                                      <span className="tabular-nums rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-base font-semibold text-white">
-                                        {m.evaluation.overall_score}/10
-                                      </span>
-                                    </div>
-                                    {m.evaluation.gap_analysis?.length > 0 && (
-                                      <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-[#b8b8b8]">
-                                        {m.evaluation.gap_analysis.map((gap: string, gIdx: number) => (
-                                          <li key={gIdx} className="break-words">
-                                            {gap}
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </motion.div>
-                      ))}
-                      {loading && (
-                        <div className="flex w-full justify-start">
-                          <div
-                            className="inline-flex items-center gap-3 rounded-2xl border border-white/10 px-4 py-3 text-sm text-[#a8a8a8]"
-                            style={{ backgroundColor: CHAT_ASSISTANT_SURFACE }}
-                          >
-                            <Loader2 className="h-4 w-4 shrink-0 animate-spin" style={{ color: CHAT_GREEN }} aria-hidden />
-                            Evaluating…
+                <div className="flex min-h-0 max-h-[min(62vh,680px)] flex-1 flex-col gap-8 overflow-y-auto px-5 py-8 md:gap-10 md:px-8 md:py-9 xl:max-h-[min(66vh,760px)]">
+                  {messages.map((m, i) => (
+                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} key={i} className="w-full min-w-0">
+                      <div className={`w-full min-w-0 rounded-2xl px-6 py-7 shadow-lg md:px-7 md:py-8 ${m.sender === "user" ? "rounded-br-md border border-on-primary-container/15 bg-gradient-to-br from-primary-container to-secondary-container text-on-primary-container" : "rounded-bl-md border border-outline-variant/50 bg-surface-container-lowest/95 text-on-surface backdrop-blur-md"}`}>
+                        {m.sender === "bot" && (
+                          <div className="mb-6 flex flex-wrap items-center gap-3">
+                            <img src="/logo.png" alt="" className="h-7 w-7 shrink-0 rounded-full border border-primary-container/50 bg-surface p-1 object-contain" />
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Interviewer</span>
                           </div>
-                        </div>
-                      )}
+                        )}
+                        {m.sender === "user" && <span className="mb-5 block text-right text-[10px] font-semibold uppercase tracking-wider text-on-primary-container/80">You</span>}
+                        <div className={`min-w-0 text-[15px] leading-[1.75] whitespace-pre-wrap break-words md:text-base md:leading-[1.8] ${m.sender === "user" ? "text-on-primary-container" : "text-on-surface"}`}>{m.content}</div>
+                        {m.evaluation && (
+                          <div className={`mt-7 space-y-3 rounded-xl border border-outline-variant/25 px-4 py-5 pt-6 ${m.sender === "user" ? "bg-surface-container-lowest/45" : "bg-surface-container-lowest/35"}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wider text-primary-container">
+                              <span>Score</span>
+                              <span className="tabular-nums rounded-lg border border-primary-container/30 bg-surface px-2 py-0.5 text-base text-on-surface">{m.evaluation.overall_score}/10</span>
+                            </div>
+                            {m.evaluation.gap_analysis?.length > 0 && (
+                              <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-on-surface-variant">
+                                {m.evaluation.gap_analysis.map((gap: string, gIdx: number) => (
+                                  <li key={gIdx} className="break-words">{gap}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  ))}
+                  {loading && (
+                    <div className="flex w-full justify-start">
+                      <div className="inline-flex items-center gap-3 rounded-2xl border border-outline-variant/30 bg-surface-container-high/60 px-4 py-3 text-sm text-on-surface-variant">
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary-container" />
+                        Evaluating…
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
-                <div className="shrink-0 space-y-2 border-t border-white/10 bg-[#0c0c0f] px-3 py-3 md:px-4 md:py-3">
+                <div className="shrink-0 space-y-4 border-t border-outline-variant/25 bg-surface-container-lowest/50 px-5 py-5 md:px-7 md:py-6">
                   {(currentStage === 5 || currentStage === 6) && (
                     <div className="flex flex-wrap gap-2">
                       {currentStage === 5 && (
-                        <a
-                          href="https://excalidraw.com/"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1.5 text-[11px] font-medium text-white/80 transition-colors hover:border-primary-container/50 hover:text-white"
-                        >
-                          <PenSquare size={13} className="shrink-0 text-primary-container" aria-hidden />
+                        <a href="https://excalidraw.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/45 bg-surface-container-high/70 px-4 py-2.5 text-xs font-medium transition-colors hover:border-primary-container/50">
+                          <PenSquare size={14} className="shrink-0 text-primary-container" aria-hidden />
                           Excalidraw
                         </a>
                       )}
                       {currentStage === 6 && (
-                        <a
-                          href="https://www.onlinegdb.com/"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1.5 text-[11px] font-medium text-white/80 transition-colors hover:border-primary-container/50 hover:text-white"
-                        >
-                          <Code2 size={13} className="shrink-0 text-primary-container" aria-hidden />
+                        <a href="https://www.onlinegdb.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/45 bg-surface-container-high/70 px-4 py-2.5 text-xs font-medium transition-colors hover:border-primary-container/50">
+                          <Code2 size={14} className="shrink-0 text-primary-container" aria-hidden />
                           Code playground
                         </a>
                       )}
                     </div>
                   )}
-                  <div className="flex items-end gap-1 rounded-[1.35rem] border border-white/12 bg-[#303030] py-1.5 pl-4 pr-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                    <textarea
-                      ref={answerTextareaRef}
-                      value={answer}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      placeholder="Message…"
-                      rows={1}
-                      disabled={loading}
-                      className="max-h-[200px] min-h-[48px] w-0 min-w-0 flex-1 resize-none bg-transparent py-3 text-[15px] leading-relaxed text-white outline-none placeholder:text-white/40"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSend();
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={toggleCandidateVoice}
-                      disabled={loading || currentStage < 1 || currentStage > 6}
-                      aria-label={isRecordingAnswer ? "Stop dictation" : "Start dictation"}
-                      className={`mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors ${
-                        isRecordingAnswer ? "bg-red-500/20 text-red-400" : "text-white/70 hover:bg-white/10 hover:text-white"
-                      } disabled:opacity-40`}
-                    >
-                      {isRecordingAnswer ? <MicOff size={20} /> : <Mic size={20} />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setVoiceEnabled((v) => !v)}
-                      aria-label={voiceEnabled ? "Turn interviewer voice off" : "Turn interviewer voice on"}
-                      className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-                    >
-                      {voiceEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSend}
-                      disabled={loading || !answer.trim()}
-                      aria-label="Send message"
-                      className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white shadow-md transition-opacity disabled:opacity-35"
-                      style={{ backgroundColor: CHAT_GREEN }}
-                    >
-                      <Send size={18} className="-ml-px" aria-hidden />
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-0.5">
-                    <button
-                      type="button"
-                      onClick={handleNeedHelp}
-                      disabled={loading}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium text-white/40 transition-colors hover:text-white/70 disabled:opacity-45"
-                    >
-                      <HelpCircle size={13} className="shrink-0 text-white/35" aria-hidden />
-                      Suggested answer
-                    </button>
-                    {isRecordingAnswer && <span className="text-xs font-medium text-red-400">Listening…</span>}
+                  <div className="overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container-high/50">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/20 px-4 py-3 sm:px-5">
+                      <span className="text-xs font-medium text-on-surface">Your answer</span>
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${isRecordingAnswer ? "bg-error/15 text-error" : "bg-primary-container/15 text-primary-container"}`}>
+                        {isRecordingAnswer ? "Listening…" : "Speech to text"}
+                      </span>
+                    </div>
+                    <div className="p-4 sm:p-5">
+                      <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Type your response… (mic + send below)" className="min-h-[96px] w-full resize-y rounded-2xl border border-outline-variant/50 bg-surface-container-high px-4 py-3 text-[15px] leading-relaxed text-on-surface shadow-inner placeholder:text-on-surface-variant/60 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-container sm:min-h-[104px]" rows={3} disabled={loading} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} />
+                    </div>
+                    <div className="flex flex-col gap-3 border-t border-outline-variant/25 bg-surface-container-lowest/40 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:py-4">
+                      <button type="button" onClick={handleNeedHelp} disabled={loading} className="inline-flex items-center gap-2 rounded-lg px-2 py-2 text-xs font-medium text-on-surface-variant transition-colors hover:text-primary-container disabled:opacity-45 sm:justify-start">
+                        <HelpCircle size={14} className="shrink-0 text-secondary-container" aria-hidden />
+                        Suggested answer
+                      </button>
+                      {/* --------- */}
+                      {/* <div className="flex w-full min-w-0 overflow-hidden rounded-xl border-2 border-primary-container/45 bg-surface-container-high shadow-md ring-1 ring-primary-container/20 sm:max-w-sm sm:shrink-0">
+                        <motion.button type="button" whileTap={{ scale: 0.98 }} aria-label={isRecordingAnswer ? "Stop dictation" : "Start dictation"} onClick={toggleCandidateVoice} disabled={loading || currentStage < 1 || currentStage > 6} className={`flex min-h-12 flex-1 items-center justify-center gap-2 border-r border-outline-variant/40 px-3 py-3 text-xs font-semibold transition-colors sm:px-4 sm:text-sm ${isRecordingAnswer ? "bg-error/10 text-error" : "text-primary-container hover:bg-primary-container/10"} disabled:opacity-35`}>
+                          {isRecordingAnswer ? <MicOff size={20} className="shrink-0" aria-hidden /> : <Mic size={20} className="shrink-0" aria-hidden />}
+                          <span className="hidden sm:inline">{isRecordingAnswer ? "Stop" : "Dictate"}</span>
+                        </motion.button>
+                        <button type="button" onClick={handleSend} disabled={loading || !answer.trim()} className="flex min-h-12 flex-1 items-center justify-center gap-2 bg-primary-container px-3 py-3 text-xs font-semibold text-on-primary-container transition-all hover:opacity-90 disabled:opacity-40 sm:px-5 sm:text-sm">
+                          <Send size={18} className="shrink-0" aria-hidden />
+                          Send
+                        </button>
+                      </div> */}
+
+                        {/* ----------------------- */}
+                        
+
+ {/* INPUT */}
+ {/* <div className="fixed bottom-0 left-0 right-0 bg-black/80 px-6 py-4">
+            <div className="max-w-4xl mx-auto flex gap-3">
+
+              <textarea
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                className="flex-1 input-field"
+              />
+
+              <button onClick={toggleMic} className="btn-secondary p-3">
+                {recording ? <MicOff /> : <Mic />}
+              </button>
+
+              <button onClick={() => setVoiceEnabled(!voiceEnabled)} className="btn-secondary p-3">
+                {voiceEnabled ? <Volume2 /> : <VolumeX />}
+              </button>
+
+              <button onClick={handleSend} className="btn-primary p-3">
+                <Send />
+              </button>
+            </div>
+          </div>
+           */}
+
+<div className="fixed bottom-0 left-0 right-0 bg-black/80 px-6 py-4">
+  <div className="max-w-4xl mx-auto flex gap-3">
+
+    <textarea
+      value={answer}
+      onChange={(e) => setAnswer(e.target.value)}
+      className="flex-1 input-field"
+    />
+
+    {/* 🎤 Mic Button (Merged Logic) */}
+    <button
+      type="button"
+      onClick={toggleCandidateVoice}
+      disabled={loading || currentStage < 1 || currentStage > 6}
+      aria-label={isRecordingAnswer ? "Stop dictation" : "Start dictation"}
+      className={`btn-secondary p-3 flex items-center justify-center transition-colors
+        ${isRecordingAnswer 
+          ? "bg-red-500/20 text-red-400" 
+          : "text-white hover:bg-white/10"}
+        disabled:opacity-40`}
+    >
+      {isRecordingAnswer ? <MicOff /> : <Mic />}
+    </button>
+
+    {/* 🔊 Voice Toggle */}
+    <button
+      onClick={() => setVoiceEnabled(!voiceEnabled)}
+      className="btn-secondary p-3"
+    >
+      {voiceEnabled ? <Volume2 /> : <VolumeX />}
+    </button>
+
+    {/* 📤 Send Button */}
+    <button
+      onClick={handleSend}
+      disabled={loading || !answer.trim()}
+      className="btn-primary p-3 disabled:opacity-40"
+    >
+      <Send />
+    </button>
+
+  </div>
+</div>
+
+
+
+
+
+
+
+
+
+                        
+                    </div>
                   </div>
                 </div>
               </div>
@@ -941,3 +809,391 @@ export default function RealisticInterviewPage() {
   );
 }
 
+
+
+// "use client";
+
+// import { useState, useEffect, useRef } from "react";
+// import { useRouter } from "next/navigation";
+// import Navbar from "@/components/Navbar";
+// import Webcam from "react-webcam";
+// import { motion } from "framer-motion";
+// import {
+//   Send,
+//   Mic,
+//   MicOff,
+//   Camera,
+//   CameraOff,
+//   Loader2,
+//   Volume2,
+//   VolumeX,
+//   HelpCircle,
+// } from "lucide-react";
+// import toast from "react-hot-toast";
+
+// import {
+//   sendQuickChat,
+//   getStageQuestions,
+//   saveProjectBrief,
+// } from "@/lib/api";
+
+// import {
+//   LineChart,
+//   Line,
+//   XAxis,
+//   YAxis,
+//   Tooltip,
+//   ResponsiveContainer,
+// } from "recharts";
+
+// const STAGES = [
+//   { id: 1, name: "Intro" },
+//   { id: 2, name: "Mock" },
+//   { id: 3, name: "Manager" },
+//   { id: 4, name: "Technical" },
+//   { id: 5, name: "System Design" },
+//   { id: 6, name: "Coding" },
+// ];
+
+// export default function InterviewPage() {
+//   const router = useRouter();
+
+//   // ================= STATE =================
+//   const [sessionId, setSessionId] = useState("");
+//   const [messages, setMessages] = useState<any[]>([]);
+//   const [answer, setAnswer] = useState("");
+//   const [loading, setLoading] = useState(false);
+
+//   const [currentStage, setCurrentStage] = useState(0);
+//   const [questions, setQuestions] = useState<string[]>([]);
+//   const [scores, setScores] = useState<number[]>([]);
+
+//   const [webcamEnabled, setWebcamEnabled] = useState(true);
+//   const [voiceEnabled, setVoiceEnabled] = useState(true);
+
+//   const [recording, setRecording] = useState(false);
+//   const recognitionRef = useRef<any>(null);
+
+//   const [timeLeft, setTimeLeft] = useState(120);
+//   const [answeredInStage, setAnsweredInStage] = useState(0);
+//   const [stageCounts] = useState({
+//     1: 1,
+//     2: 5,
+//     3: 3,
+//     4: 5,
+//     5: 1,
+//     6: 1,
+//   });
+
+//   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+//   // ================= INIT =================
+//   useEffect(() => {
+//     const sid = localStorage.getItem("session_id");
+//     if (!sid) router.push("/setup");
+//     else setSessionId(sid);
+//   }, [router]);
+
+//   useEffect(() => {
+//     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+//   }, [messages]);
+
+//   // ================= TIMER =================
+//   useEffect(() => {
+//     if (currentStage === 0) return;
+
+//     const timer = setInterval(() => {
+//       setTimeLeft((t) => {
+//         if (t <= 1) {
+//           toast("⏱ Time's up!");
+//           return 0;
+//         }
+//         return t - 1;
+//       });
+//     }, 1000);
+
+//     return () => clearInterval(timer);
+//   }, [currentStage]);
+
+//   // ================= TTS =================
+//   const speak = (text: string) => {
+//     if (!voiceEnabled) return;
+//     const utterance = new SpeechSynthesisUtterance(text);
+//     speechSynthesis.speak(utterance);
+//   };
+
+//   const addBotMessage = (text: string, evaluation?: any) => {
+//     setMessages((m) => [...m, { sender: "bot", text, evaluation }]);
+//     speak(text);
+//   };
+
+//   // ================= START =================
+//   const handleStart = async () => {
+//     const data = await getStageQuestions(sessionId);
+
+//     if (data?.needs_project_brief) {
+//       const brief = prompt("Enter your project details:");
+//       if (!brief) return;
+//       await saveProjectBrief(sessionId, brief);
+//       return handleStart();
+//     }
+
+//     setQuestions(data.questions);
+//     setCurrentStage(1);
+//     setAnsweredInStage(0);
+//     addBotMessage(data.questions[0]);
+//   };
+
+//   // ================= SEND =================
+//   const handleSend = async () => {
+//     if (!answer.trim()) return;
+
+//     const userText = answer;
+//     setAnswer("");
+
+//     setMessages((m) => [...m, { sender: "user", text: userText }]);
+//     setLoading(true);
+
+//     try {
+//       const lastQ =
+//         messages.slice().reverse().find((m) => m.sender === "bot")?.text ||
+//         questions[currentStage - 1];
+
+//       const context = messages
+//         .map((m) => `${m.sender}: ${m.text}`)
+//         .join("\n");
+
+//       const res = await sendQuickChat(
+//         sessionId,
+//         lastQ,
+//         userText,
+//         STAGES[currentStage - 1].name,
+//         context
+//       );
+
+//       let reply = res.reply;
+
+//       if (
+//         userText.toLowerCase().includes("not sure") &&
+//         res?.evaluation?.improved_answer
+//       ) {
+//         reply =
+//           "Suggested answer:\n\n" +
+//           res.evaluation.improved_answer +
+//           "\n\n" +
+//           reply;
+//       }
+
+//       const newCount = answeredInStage + 1;
+//       const target = stageCounts[currentStage];
+
+//       if (newCount >= target) {
+//         reply += "\n\n✅ Stage complete. Click Next.";
+//       }
+
+//       addBotMessage(reply, res.evaluation);
+
+//       setScores((s) => [
+//         ...s,
+//         res.evaluation?.overall_score || 0,
+//       ]);
+
+//       setAnsweredInStage(newCount);
+//       setTimeLeft(120);
+//     } catch {
+//       toast.error("Evaluation failed");
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   // ================= NEXT =================
+//   const nextStage = () => {
+//     const next = currentStage + 1;
+
+//     if (next > 6) {
+//       toast.success("Interview completed!");
+//       setCurrentStage(0);
+//       return;
+//     }
+
+//     setCurrentStage(next);
+//     setMessages([]);
+//     setAnsweredInStage(0);
+//     addBotMessage(questions[next - 1]);
+//   };
+
+//   // ================= MIC =================
+//   const toggleMic = () => {
+//     if (recording) {
+//       recognitionRef.current?.stop();
+//       setRecording(false);
+//       return;
+//     }
+
+//     const SpeechRecognition =
+//       (window as any).webkitSpeechRecognition;
+
+//     if (!SpeechRecognition) {
+//       toast.error("Speech not supported");
+//       return;
+//     }
+
+//     const recognition = new SpeechRecognition();
+//     recognition.continuous = true;
+
+//     recognition.onresult = (e: any) => {
+//       let text = "";
+//       for (let i = e.resultIndex; i < e.results.length; i++) {
+//         text += e.results[i][0].transcript;
+//       }
+//       setAnswer((prev) => prev + " " + text);
+//     };
+
+//     recognition.start();
+//     recognitionRef.current = recognition;
+//     setRecording(true);
+//   };
+
+//   // ================= CHART =================
+//   const ScoreChart = () => (
+//     <div className="card p-4 h-[200px]">
+//       <p className="text-sm mb-2 text-gray-400">Performance</p>
+//       <ResponsiveContainer width="100%" height="100%">
+//         <LineChart data={scores.map((v, i) => ({ i, v }))}>
+//           <XAxis dataKey="i" hide />
+//           <YAxis domain={[0, 10]} />
+//           <Tooltip />
+//           <Line type="monotone" dataKey="v" strokeWidth={2} />
+//         </LineChart>
+//       </ResponsiveContainer>
+//     </div>
+//   );
+
+//   // ================= UI =================
+//   return (
+//     <div className="h-screen flex flex-col">
+//       <Navbar />
+
+//       <div className="flex flex-1 pt-20">
+
+//         {/* LEFT */}
+//         <div className="flex-1 flex flex-col max-w-4xl mx-auto px-6">
+
+//           {/* HEADER */}
+//           <div className="flex justify-between items-center mb-4">
+//             <div className="flex gap-2 flex-wrap">
+//               {STAGES.map((s) => (
+//                 <div
+//                   key={s.id}
+//                   className={`px-3 py-1 rounded-full text-xs ${
+//                     currentStage === s.id
+//                       ? "bg-purple-500 text-white"
+//                       : "bg-gray-800 text-gray-400"
+//                   }`}
+//                 >
+//                   {s.name}
+//                 </div>
+//               ))}
+//             </div>
+
+//             <div className="text-sm text-gray-400">
+//               ⏱ {Math.floor(timeLeft / 60)}:
+//               {(timeLeft % 60).toString().padStart(2, "0")}
+//             </div>
+//           </div>
+
+//           {/* CHAT */}
+//           <div className="flex-1 overflow-y-auto flex flex-col gap-6 pb-24">
+
+//             {currentStage === 0 && (
+//               <button onClick={handleStart} className="btn-primary mx-auto mt-20">
+//                 Start Interview
+//               </button>
+//             )}
+
+//             {messages.map((m, i) => (
+//               <motion.div
+//                 key={i}
+//                 initial={{ opacity: 0, y: 10 }}
+//                 animate={{ opacity: 1, y: 0 }}
+//                 className={`max-w-[80%] px-5 py-3 rounded-2xl ${
+//                   m.sender === "user"
+//                     ? "ml-auto bg-purple-600 text-white"
+//                     : "bg-gray-900 border border-gray-700"
+//                 }`}
+//               >
+//                 {m.text}
+
+//                 {m.evaluation && (
+//                   <div className="mt-2 text-xs text-gray-400">
+//                     Score: {m.evaluation.overall_score}/10
+//                   </div>
+//                 )}
+//               </motion.div>
+//             ))}
+
+//             {loading && (
+//               <div className="flex items-center gap-2 text-sm text-gray-400">
+//                 <Loader2 className="animate-spin" size={14} />
+//                 Evaluating...
+//               </div>
+//             )}
+
+//             <div ref={messagesEndRef} />
+//           </div>
+
+//           {/* INPUT */}
+//           <div className="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur px-6 py-4">
+//             <div className="max-w-4xl mx-auto flex gap-3">
+
+//               <textarea
+//                 value={answer}
+//                 onChange={(e) => setAnswer(e.target.value)}
+//                 className="flex-1 input-field"
+//               />
+
+//               <button onClick={toggleMic} className="btn-secondary p-3">
+//                 {recording ? <MicOff /> : <Mic />}
+//               </button>
+
+//               <button onClick={() => setVoiceEnabled(!voiceEnabled)} className="btn-secondary p-3">
+//                 {voiceEnabled ? <Volume2 /> : <VolumeX />}
+//               </button>
+
+//               <button onClick={handleSend} className="btn-primary p-3">
+//                 <Send />
+//               </button>
+//             </div>
+//           </div>
+//         </div>
+
+//         {/* RIGHT */}
+//         <div className="hidden lg:flex w-[380px] flex-col gap-4 p-4 border-l">
+
+//           <div className="card h-[180px] flex items-center justify-center">
+//             🤖 AI
+//           </div>
+
+//           <div className="relative card h-[220px]">
+//             {webcamEnabled ? (
+//               <Webcam className="w-full h-full object-cover" />
+//             ) : (
+//               <div className="flex items-center justify-center h-full">
+//                 Camera Off
+//               </div>
+//             )}
+//             <button
+//               onClick={() => setWebcamEnabled(!webcamEnabled)}
+//               className="absolute top-3 right-3 btn-secondary p-2"
+//             >
+//               {webcamEnabled ? <Camera /> : <CameraOff />}
+//             </button>
+//           </div>
+
+//           <ScoreChart />
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }

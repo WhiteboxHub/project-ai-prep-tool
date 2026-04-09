@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getResumeSummary, getResumeAnalytics } from "@/lib/api";
 import Link from "next/link";
+import Navbar from "@/components/Navbar";
 import {
   Brain,
   FileText,
@@ -112,83 +113,10 @@ export default function DashboardPage() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-primary)" }}>
       {/* Navbar */}
-      <nav
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "20px 48px",
-          borderBottom: "1px solid var(--border)",
-        }}
-      >
-        <Link
-          href="/"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            textDecoration: "none",
-          }}
-        >
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              background: "linear-gradient(135deg, #7c3aed, #a78bfa)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <img
-              src="/logo.png"
-              alt="WBL Logo"
-              style={{ width: 22, height: 22, objectFit: "contain" }}
-            />
-          </div>
-          <span
-            style={{
-              fontFamily: "'Outfit', sans-serif",
-              fontWeight: 700,
-              fontSize: 20,
-              color: "var(--text-primary)",
-            }}
-          >
-            WBL <span style={{ color: "var(--accent-light)" }}>PrepHub</span>
-          </span>
-        </Link>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {candidateName && (
-            <span
-              style={{
-                color: "var(--text-secondary)",
-                fontSize: 14,
-                fontWeight: 500,
-                marginRight: 8,
-              }}
-            >
-              Welcome, {candidateName}
-            </span>
-          )}
-          <div className="badge badge-accent">
-            <User size={12} /> Active Session
-          </div>
-          <button
-            className="btn-secondary"
-            onClick={handleLogout}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "8px 16px",
-              fontSize: 13,
-            }}
-          >
-            <LogOut size={14} /> Logout
-          </button>
-        </div>
-      </nav>
+      <Navbar
+        candidateName={candidateName}
+        onLogout={handleLogout}
+      />
 
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "48px 24px" }}>
         {/* Header */}
