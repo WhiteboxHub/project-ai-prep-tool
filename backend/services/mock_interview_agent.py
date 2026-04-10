@@ -87,13 +87,13 @@ You are an expert interview evaluator generating a final preparation report.
 Analyze all Candidate Data below and generate a strictly structured JSON response representing the candidate's final interview capability report.
 
 Return ONLY a valid JSON object matching this schema (do NOT use markdown fences):
-{
+{{
   "overall_score": "<0-100>",
   "hire_readiness": "High | Medium | Low",
   "top_strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
   "top_weaknesses": ["<weakness 1>", "<weakness 2>"],
   "improvement_plan": ["<action 1>", "<action 2>", "<action 3>"]
-}
+}}
 
 ---
 Candidate Data:

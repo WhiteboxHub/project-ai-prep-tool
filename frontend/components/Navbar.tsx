@@ -202,7 +202,6 @@ export default function Navbar({ candidateName, onLogout }: NavbarProps) {
 
   const navItems = [
     { label: "Dashboard", href: "/dashboard" },
-    { label: "Mock", href: "/mock" },
     { label: "Progress", href: "/progress" },
   ];
 

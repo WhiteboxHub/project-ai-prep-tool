@@ -79,12 +79,11 @@ async def generate_report(request: ReportRequest, db: Session = Depends(get_db))
             provider=candidate.api_provider,
         )
         
-        # Coerce JSON into Markdown template
         raw = raw_json_str.strip()
-        if raw.startswith("```json"):
-            raw = raw.split("```json")[1].split("```")[0]
-        elif raw.startswith("```"):
-            raw = raw.split("```")[1]
+        import re
+        json_match = re.search(r'\{.*\}', raw, re.DOTALL)
+        if json_match:
+            raw = json_match.group(0)
             
         data = _normalize_report_payload(json.loads(raw.strip()))
 
@@ -139,17 +138,57 @@ async def generate_report(request: ReportRequest, db: Session = Depends(get_db))
 
 @router.get("/latest")
 async def get_latest_report(session_id: str, db: Session = Depends(get_db)):
-    """Get the latest generated report for this session."""
+    """Get the latest generated report for this session with detailed analytics."""
     report = (
         db.query(FinalReport)
         .filter(FinalReport.session_id == session_id)
         .order_by(FinalReport.created_at.desc())
         .first()
     )
+    
+    # Calculate dimensional analytics from all answers in this session
+    answers = db.query(InterviewAnswer).filter(InterviewAnswer.session_id == session_id).all()
+    
+    analytics = {
+        "technical_correctness": 0,
+        "depth_of_knowledge": 0,
+        "clarity": 0,
+        "communication": 0,
+        "confidence": 0,
+        "structure": 0
+    }
+    
+    count = 0
+    for ans in answers:
+        if ans.scores_json:
+            try:
+                data = json.loads(ans.scores_json)
+                scores = data.get("scores", {})
+                if scores:
+                    analytics["technical_correctness"] += scores.get("technical_correctness", 0)
+                    analytics["depth_of_knowledge"] += scores.get("depth_of_knowledge", 0)
+                    analytics["clarity"] += scores.get("clarity", 0)
+                    analytics["communication"] += scores.get("communication", 0)
+                    analytics["confidence"] += scores.get("confidence", 0)
+                    analytics["structure"] += scores.get("structure", 0)
+                    count += 1
+            except:
+                continue
+                
+    if count > 0:
+        for k in analytics:
+            analytics[k] = round((analytics[k] / count) * 10, 1) # Scale 1-10 to 1-100
+            
     if not report:
-        return {"session_id": session_id, "content": None}
+        return {
+            "session_id": session_id, 
+            "content": None, 
+            "analytics": analytics if count > 0 else None
+        }
+        
     return {
         "session_id": session_id,
         "content": report.content,
         "created_at": str(report.created_at),
+        "analytics": analytics if count > 0 else None
     }
