@@ -5,6 +5,7 @@ import { evaluateIntro, getIntroHistory } from "@/lib/api";
 import toast from "react-hot-toast";
 import Link from "next/link";
 import { Brain, Mic, Square, ChevronLeft, CheckCircle, XCircle, Clock, Play, RotateCcw, Send, Volume2, VolumeX, ChevronDown, ChevronUp, FileText, BarChart2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const CRITERIA = ["Fluency", "Grammar", "Confidence", "Structure", "Clarity"];
 
@@ -187,348 +188,532 @@ export default function IntroPage() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg-primary)" }}>
+    <div className="min-h-screen bg-[var(--bg-primary)] overflow-hidden">
+      {/* Background Decorative Elements */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[rgba(139,92,246,0.15)] blur-[120px]" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[40%] h-[40%] rounded-full bg-[rgba(139,92,246,0.1)] blur-[100px]" />
+      </div>
+
       {/* Navbar */}
-      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 48px", borderBottom: "1px solid var(--border)" }}>
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #7c3aed, #a78bfa)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <img src="/logo.png" alt="WBL Logo" style={{ width: 22, height: 22, objectFit: 'contain' }} />
+      <nav className="relative z-10 flex items-center justify-between px-6 py-4 lg:px-12 lg:py-5 border-b border-[var(--border)] bg-[rgba(10,10,15,0.8)] backdrop-blur-md">
+        <Link href="/" className="flex items-center gap-3 no-underline">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#7c3aed] to-[#a78bfa] flex items-center justify-center shadow-[0_0_20px_rgba(139,92,246,0.3)]">
+            <img src="/logo.png" alt="WBL Logo" className="w-6 h-6 object-contain" />
           </div>
-          <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: 20, color: "var(--text-primary)" }}>
-            WBL <span style={{ color: "var(--accent-light)" }}>PrepHub</span>
+          <span className="font-['Outfit'] font-bold text-xl text-[var(--text-primary)]">
+            WBL <span className="text-[var(--accent-light)]">PrepHub</span>
           </span>
         </Link>
-        <Link href="/dashboard">
-          <button className="btn-secondary" style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", fontSize: 13 }}>
-            <ChevronLeft size={14} /> Dashboard
-          </button>
-        </Link>
-        {candidateName && (
-          <span style={{ color: "var(--text-secondary)", fontSize: 14 }}>{candidateName}</span>
-        )}
+        <div className="flex items-center gap-4">
+          {candidateName && (
+            <span className="hidden md:inline-block text-[var(--text-secondary)] text-sm font-medium px-3 py-1.5 bg-[rgba(255,255,255,0.03)] rounded-full border border-[var(--border)]">
+              {candidateName}
+            </span>
+          )}
+          <Link href="/dashboard">
+            <button className="btn-secondary flex items-center gap-2 px-4 py-2 text-sm rounded-lg hover:bg-[rgba(139,92,246,0.1)] transition-colors">
+              <ChevronLeft size={16} /> Dashboard
+            </button>
+          </Link>
+        </div>
       </nav>
 
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "48px 24px" }}>
-        <div style={{ marginBottom: 40 }}>
-          <h1 style={{ fontSize: 32, marginBottom: 8 }}>
+      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-16">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="text-center mb-12"
+        >
+          <h1 className="text-4xl lg:text-5xl font-['Outfit'] font-bold mb-4">
             Intro <span className="glow-text">Practice & AI Scoring</span>
           </h1>
-          <p style={{ color: "var(--text-secondary)", fontSize: 16 }}>
-            Record your self-introduction and get detailed AI feedback. Score 70+ to pass.
+          <p className="text-[var(--text-secondary)] text-lg max-w-2xl mx-auto leading-relaxed">
+            Record your self-introduction and receive deep AI feedback. Score 70+ to pass.
           </p>
-        </div>
+        </motion.div>
 
         {provider !== "openai" && (
-          <div className="card" style={{ padding: 20, marginBottom: 32, borderColor: "rgba(239,68,68,0.4)", background: "rgba(239,68,68,0.05)" }}>
-            <p style={{ color: "var(--danger)", display: "flex", alignItems: "center", gap: 8 }}>
-              <XCircle size={18} /> This feature requires an OpenAI API key (for Whisper speech-to-text).
-              <Link href="/setup" style={{ color: "var(--accent-light)", marginLeft: 8 }}>Update your setup →</Link>
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="max-w-3xl mx-auto mb-8 border border-[rgba(239,68,68,0.4)] bg-[rgba(239,68,68,0.05)] rounded-2xl p-4 flex items-center gap-3 backdrop-blur-sm shadow-[0_0_20px_rgba(239,68,68,0.1)]"
+          >
+            <XCircle size={20} className="text-[var(--danger)] shrink-0" />
+            <p className="text-[var(--danger)] text-sm md:text-base m-0">
+              Whisper speech-to-text requires an OpenAI API key.
+              <Link href="/setup" className="text-[var(--accent-light)] font-medium ml-2 hover:underline">Update your setup →</Link>
             </p>
-          </div>
+          </motion.div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
-          {/* Left: Recording */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-            {/* Ideal template */}
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
+          
+          {/* LEFT COLUMN: Record & Template */}
+          <div className="lg:col-span-7 flex flex-col gap-6">
+            
+            {/* Template Card */}
+            <motion.div 
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="card overflow-hidden bg-gradient-to-b from-[var(--bg-card)] to-[rgba(10,10,15,0.4)] border border-[var(--border)] shadow-xl"
+            >
               <div 
+                className="flex items-center justify-between p-5 cursor-pointer hover:bg-[rgba(255,255,255,0.02)] transition-colors"
                 onClick={() => setTemplateExpanded(!templateExpanded)}
-                style={{ padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: "rgba(255,255,255,0.02)", borderBottom: templateExpanded ? "1px solid var(--border)" : "none" }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <FileText size={18} color="var(--text-secondary)" />
-                  <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>Your Custom Generated Intro Template</h3>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-[rgba(139,92,246,0.1)] text-[var(--accent-light)]">
+                    <FileText size={20} />
+                  </div>
+                  <h3 className="text-base font-semibold text-[var(--text-primary)] m-0">Generated Intro Template</h3>
                 </div>
-                {templateExpanded ? <ChevronUp size={18} color="var(--text-muted)" /> : <ChevronDown size={18} color="var(--text-muted)" />}
+                <div className="p-1.5 rounded-md bg-[rgba(255,255,255,0.05)] text-[var(--text-muted)]">
+                  {templateExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </div>
               </div>
-              {templateExpanded && (
-                <div style={{ padding: 24 }}>
-                  <pre style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.8, whiteSpace: "pre-wrap", margin: 0 }}>
-                    {idealIntro}
-                  </pre>
-                </div>
-              )}
-            </div>
-
-            {/* Recorder */}
-            <div className="card" style={{ padding: 0, textAlign: "center", overflow: "hidden" }}>
-              <div 
-                onClick={() => setRecorderExpanded(!recorderExpanded)}
-                style={{ padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: "rgba(255,255,255,0.02)", borderBottom: recorderExpanded ? "1px solid var(--border)" : "none" }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <Mic size={18} color="var(--text-secondary)" />
-                  <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>Record Your Introduction</h3>
-                </div>
-                {recorderExpanded ? <ChevronUp size={18} color="var(--text-muted)" /> : <ChevronDown size={18} color="var(--text-muted)" />}
-              </div>
-              
-              {recorderExpanded && (
-                <div style={{ padding: 32 }}>
-                  {/* Big record button */}
-              <div style={{ marginBottom: 28 }}>
-                {!recording ? (
-                  <button
-                    id="start-recording-btn"
-                    onClick={startRecording}
-                    disabled={provider !== "openai"}
-                    style={{
-                      width: 100, height: 100, borderRadius: "50%",
-                      background: recording ? "var(--danger)" : "linear-gradient(135deg, #7c3aed, #a78bfa)",
-                      border: "none", cursor: provider === "openai" ? "pointer" : "not-allowed",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      margin: "0 auto", opacity: provider !== "openai" ? 0.4 : 1,
-                      boxShadow: "0 0 30px rgba(139,92,246,0.4)", transition: "all 0.3s",
-                    }}
+              <AnimatePresence>
+                {templateExpanded && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
                   >
-                    <Mic size={40} color="white" />
-                  </button>
-                ) : (
-                  <button
-                    id="stop-recording-btn"
-                    onClick={stopRecording}
-                    className="animate-recording"
-                    style={{
-                      width: 100, height: 100, borderRadius: "50%",
-                      background: "var(--danger)", border: "none", cursor: "pointer",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      margin: "0 auto", boxShadow: "0 0 30px rgba(239,68,68,0.5)",
-                    }}
-                  >
-                    <Square size={36} color="white" />
-                  </button>
-                )}
-              </div>
-
-              {recording && (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 12 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--danger)", animation: "recording-pulse 1s ease infinite" }}></div>
-                  <span style={{ color: "var(--danger)", fontWeight: 600, fontFamily: "'Outfit', sans-serif", fontSize: 20 }}>
-                    {formatTime(recordingTime)}
-                  </span>
-                  <span style={{ color: "var(--text-muted)", fontSize: 14 }}>Recording...</span>
-                </div>
-              )}
-              {!recording && !audioBlob && (
-                <p style={{ color: "var(--text-muted)", fontSize: 14 }}>Click the mic to start recording</p>
-              )}
-
-              {/* Audio playback */}
-              {audioUrl && (
-                <div style={{ marginTop: 20 }}>
-                  <audio controls src={audioUrl} style={{ width: "100%", borderRadius: 8 }}></audio>
-                  <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-                    <button
-                      id="evaluate-intro-btn"
-                      className="btn-primary"
-                      onClick={handleEvaluate}
-                      disabled={loading}
-                      style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
-                    >
-                      {loading
-                        ? <><div className="animate-spin" style={{ width: 16, height: 16, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%" }}></div> Evaluating...</>
-                        : <><Play size={16} /> Evaluate Audio</>}
-                    </button>
-                    <button className="btn-secondary" onClick={reset} title="Record Again" style={{ padding: "12px 16px" }}>
-                      <RotateCcw size={16} />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {!audioUrl && (
-                  <div style={{ marginTop: 24, paddingTop: 24, borderTop: "1px solid var(--border)" }}>
-                    <h4 style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.5px" }}>Or Type Your Intro</h4>
-                    <textarea 
-                       className="input-field" 
-                       rows={4} 
-                       placeholder="Type your introduction here..." 
-                       value={introText}
-                       onChange={(e) => setIntroText(e.target.value)}
-                       disabled={loading || recording}
-                       style={{ marginBottom: 12 }}
-                    />
-                    <button 
-                      className="btn-primary" 
-                      onClick={handleEvaluateText} 
-                      disabled={loading || !introText.trim() || recording}
-                      style={{ width: "100%", padding: "10px 0", display: "flex", justifyContent: "center", gap: 6 }}
-                    >
-                      {loading ? <div className="animate-spin" style={{ width: 16, height: 16, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%" }}></div> : <Send size={16} />}
-                      Evaluate Text
-                    </button>
-                  </div>
-                )}
-              </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right: Results */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-            {/* Current result */}
-            {result ? (
-              <div className="card animate-fadeIn" style={{ padding: 0, overflow: "hidden" }}>
-                <div 
-                  onClick={() => setResultsExpanded(!resultsExpanded)}
-                  style={{ padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: "rgba(255,255,255,0.02)", borderBottom: resultsExpanded ? "1px solid var(--border)" : "none" }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <BarChart2 size={18} color="var(--text-secondary)" />
-                    <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>AI Evaluation Results</h3>
-                  </div>
-                  {resultsExpanded ? <ChevronUp size={18} color="var(--text-muted)" /> : <ChevronDown size={18} color="var(--text-muted)" />}
-                </div>
-
-                {resultsExpanded && (
-                  <div style={{ padding: 32 }}>
-                {/* Voice toggle */}
-                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-                    <button onClick={() => {
-                        setVoiceEnabled(!voiceEnabled);
-                        if (voiceEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
-                    }} className="btn-secondary" style={{ padding: "6px 12px", gap: 6, fontSize: 12 }}>
-                        {voiceEnabled ? <Volume2 size={14}/> : <VolumeX size={14} />} {voiceEnabled ? "TTS On" : "TTS Off"}
-                    </button>
-                </div>
-                {/* Score */}
-                <div style={{ textAlign: "center", marginBottom: 28 }}>
-                  <div
-                    className="score-ring"
-                    style={{
-                      margin: "0 auto 16px",
-                      borderColor: getScoreColor(result.score),
-                      color: getScoreColor(result.score),
-                      boxShadow: `0 0 30px ${getScoreColor(result.score)}40`,
-                    }}
-                  >
-                    {result.score}
-                  </div>
-                  <div className={`badge ${result.passed ? "badge-success" : "badge-danger"}`} style={{ justifyContent: "center" }}>
-                    {result.passed ? <><CheckCircle size={12} /> Passed!</> : <><XCircle size={12} /> Keep Practicing</>}
-                  </div>
-                </div>
-
-                {/* Score breakdown */}
-                {result.scores_breakdown && Object.keys(result.scores_breakdown).length > 0 && (
-                  <div style={{ marginBottom: 24 }}>
-                    <h4 style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.5px" }}>Breakdown</h4>
-                    {Object.entries(result.scores_breakdown).map(([key, val]: any) => (
-                      <div key={key} style={{ marginBottom: 10 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                          <span style={{ fontSize: 13, color: "var(--text-secondary)", textTransform: "capitalize" }}>{key}</span>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: getScoreColor(val * 5) }}>{val}/20</span>
-                        </div>
-                        <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3 }}>
-                          <div style={{ height: "100%", width: `${(val / 20) * 100}%`, background: getScoreColor(val * 5), borderRadius: 3, transition: "width 0.5s" }}></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Transcript */}
-                {result.transcript && (
-                  <div style={{ marginBottom: 20 }}>
-                    <h4 style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.5px" }}>Transcript</h4>
-                    <p style={{ color: "var(--text-secondary)", fontSize: 14, lineHeight: 1.7, background: "rgba(255,255,255,0.03)", padding: 14, borderRadius: 10 }}>
-                      "{result.transcript}"
-                    </p>
-                  </div>
-                )}
-
-                {/* Feedback */}
-                <div style={{ marginBottom: result.strengths ? 16 : 0 }}>
-                  <h4 style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.5px" }}>Feedback</h4>
-                  <p style={{ color: "var(--text-secondary)", fontSize: 14, lineHeight: 1.7 }}>{result.feedback}</p>
-                </div>
-
-                {result.strengths && (
-                  <div style={{ marginBottom: 16 }}>
-                    <h4 style={{ fontSize: 13, fontWeight: 600, color: "var(--success)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>✓ Strengths</h4>
-                    <p style={{ color: "var(--text-secondary)", fontSize: 14, lineHeight: 1.7 }}>{result.strengths}</p>
-                  </div>
-                )}
-                {result.improvements && (
-                  <div style={{ marginBottom: 20 }}>
-                    <h4 style={{ fontSize: 13, fontWeight: 600, color: "var(--warning)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>⟳ Improvements</h4>
-                    <p style={{ color: "var(--text-secondary)", fontSize: 14, lineHeight: 1.7 }}>{result.improvements}</p>
-                  </div>
-                )}
-                {/* Pipeline Progression Button */}
-                {result.passed ? (
-                  <div style={{ marginTop: 24, paddingTop: 24, borderTop: "1px solid var(--border)", textAlign: "center" }}>
-                    <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>You've unlocked the final stage!</p>
-                    <Link href="/interview">
-                      <button className="btn-primary" style={{ width: "100%", padding: "14px 0", fontSize: 16 }}>
-                        Proceed to Mock Interviews
-                      </button>
-                    </Link>
-                  </div>
-                ) : (
-                  <div style={{ marginTop: 24, paddingTop: 24, borderTop: "1px solid var(--border)", textAlign: "center" }}>
-                    <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>Your score didn't meet the passing criteria (70+).</p>
-                    <button className="btn-secondary" onClick={reset} style={{ width: "100%", padding: "14px 0", fontSize: 16 }}>
-                      Retake the Intro
-                    </button>
-                  </div>
-                )}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="card" style={{ padding: 40, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
-                <Mic size={48} color="var(--text-muted)" style={{ marginBottom: 16 }} />
-                <h3 style={{ color: "var(--text-secondary)", fontSize: 18, marginBottom: 8 }}>No Evaluation Yet</h3>
-                <p style={{ color: "var(--text-muted)", fontSize: 14 }}>Record and evaluate your intro to see your score here.</p>
-              </div>
-            )}
-
-            {/* History */}
-            {history.length > 0 && (
-              <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-                <div 
-                  onClick={() => setHistoryExpanded(!historyExpanded)}
-                  style={{ padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: "rgba(255,255,255,0.02)", borderBottom: historyExpanded ? "1px solid var(--border)" : "none" }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <Clock size={16} color="var(--text-secondary)" />
-                    <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>Past Attempts ({history.length})</h3>
-                  </div>
-                  {historyExpanded ? <ChevronUp size={18} color="var(--text-muted)" /> : <ChevronDown size={18} color="var(--text-muted)" />}
-                </div>
-                
-                {historyExpanded && (
-                  <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 8 }}>
-                  {history.slice(0, 5).map((h, i) => (
-                    <div key={h.id} style={{
-                      display: "flex", alignItems: "center", justifyContent: "space-between",
-                      padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.03)",
-                      border: "1px solid var(--border)",
-                    }}>
-                      <div>
-                        <p style={{ fontSize: 13, fontWeight: 600 }}>Attempt #{history.length - i}</p>
-                        <p style={{ fontSize: 11, color: "var(--text-muted)" }}>{new Date(h.created_at).toLocaleDateString()}</p>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 18, fontWeight: 800, color: getScoreColor(h.score || 0), fontFamily: "'Outfit', sans-serif" }}>
-                          {h.score ?? "–"}
-                        </span>
-                        {h.score >= 70
-                          ? <CheckCircle size={16} color="var(--success)" />
-                          : <XCircle size={16} color="var(--danger)" />
-                        }
+                    <div className="p-6 pt-0 border-t border-[var(--border)] mt-2">
+                      <div className="p-5 rounded-xl bg-[rgba(0,0,0,0.2)] border border-[rgba(255,255,255,0.05)] text-[var(--text-secondary)] font-['Inter'] text-[15px] leading-relaxed whitespace-pre-wrap mt-4 shadow-inner">
+                        {idealIntro}
                       </div>
                     </div>
-                  ))}
-                  </div>
+                  </motion.div>
                 )}
+              </AnimatePresence>
+            </motion.div>
+
+            {/* Recorder Card */}
+            <motion.div 
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="card overflow-hidden bg-gradient-to-br from-[var(--bg-card)] via-[rgba(139,92,246,0.03)] to-[var(--bg-card)] border border-[var(--border)] shadow-[0_8px_32px_rgba(0,0,0,0.4)] relative"
+            >
+              {recording && (
+                <div className="absolute inset-0 border-2 border-[var(--danger)] rounded-2xl opacity-50 animate-pulse pointer-events-none z-10" />
+              )}
+              
+              <div 
+                className="flex items-center justify-between p-5 cursor-pointer hover:bg-[rgba(255,255,255,0.02)] transition-colors relative z-20"
+                onClick={() => setRecorderExpanded(!recorderExpanded)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${recording ? 'bg-[rgba(239,68,68,0.1)] text-[var(--danger)]' : 'bg-[rgba(139,92,246,0.1)] text-[var(--accent-light)]'}`}>
+                    <Mic size={20} className={recording ? 'animate-pulse' : ''} />
+                  </div>
+                  <h3 className="text-base font-semibold text-[var(--text-primary)] m-0">
+                    {recording ? "Recording in Progress" : "Record Your Introduction"}
+                  </h3>
+                </div>
+                <div className="p-1.5 rounded-md bg-[rgba(255,255,255,0.05)] text-[var(--text-muted)]">
+                  {recorderExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </div>
               </div>
-            )}
+
+              <AnimatePresence>
+                {recorderExpanded && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="p-8 pt-6 flex flex-col items-center">
+                      
+                      <div className="relative mb-8 mt-4">
+                        {!recording ? (
+                          <motion.button
+                            whileHover={provider === "openai" ? { scale: 1.05 } : {}}
+                            whileTap={provider === "openai" ? { scale: 0.95 } : {}}
+                            onClick={startRecording}
+                            disabled={provider !== "openai"}
+                            className="w-28 h-28 rounded-full bg-gradient-to-br from-[#7c3aed] to-[#a78bfa] flex items-center justify-center shadow-[0_0_40px_rgba(139,92,246,0.5)] border-none relative group"
+                            style={{ opacity: provider !== "openai" ? 0.5 : 1, cursor: provider === "openai" ? "pointer" : "not-allowed" }}
+                            id="start-recording-btn"
+                          >
+                            <div className="absolute inset-0 rounded-full bg-white opacity-0 group-hover:opacity-20 transition-opacity" />
+                            <Mic size={48} color="white" />
+                          </motion.button>
+                        ) : (
+                          <div className="relative flex items-center justify-center">
+                            {/* Animated ripples */}
+                            <motion.div 
+                              animate={{ scale: [1, 1.5, 2], opacity: [0.8, 0.3, 0] }} 
+                              transition={{ duration: 1.5, repeat: Infinity, ease: "easeOut" }}
+                              className="absolute w-28 h-28 bg-[var(--danger)] rounded-full -z-10"
+                            />
+                            <motion.div 
+                              animate={{ scale: [1, 1.3, 1.6], opacity: [0.6, 0.2, 0] }} 
+                              transition={{ duration: 1.5, repeat: Infinity, ease: "easeOut", delay: 0.5 }}
+                              className="absolute w-28 h-28 bg-[var(--danger)] rounded-full -z-10"
+                            />
+                            
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={stopRecording}
+                              className="w-28 h-28 rounded-full bg-[var(--danger)] flex items-center justify-center shadow-[0_0_40px_rgba(239,68,68,0.6)] border-none relative z-10"
+                              style={{ cursor: "pointer" }}
+                              id="stop-recording-btn"
+                            >
+                              <Square size={40} color="white" className="rounded-sm" />
+                            </motion.button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="h-10 flex items-center justify-center mb-6 w-full">
+                        {recording ? (
+                          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3">
+                            <div className="w-2.5 h-2.5 rounded-full bg-[var(--danger)] shadow-[0_0_10px_rgba(239,68,68,0.8)] animate-pulse" />
+                            <span className="text-[var(--danger)] font-['Outfit'] font-bold text-3xl tracking-wide">
+                              {formatTime(recordingTime)}
+                            </span>
+                          </motion.div>
+                        ) : !audioBlob && (
+                          <p className="text-[var(--text-muted)] text-sm font-medium tracking-wide uppercase">
+                            Click microphone to start
+                          </p>
+                        )}
+                      </div>
+
+                      <AnimatePresence>
+                        {audioUrl && (
+                          <motion.div 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="w-full max-w-md bg-[rgba(0,0,0,0.2)] rounded-2xl p-5 border border-[rgba(255,255,255,0.05)] shadow-inner"
+                          >
+                            <audio controls src={audioUrl} className="w-full h-10 mb-4 rounded-lg opacity-90" />
+                            <div className="flex gap-3">
+                              <button
+                                onClick={handleEvaluate}
+                                id="evaluate-intro-btn"
+                                disabled={loading}
+                                className="flex-1 btn-primary flex items-center justify-center gap-2 py-3 rounded-xl shadow-[0_0_20px_rgba(139,92,246,0.3)] disabled:opacity-70"
+                              >
+                                {loading ? (
+                                  <><div className="w-5 h-5 border-2 border-t-white border-white/20 rounded-full animate-spin" /> Analyzing...</>
+                                ) : (
+                                  <><Play size={18} fill="currentColor" /> Evaluate Audio</>
+                                )}
+                              </button>
+                              <button 
+                                onClick={reset} 
+                                className="p-3 bg-[rgba(255,255,255,0.05)] hover:bg-[rgba(239,68,68,0.1)] hover:text-[var(--danger)] text-[var(--text-secondary)] border border-[rgba(255,255,255,0.1)] rounded-xl transition-all"
+                                title="Discard and restart"
+                              >
+                                <RotateCcw size={18} />
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      <AnimatePresence>
+                        {!audioUrl && !recording && (
+                          <motion.div 
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                            className="w-full mt-8 pt-8 border-t border-[rgba(255,255,255,0.05)]"
+                          >
+                            <div className="flex items-center gap-2 mb-4">
+                              <div className="h-px bg-gradient-to-r from-transparent via-[var(--border)] to-transparent flex-1" />
+                              <span className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-widest">Or Type Your Intro</span>
+                              <div className="h-px bg-gradient-to-r from-transparent via-[var(--border)] to-transparent flex-1" />
+                            </div>
+                            <div className="relative group">
+                              <textarea 
+                                className="w-full bg-[rgba(0,0,0,0.2)] border border-[rgba(255,255,255,0.08)] focus:border-[var(--accent-light)] rounded-xl p-4 text-[var(--text-primary)] font-['Inter'] text-sm resize-none transition-all outline-none focus:shadow-[0_0_20px_rgba(139,92,246,0.15)] placeholder-[var(--text-muted)]" 
+                                rows={4} 
+                                placeholder="Type your introduction here if you prefer not to speak..." 
+                                value={introText}
+                                onChange={(e) => setIntroText(e.target.value)}
+                                disabled={loading}
+                              />
+                            </div>
+                            <button 
+                              className="w-full mt-3 btn-secondary bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(139,92,246,0.1)] border border-[rgba(255,255,255,0.08)] hover:border-[var(--accent-light)] text-[var(--text-primary)] rounded-xl py-3 flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed" 
+                              onClick={handleEvaluateText} 
+                              disabled={loading || !introText.trim()}
+                            >
+                              {loading ? (
+                                <div className="w-4 h-4 border-2 border-t-[var(--accent-light)] border-white/10 rounded-full animate-spin" />
+                              ) : (
+                                <Send size={16} className="text-[var(--accent-light)]" />
+                              )}
+                              Evaluate Text
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          </div>
+
+          {/* RIGHT COLUMN: Results & History */}
+          <div className="lg:col-span-5 flex flex-col gap-6">
+            
+            {/* Results Card */}
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              className="card overflow-hidden bg-[var(--bg-card)] border border-[var(--border)] shadow-lg flex-1 flex flex-col"
+            >
+              <div 
+                className="flex items-center justify-between p-5 cursor-pointer bg-[rgba(255,255,255,0.01)] border-b border-[rgba(255,255,255,0.03)]"
+                onClick={() => setResultsExpanded(!resultsExpanded)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-[rgba(255,255,255,0.05)] text-[var(--text-primary)]">
+                    <BarChart2 size={18} />
+                  </div>
+                  <h3 className="text-base font-semibold text-[var(--text-primary)] m-0">AI Evaluation</h3>
+                </div>
+                <div className="p-1.5 rounded-md bg-[rgba(255,255,255,0.05)] text-[var(--text-muted)]">
+                  {resultsExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </div>
+              </div>
+
+              <AnimatePresence mode="wait">
+                {resultsExpanded && !result && (
+                  <motion.div 
+                    key="empty"
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="flex-1 flex flex-col items-center justify-center p-10 min-h-[350px] text-center"
+                  >
+                    <div className="w-20 h-20 rounded-full bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] flex items-center justify-center mb-5">
+                      <Brain size={32} className="text-[var(--text-muted)] opacity-50" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-[var(--text-secondary)] mb-2">Awaiting Introduction</h3>
+                    <p className="text-sm text-[var(--text-muted)] max-w-[250px] mx-auto leading-relaxed">
+                      Record or type your introduction to receive detailed AI feedback and scoring here.
+                    </p>
+                  </motion.div>
+                )}
+
+                {resultsExpanded && result && (
+                  <motion.div 
+                    key="results"
+                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                    className="p-6 md:p-8 overflow-y-auto"
+                  >
+                    {/* TTS Toggle */}
+                    <div className="flex justify-end mb-6">
+                      <button 
+                        onClick={() => {
+                          setVoiceEnabled(!voiceEnabled);
+                          if (voiceEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
+                        }} 
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                          voiceEnabled 
+                            ? 'bg-[rgba(139,92,246,0.1)] border-[rgba(139,92,246,0.3)] text-[var(--accent-light)]' 
+                            : 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.1)] text-[var(--text-muted)]'
+                        }`}
+                      >
+                        {voiceEnabled ? <Volume2 size={14}/> : <VolumeX size={14} />} 
+                        {voiceEnabled ? "Voice Feedback On" : "Voice Feedback Off"}
+                      </button>
+                    </div>
+
+                    {/* Circular Score */}
+                    <div className="flex flex-col items-center mb-10">
+                      <div className="relative w-36 h-36 flex items-center justify-center mb-4">
+                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                          <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
+                          <motion.circle 
+                            cx="50" cy="50" r="45" fill="none" 
+                            stroke={getScoreColor(result.score)} 
+                            strokeWidth="8"
+                            strokeLinecap="round"
+                            initial={{ strokeDasharray: "0 283" }}
+                            animate={{ strokeDasharray: `${(result.score / 100) * 283} 283` }}
+                            transition={{ duration: 1.5, ease: "easeOut" }}
+                            style={{ filter: `drop-shadow(0 0 8px ${getScoreColor(result.score)}80)` }}
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <span className="text-4xl font-['Outfit'] font-bold" style={{ color: getScoreColor(result.score) }}>
+                            {result.score}
+                          </span>
+                          <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold mt-1">Score</span>
+                        </div>
+                      </div>
+                      
+                      <div className={`px-4 py-1.5 rounded-full flex items-center gap-2 text-sm font-bold border ${
+                        result.passed ? 'bg-[rgba(16,185,129,0.1)] border-[rgba(16,185,129,0.2)] text-[var(--success)]' : 'bg-[rgba(239,68,68,0.1)] border-[rgba(239,68,68,0.2)] text-[var(--danger)]'
+                      }`}>
+                        {result.passed ? <><CheckCircle size={16} /> Passed & Ready!</> : <><XCircle size={16} /> Needs Refinement</>}
+                      </div>
+                    </div>
+
+                    {/* Breakdown Bars */}
+                    {result.scores_breakdown && Object.keys(result.scores_breakdown).length > 0 && (
+                      <div className="mb-8 p-5 bg-[rgba(0,0,0,0.15)] rounded-2xl border border-[rgba(255,255,255,0.03)]">
+                        <h4 className="text-xs font-bold text-[var(--text-secondary)] mb-4 uppercase tracking-widest flex items-center gap-2">
+                          <BarChart2 size={14} /> Evaluation Breakdown
+                        </h4>
+                        <div className="space-y-4">
+                          {Object.entries(result.scores_breakdown).map(([key, val]: any, i) => (
+                            <div key={key}>
+                              <div className="flex justify-between items-end mb-1.5">
+                                <span className="text-sm font-medium text-[var(--text-secondary)] capitalize">{key}</span>
+                                <span className="text-xs font-bold" style={{ color: getScoreColor(val * 5) }}>{val}/20</span>
+                              </div>
+                              <div className="h-2 w-full bg-[rgba(255,255,255,0.05)] rounded-full overflow-hidden">
+                                <motion.div 
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${(val / 20) * 100}%` }}
+                                  transition={{ duration: 1, delay: i * 0.1, ease: "easeOut" }}
+                                  className="h-full rounded-full"
+                                  style={{ background: getScoreColor(val * 5), boxShadow: `0 0 10px ${getScoreColor(val * 5)}` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Transcript */}
+                    {result.transcript && (
+                      <div className="mb-8">
+                        <h4 className="text-xs font-bold text-[var(--text-secondary)] mb-3 uppercase tracking-widest">Transcript</h4>
+                        <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] shadow-inner text-sm text-[var(--text-secondary)] leading-relaxed italic border-l-2 border-l-[var(--accent-light)]">
+                          "{result.transcript}"
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Feedback Items */}
+                    <div className="space-y-6">
+                      {result.strengths && (
+                        <div className="p-4 rounded-xl bg-gradient-to-br from-[rgba(16,185,129,0.05)] to-transparent border border-[rgba(16,185,129,0.1)]">
+                          <h4 className="text-xs font-bold text-[var(--success)] mb-2 uppercase tracking-widest flex items-center gap-1.5">
+                            <CheckCircle size={14} /> Strengths
+                          </h4>
+                          <p className="text-sm text-[var(--text-secondary)] leading-relaxed m-0">{result.strengths}</p>
+                        </div>
+                      )}
+                      
+                      {result.improvements && (
+                        <div className="p-4 rounded-xl bg-gradient-to-br from-[rgba(245,158,11,0.05)] to-transparent border border-[rgba(245,158,11,0.1)]">
+                          <h4 className="text-xs font-bold text-[var(--warning)] mb-2 uppercase tracking-widest flex items-center gap-1.5">
+                            <RotateCcw size={14} /> Areas to Improve
+                          </h4>
+                          <p className="text-sm text-[var(--text-secondary)] leading-relaxed m-0">{result.improvements}</p>
+                        </div>
+                      )}
+
+                      {!result.strengths && !result.improvements && result.feedback && (
+                        <div className="p-4 rounded-xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)]">
+                          <h4 className="text-xs font-bold text-[var(--accent-light)] mb-2 uppercase tracking-widest">General Feedback</h4>
+                          <p className="text-sm text-[var(--text-secondary)] leading-relaxed m-0">{result.feedback}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Next Steps CTA */}
+                    <motion.div 
+                      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}
+                      className="mt-10 pt-8 border-t border-[rgba(255,255,255,0.05)] text-center relative"
+                    >
+                      {result.passed ? (
+                        <>
+                          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--success)] to-transparent opacity-20" />
+                          <p className="text-sm text-[var(--text-secondary)] mb-4">Excellent work! You've unlocked the core interview stages.</p>
+                          <Link href="/interview" className="block">
+                            <button className="w-full btn-primary bg-gradient-to-r from-[var(--success)] to-[#059669] py-4 text-base shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] border-none cursor-pointer text-white rounded-xl">
+                              Enter Mock Interview Session →
+                            </button>
+                          </Link>
+                        </>
+                      ) : (
+                        <>
+                          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--border)] to-transparent" />
+                          <p className="text-sm text-[var(--text-secondary)] mb-4">Review the feedback and try again to hit the 70 point threshold.</p>
+                          <button 
+                            className="w-full btn-secondary py-3 text-[15px] border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.03)] cursor-pointer rounded-xl bg-transparent text-[var(--text-primary)]" 
+                            onClick={reset}
+                          >
+                            Retake Introduction
+                          </button>
+                        </>
+                      )}
+                    </motion.div>
+
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+
+            {/* History Card */}
+            <AnimatePresence>
+              {history.length > 0 && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                  className="card overflow-hidden bg-[rgba(10,10,15,0.6)] border border-[var(--border)] relative z-10"
+                >
+                  <div 
+                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-[rgba(255,255,255,0.02)] transition-colors"
+                    onClick={() => setHistoryExpanded(!historyExpanded)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-1.5 rounded-lg bg-[rgba(255,255,255,0.05)] text-[var(--text-secondary)]">
+                        <Clock size={16} />
+                      </div>
+                      <h3 className="text-[15px] font-semibold text-[var(--text-primary)] m-0">Past Attempts ({history.length})</h3>
+                    </div>
+                    <div className="text-[var(--text-muted)]">
+                      {historyExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </div>
+                  </div>
+                  
+                  <AnimatePresence>
+                    {historyExpanded && (
+                      <motion.div 
+                        initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden"
+                      >
+                        <div className="p-4 pt-0 border-t border-[rgba(255,255,255,0.03)] mt-2 flex flex-col gap-2">
+                          {history.slice(0, 4).map((h, i) => (
+                            <div key={h.id} className="flex items-center justify-between p-3 rounded-xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.03)] hover:border-[rgba(255,255,255,0.08)] transition-colors group">
+                              <div>
+                                <p className="text-sm font-semibold text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors m-0">Attempt #{history.length - i}</p>
+                                <p className="text-xs text-[var(--text-muted)] m-0">{new Date(h.created_at).toLocaleDateString()}</p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-lg font-bold font-['Outfit']" style={{ color: getScoreColor(h.score || 0) }}>
+                                  {h.score ?? "–"}
+                                </span>
+                                {h.score >= 70 ? <CheckCircle size={16} className="text-[var(--success)]" /> : <XCircle size={16} className="text-[var(--danger)]" />}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
