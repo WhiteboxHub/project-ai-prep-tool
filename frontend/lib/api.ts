@@ -223,6 +223,7 @@
 // }
 
 
+// frontend\lib\api.ts
 import axios from "axios";
 
 const isProd = process.env.NODE_ENV === "production";
@@ -314,15 +315,15 @@ export async function getIntroHistory(sessionId: string) {
 }
 
 // ─── Interview ─────────────────────────────────
-export async function getStageQuestions(sessionId: string, stageName: string = "General Mock") {
-  const res = await api.get("/api/interview/stage-questions", {
-    params: {
-      session_id: sessionId,
-      stage_name: stageName,
-    },
-  });
-  return res.data;
-}
+// export async function getStageQuestions(sessionId: string, stageName: string = "General Mock") {
+//   const res = await api.get("/api/interview/stage-questions", {
+//     params: {
+//       session_id: sessionId,
+//       stage_name: stageName,
+//     },
+//   });
+//   return res.data;
+// }
 
 export async function generateReport(sessionId: string) {
   const res = await api.post("/api/report/generate", { session_id: sessionId });

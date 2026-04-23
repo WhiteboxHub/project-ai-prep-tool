@@ -1,3 +1,4 @@
+// ai-prep-tool-duplicate\frontend-updated\app\intro\page.tsx
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -147,25 +148,73 @@ export default function IntroPage() {
     if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
   };
 
+  // const handleEvaluateText = async () => {
+  //   if (!introText.trim()) return;
+  //   setLoading(true);
+  //   try {
+  //     const { evaluateIntroText } = await import("@/lib/api");
+  //     const data = await evaluateIntroText(sessionId, introText);
+  //     const normalized = {
+  //       ...data,
+  //       score: data?.score ?? Math.round((data?.evaluation?.overall_score || 0) * 10),
+  //       passed: data?.status === "PASS",
+  //       scores_breakdown: data?.evaluation?.scores || {},
+  //       feedback: (data?.evaluation?.feedback || []).join(" ") + " " + (data?.evaluation?.missing_elements || []).join(" "),
+  //       strengths: data?.status === "PASS" ? "Clear, professional introduction structure." : "",
+  //       improvements: (data?.evaluation?.missing_elements || data?.evaluation?.feedback || []).join(" "),
+  //     };
+  //     setResult(normalized);
+  //     const h = await getIntroHistory(sessionId);
+  //     setHistory(h.attempts || []);
+  //     toast.success(normalized.passed ? "Excellent! You passed!" : "Keep practicing!");
+  //     speakText(`Score: ${normalized.score}. ${normalized.feedback}`);
+  //   } catch (err: any) {
+  //     toast.error(err?.response?.data?.detail || "Evaluation failed. Please try again.");
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
+  
   const handleEvaluateText = async () => {
     if (!introText.trim()) return;
     setLoading(true);
     try {
       const { evaluateIntroText } = await import("@/lib/api");
       const data = await evaluateIntroText(sessionId, introText);
+  
+      // ✅ FIX: same logic here
+      const computedScore =
+        data?.score ?? Math.round((data?.evaluation?.overall_score || 0) * 10);
+  
       const normalized = {
         ...data,
-        score: data?.score ?? Math.round((data?.evaluation?.overall_score || 0) * 10),
-        passed: data?.status === "PASS",
+        score: computedScore,
+        passed: computedScore >= 70, // ✅ FIXED
         scores_breakdown: data?.evaluation?.scores || {},
-        feedback: (data?.evaluation?.feedback || []).join(" ") + " " + (data?.evaluation?.missing_elements || []).join(" "),
-        strengths: data?.status === "PASS" ? "Clear, professional introduction structure." : "",
-        improvements: (data?.evaluation?.missing_elements || data?.evaluation?.feedback || []).join(" "),
+        feedback:
+          (data?.evaluation?.feedback || []).join(" ") +
+          " " +
+          (data?.evaluation?.missing_elements || []).join(" "),
+        strengths:
+          computedScore >= 70
+            ? "Clear, professional introduction structure."
+            : "",
+        improvements:
+          (data?.evaluation?.missing_elements ||
+            data?.evaluation?.feedback ||
+            []).join(" "),
       };
+  
+      console.log("TEXT EVAL:", normalized); // ✅ debug
+  
       setResult(normalized);
+  
       const h = await getIntroHistory(sessionId);
       setHistory(h.attempts || []);
+  
       toast.success(normalized.passed ? "Excellent! You passed!" : "Keep practicing!");
+  
       speakText(`Score: ${normalized.score}. ${normalized.feedback}`);
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Evaluation failed. Please try again.");
@@ -173,7 +222,7 @@ export default function IntroPage() {
       setLoading(false);
     }
   };
-
+  
   const speakText = (text: string) => {
     if (!voiceEnabled || typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
