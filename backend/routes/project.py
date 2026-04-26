@@ -123,7 +123,11 @@ def save_and_evaluate_project(data: ProjectContextData):
             raise Exception("API key not found. Please setup again.")
 
         # 3. Prepare input
+        skills_str = ", ".join(data.skills) if data.skills else ""
         answers = f"""
+Domain: {data.domain}
+Background: {data.background}
+Skills: {skills_str}
 Product: {data.product}
 Architecture: {data.architecture}
 Business Value: {data.business_value}

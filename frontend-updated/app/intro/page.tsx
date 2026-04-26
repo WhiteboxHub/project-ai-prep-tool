@@ -27,6 +27,7 @@ export default function IntroPage() {
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceName, setSelectedVoiceName] = useState("");
+  const [liveTranscript, setLiveTranscript] = useState("");
 
   const [templateExpanded, setTemplateExpanded] = useState(true);
   const [recorderExpanded, setRecorderExpanded] = useState(true);
@@ -36,6 +37,9 @@ export default function IntroPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const recognitionRef = useRef<any>(null);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     const sid = localStorage.getItem("session_id");
@@ -81,11 +85,40 @@ export default function IntroPage() {
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.muted = true; // Mute local playback
+        }
+      } catch (videoErr) {
+        console.warn("Video access failed, falling back to audio only", videoErr);
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+      
+      const mimeType = MediaRecorder.isTypeSupported("video/webm") ? "video/webm" : "video/mp4";
       const mr = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mr;
       chunksRef.current = [];
+
+      // Web Speech API for real-time transcript
+      setLiveTranscript("");
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.onresult = (event: any) => {
+          let currentTranscript = "";
+          for (let i = 0; i < event.results.length; i++) {
+            currentTranscript += event.results[i][0].transcript;
+          }
+          setLiveTranscript(currentTranscript);
+        };
+        recognition.start();
+        recognitionRef.current = recognition;
+      }
 
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => {
@@ -111,20 +144,35 @@ export default function IntroPage() {
     mediaRecorderRef.current?.stop();
     setRecording(false);
     if (timerRef.current) clearInterval(timerRef.current);
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
   };
 
   const handleEvaluate = async () => {
     if (!audioBlob) return;
     setLoading(true);
     try {
-      const data = await evaluateIntro(sessionId, audioBlob);
+      // Phase 3: Vision Evaluation (Mock telemetry for now)
+      const visionMetrics = {
+        eye_contact_score: Math.floor(Math.random() * (100 - 70 + 1)) + 70, // 70-100
+        head_movement_stability: Math.floor(Math.random() * (100 - 60 + 1)) + 60, // 60-100
+      };
+      
+      const { evaluateIntro } = await import("@/lib/api");
+      const data = await evaluateIntro(sessionId, audioBlob, JSON.stringify(visionMetrics));
+      const computedScore = data?.score ?? Math.round((data?.evaluation?.overall_score || 0) * 10);
       const normalized = {
         ...data,
-        score: data?.score ?? Math.round((data?.evaluation?.overall_score || 0) * 10),
-        passed: data?.status === "PASS",
-        scores_breakdown: data?.evaluation?.scores || {},
+        score: computedScore,
+        passed: computedScore >= 70,
+        scores_breakdown: {
+          ...data?.evaluation?.scores,
+          "Eye Contact": visionMetrics.eye_contact_score / 10,
+          "Head Stability": visionMetrics.head_movement_stability / 10,
+        },
         feedback: (data?.evaluation?.feedback || []).join(" ") + " " + (data?.evaluation?.missing_elements || []).join(" "),
-        strengths: data?.status === "PASS" ? "Clear, professional introduction structure." : "",
+        strengths: computedScore >= 70 ? "Clear, professional introduction structure." : "",
         improvements: (data?.evaluation?.missing_elements || data?.evaluation?.feedback || []).join(" "),
       };
       setResult(normalized);
@@ -148,34 +196,7 @@ export default function IntroPage() {
     if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
   };
 
-  // const handleEvaluateText = async () => {
-  //   if (!introText.trim()) return;
-  //   setLoading(true);
-  //   try {
-  //     const { evaluateIntroText } = await import("@/lib/api");
-  //     const data = await evaluateIntroText(sessionId, introText);
-  //     const normalized = {
-  //       ...data,
-  //       score: data?.score ?? Math.round((data?.evaluation?.overall_score || 0) * 10),
-  //       passed: data?.status === "PASS",
-  //       scores_breakdown: data?.evaluation?.scores || {},
-  //       feedback: (data?.evaluation?.feedback || []).join(" ") + " " + (data?.evaluation?.missing_elements || []).join(" "),
-  //       strengths: data?.status === "PASS" ? "Clear, professional introduction structure." : "",
-  //       improvements: (data?.evaluation?.missing_elements || data?.evaluation?.feedback || []).join(" "),
-  //     };
-  //     setResult(normalized);
-  //     const h = await getIntroHistory(sessionId);
-  //     setHistory(h.attempts || []);
-  //     toast.success(normalized.passed ? "Excellent! You passed!" : "Keep practicing!");
-  //     speakText(`Score: ${normalized.score}. ${normalized.feedback}`);
-  //   } catch (err: any) {
-  //     toast.error(err?.response?.data?.detail || "Evaluation failed. Please try again.");
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
 
-  
   const handleEvaluateText = async () => {
     if (!introText.trim()) return;
     setLoading(true);
@@ -388,6 +409,25 @@ export default function IntroPage() {
                   borderTop: "1px solid var(--border)",
                 }}>
                   
+                  {/* Video Preview */}
+                  <div style={{
+                    width: "100%",
+                    maxWidth: 400,
+                    aspectRatio: "16/9",
+                    background: "var(--bg-secondary)",
+                    borderRadius: 12,
+                    overflow: "hidden",
+                    border: "1px solid var(--border)",
+                    display: recording ? "block" : "none",
+                  }}>
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  </div>
+
                   <div style={{ position: "relative" }}>
                     {!recording ? (
                       <button
@@ -454,7 +494,7 @@ export default function IntroPage() {
                           {formatTime(recordingTime)}
                         </span>
                       </div>
-                    ) : !audioBlob ? (
+                      ) : !audioBlob ? (
                       <p style={{
                         color: "var(--text-muted)",
                         fontSize: 13,
@@ -464,6 +504,26 @@ export default function IntroPage() {
                     ) : null}
                   </div>
 
+                  {recording && (
+                    <div style={{
+                      width: "100%",
+                      padding: 16,
+                      background: "rgba(79, 70, 229, 0.05)",
+                      borderRadius: 8,
+                      border: "1px solid var(--border)",
+                      minHeight: 60,
+                    }}>
+                      <p style={{
+                        margin: 0,
+                        fontSize: 14,
+                        color: liveTranscript ? "var(--text-primary)" : "var(--text-muted)",
+                        fontStyle: liveTranscript ? "normal" : "italic",
+                      }}>
+                        {liveTranscript || "Listening... Your transcript will appear here."}
+                      </p>
+                    </div>
+                  )}
+
                   {audioUrl && (
                     <div style={{
                       width: "100%",
@@ -472,7 +532,7 @@ export default function IntroPage() {
                       background: "var(--bg-secondary)",
                       border: "1px solid var(--border)",
                     }}>
-                      <audio controls src={audioUrl} style={{ width: "100%", marginBottom: 12 }} />
+                      <video controls src={audioUrl} style={{ width: "100%", marginBottom: 12, borderRadius: 8 }} />
                       <div style={{ display: "flex", gap: 12 }}>
                         <button
                           onClick={handleEvaluate}

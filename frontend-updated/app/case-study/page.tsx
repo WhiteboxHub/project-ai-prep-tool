@@ -1,3 +1,4 @@
+// frontend-updated\app\case-study\page.tsx
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -6,7 +7,7 @@ import ReactMarkdown from "react-markdown";
 import toast from "react-hot-toast";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
-import { Brain, BookOpen, Loader, ChevronLeft, Sparkles, Clock, RefreshCw } from "lucide-react";
+import { Brain, BookOpen, Loader, ChevronLeft, Sparkles, Clock, RefreshCw, Download } from "lucide-react";
 
 export default function CaseStudyPage() {
   const router = useRouter();
@@ -38,14 +39,14 @@ export default function CaseStudyPage() {
     router.push("/");
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (explicitTopic?: string) => {
     setLoading(true);
     setContent("");
     setViewingHistoryId(null);
     try {
       let data;
       if (generationType === "domain") {
-        const topicStr = selectedTopic || topics[0] || "";
+        const topicStr = explicitTopic || selectedTopic || topics[0] || "";
         let templateKey = "mlops";
         if (topicStr.toLowerCase().includes("rag")) templateKey = "rag";
         else if (topicStr.toLowerCase().includes("agentic")) templateKey = "agentic";
@@ -53,12 +54,12 @@ export default function CaseStudyPage() {
         let projectDetails = "";
         try {
           const lp = await getLatestProject(sessionId);
-          if (lp && lp.project_details) {
-            projectDetails = lp.project_details;
+          if (lp && Object.keys(lp).length > 0) {
+            projectDetails = `Product: ${lp.product}\nArchitecture: ${lp.architecture}\nValue: ${lp.business_value}\nRole: ${lp.role}\nImpact: ${lp.impact}`;
           } else {
             toast.loading("Extracting project from resume...", { id: "extract" });
             const ep = await extractProject(sessionId);
-            projectDetails = ep.project_details;
+            projectDetails = `Product: ${ep.core_project?.product}\nArchitecture: ${ep.core_project?.architecture}\nValue: ${ep.core_project?.business_value}\nRole: ${ep.core_project?.role}\nImpact: ${ep.core_project?.impact}`;
             toast.dismiss("extract");
           }
         } catch (err) {
@@ -108,6 +109,34 @@ export default function CaseStudyPage() {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const element = document.getElementById("case-study-content");
+      if (!element) return;
+      
+      const opt: any = {
+        margin:       1,
+        filename:     `${candidateName || 'Candidate'}_Case_Study.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2 },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+      
+      toast.promise(
+        html2pdf().set(opt).from(element).save(),
+        {
+          loading: 'Generating PDF...',
+          success: 'PDF downloaded successfully!',
+          error: 'Failed to generate PDF.',
+        }
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to generate PDF. Make sure you are on a supported browser.");
+    }
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-primary)" }}>
       <Navbar candidateName={candidateName} onLogout={handleLogout} />
@@ -144,49 +173,73 @@ export default function CaseStudyPage() {
               ))}
             </div>
 
-            {generationType === "domain" && (
-              <div style={{ marginBottom: 20 }}>
-                <label className="label">Domain Topic</label>
-                <select
-                  className="input-field"
-                  value={selectedTopic || topics[0] || ""}
-                  onChange={(e) => setSelectedTopic(e.target.value)}
-                >
-                  {topics.map((t) => (<option key={t} value={t}>{t}</option>))}
-                </select>
+            {generationType === "domain" ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {[
+                  { id: "rag", label: "RAG Study Guide" },
+                  { id: "agentic", label: "Agentic Study Guide" },
+                  { id: "mlops", label: "MLOps Study Guide" }
+                ].map((guide) => (
+                  <button
+                    key={guide.id}
+                    className="btn-secondary"
+                    onClick={() => {
+                      setSelectedTopic(guide.id);
+                      handleGenerate(guide.id);
+                    }}
+                    disabled={loading}
+                    style={{
+                      width: "100%",
+                      padding: "12px",
+                      textAlign: "left",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      fontSize: 14,
+                      background: "var(--bg-tertiary)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      color: "var(--text-primary)"
+                    }}
+                  >
+                    <span>{guide.label}</span>
+                    <Sparkles size={16} color="var(--accent)" />
+                  </button>
+                ))}
               </div>
+            ) : (
+              <button
+                id="generate-case-study-btn"
+                className="btn-primary"
+                onClick={() => handleGenerate()}
+                disabled={loading}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  fontSize: 14,
+                }}
+              >
+                {loading
+                  ? <>
+                      <div className="animate-spin" style={{
+                        width: 16,
+                        height: 16,
+                        border: "2px solid var(--bg-tertiary)",
+                        borderTopColor: "white",
+                        borderRadius: "50%"
+                      }}></div>
+                      Generating...
+                    </>
+                  : <>
+                      <Sparkles size={16} /> Generate Case Study
+                    </>
+                }
+              </button>
             )}
-
-            <button
-              id="generate-case-study-btn"
-              className="btn-primary"
-              onClick={handleGenerate}
-              disabled={loading}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                fontSize: 14,
-              }}
-            >
-              {loading
-                ? <>
-                    <div className="animate-spin" style={{
-                      width: 16,
-                      height: 16,
-                      border: "2px solid var(--bg-tertiary)",
-                      borderTopColor: "white",
-                      borderRadius: "50%"
-                    }}></div>
-                    Generating...
-                  </>
-                : <>
-                    <Sparkles size={16} /> Generate
-                  </>
-              }
-            </button>
           </div>
 
           {/* History */}
@@ -312,21 +365,38 @@ export default function CaseStudyPage() {
                   }}>
                     {viewingHistoryId ? `Saved Case Study #${history.findIndex(h => h.id === viewingHistoryId) + 1}` : "✨ New Case Study"}
                   </h2>
-                  <button
-                    className="btn-secondary"
-                    onClick={handleGenerate}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      padding: "8px 16px",
-                      fontSize: 13,
-                    }}
-                  >
-                    <RefreshCw size={13} /> Regenerate
-                  </button>
+                  <div style={{ display: "flex", gap: 12 }}>
+                    <button
+                      className="btn-secondary"
+                      onClick={handleDownloadPdf}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "8px 16px",
+                        fontSize: 13,
+                      }}
+                    >
+                      <Download size={13} /> Download PDF
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleGenerate()}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "8px 16px",
+                        fontSize: 13,
+                      }}
+                    >
+                      <RefreshCw size={13} /> Regenerate
+                    </button>
+                  </div>
                 </div>
-                <ReactMarkdown>{content}</ReactMarkdown>
+                <div id="case-study-content" style={{ padding: "10px" }}>
+                  <ReactMarkdown>{content}</ReactMarkdown>
+                </div>
               </div>
             )}
           </div>

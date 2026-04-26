@@ -202,7 +202,8 @@ router = APIRouter(prefix="/api/intro", tags=["intro"])
 @router.post("/evaluate")
 async def evaluate_audio_intro(
     session_id: str = Form(...),
-    audio: UploadFile = File(...)
+    audio: UploadFile = File(...),
+    vision_metrics: str = Form(None)
 ):
     conn = None
     file_path = None
@@ -218,7 +219,7 @@ async def evaluate_audio_intro(
         with open(file_path, "wb") as f:
             f.write(await audio.read())
 
-        transcript = transcribe_audio(file_path)
+        transcript = transcribe_audio(file_path, api_key=api_key)
 
         eval_result = evaluate_intro(
             user_id=session_id,
@@ -226,6 +227,16 @@ async def evaluate_audio_intro(
             ideal_intro="Professional introduction",
             api_key=api_key
         )
+
+        if vision_metrics:
+            try:
+                vm = json.loads(vision_metrics)
+                if "scores" not in eval_result:
+                    eval_result["scores"] = {}
+                eval_result["scores"]["Eye Contact (Phase 3)"] = vm.get("eye_contact_score", 0) / 10
+                eval_result["scores"]["Head Stability (Phase 3)"] = vm.get("head_movement_stability", 0) / 10
+            except:
+                pass
 
         conn = get_db_connection()
 
@@ -256,7 +267,7 @@ async def evaluate_audio_intro(
         return {
             "transcript": transcript,
             "evaluation": eval_result,
-            "score": score
+            "score": db_score
         }
 
     except Exception as e:
@@ -289,9 +300,36 @@ def evaluate_text_intro(data: dict):
             api_key=api_key
         )
 
+        raw_score = eval_result.get("overall_score", 0)
+        try:
+            score = float(raw_score)
+        except (ValueError, TypeError):
+            score = 0.0
+
+        if score and score <= 10:
+            db_score = int(score * 10)
+        else:
+            db_score = int(score)
+
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO evaluations (user_id, type, score, feedback)
+                    VALUES (%s, %s, %s, %s)
+                """, (
+                    session_id,
+                    "intro",
+                    db_score,
+                    json.dumps(eval_result)
+                ))
+            conn.commit()
+        finally:
+            conn.close()
+
         return {
             "evaluation": eval_result,
-            "score": eval_result.get("overall_score", 0)
+            "score": db_score
         }
 
     except Exception as e:

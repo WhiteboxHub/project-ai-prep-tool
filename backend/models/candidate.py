@@ -28,3 +28,6 @@ class ProjectContextData(BaseModel):
     role: Optional[str] = None
     impact: Optional[str] = None
     api_key: Optional[str] = None
+    domain: Optional[str] = None
+    background: Optional[str] = None
+    skills: Optional[list] = None

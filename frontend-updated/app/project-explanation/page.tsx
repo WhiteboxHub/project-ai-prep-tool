@@ -15,6 +15,10 @@ export default function ProjectExplanationPage() {
   
   const [step, setStep] = useState<"fill" | "evaluate" | "case_study">("fill");
 
+  const [domain, setDomain] = useState("");
+  const [background, setBackground] = useState("");
+  const [skills, setSkills] = useState<string[]>([]);
+
   const [product, setProduct] = useState("");
   const [architecture, setArchitecture] = useState("");
   const [businessValue, setBusinessValue] = useState("");
@@ -32,19 +36,26 @@ export default function ProjectExplanationPage() {
     setCandidateName(localStorage.getItem("candidate_name") || "");
     const fetchContext = async () => {
       try {
-        const backendUrl = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === "production" ? "https://ai-backend-560359652969.us-central1.run.app" : "http://localhost:8000");
-        const res = await fetch(`${backendUrl}/api/context/${sid}`);
-        if(res.ok) {
-           const data = await res.json();
-           if(data.project && data.project.product) {
-              setProduct(data.project.product);
-              setArchitecture(data.project.architecture);
-              setBusinessValue(data.project.business_value);
-              setRole(data.project.role);
-              setImpact(data.project.impact);
+        setLoading(true);
+        const { extractProject } = await import("@/lib/api");
+        const extracted = await extractProject(sid);
+        if (extracted) {
+           setDomain(extracted.domain || "");
+           setBackground(extracted.background || "");
+           setSkills(extracted.skills || []);
+           if (extracted.core_project) {
+              setProduct(extracted.core_project.product || "");
+              setArchitecture(extracted.core_project.architecture || "");
+              setBusinessValue(extracted.core_project.business_value || "");
+              setRole(extracted.core_project.role || "");
+              setImpact(extracted.core_project.impact || "");
            }
         }
-      } catch(e) {}
+      } catch(e: any) {
+        toast.error("Failed to extract data from resume. Make sure you uploaded one.");
+      } finally {
+        setLoading(false);
+      }
     };
     fetchContext();
   }, [router]);
@@ -68,7 +79,18 @@ export default function ProjectExplanationPage() {
       const res = await fetch(`${backendUrl}/api/project/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: sessionId, product, architecture, business_value: businessValue, role, impact, api_key: apiKey })
+        body: JSON.stringify({ 
+          user_id: sessionId, 
+          product, 
+          architecture, 
+          business_value: businessValue, 
+          role, 
+          impact, 
+          api_key: apiKey,
+          domain,
+          background,
+          skills
+        })
       });
       if(!res.ok) throw new Error("Evaluation failed");
       const data = await res.json();
@@ -123,68 +145,112 @@ export default function ProjectExplanationPage() {
           <div className="card animate-fadeIn" style={{ padding: 32, marginBottom: 24 }}>
             <h2 style={{
               fontSize: 20,
-              marginBottom: 24,
+              marginBottom: 8,
               color: "var(--text-primary)",
               fontWeight: 700,
             }}>
-               Project Details
+               Extracted Candidate Profile
             </h2>
+            <p style={{ color: "var(--text-secondary)", fontSize: 14, marginBottom: 24 }}>
+              The AI automatically extracted your domain, background, skills, and core project from your resume. Review and edit if needed before generating your case study.
+            </p>
 
-            <div>
-              <label className="label">Product / Mission</label>
-              <input
-                className="input-field"
-                style={{marginBottom:16}}
-                value={product}
-                onChange={e => setProduct(e.target.value)}
-                placeholder="What was the product or project?"
-              />
-            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div>
+                <label className="label">Domain</label>
+                <input
+                  className="input-field"
+                  value={domain}
+                  onChange={e => setDomain(e.target.value)}
+                  placeholder="e.g. Software Engineering"
+                  disabled={loading}
+                />
+              </div>
 
-            <div>
-              <label className="label">Architecture & Tech Stack</label>
-              <textarea
-                className="input-field"
-                rows={3}
-                style={{marginBottom:16}}
-                value={architecture}
-                onChange={e => setArchitecture(e.target.value)}
-                placeholder="Describe the architecture and technologies used..."
-              />
-            </div>
+              <div>
+                <label className="label">Background</label>
+                <textarea
+                  className="input-field"
+                  rows={2}
+                  value={background}
+                  onChange={e => setBackground(e.target.value)}
+                  placeholder="Summary of experience"
+                  disabled={loading}
+                />
+              </div>
 
-            <div>
-              <label className="label">Business Value</label>
-              <textarea
-                className="input-field"
-                rows={2}
-                style={{marginBottom:16}}
-                value={businessValue}
-                onChange={e => setBusinessValue(e.target.value)}
-                placeholder="Why did this project matter? What problem did it solve?"
-              />
-            </div>
+              <div>
+                <label className="label">Skills</label>
+                <input
+                  className="input-field"
+                  value={skills.join(", ")}
+                  onChange={e => setSkills(e.target.value.split(",").map(s => s.trim()))}
+                  placeholder="React, Python, AWS..."
+                  disabled={loading}
+                />
+              </div>
 
-            <div>
-              <label className="label">Your Role & Ownership</label>
-              <input
-                className="input-field"
-                style={{marginBottom:16}}
-                value={role}
-                onChange={e => setRole(e.target.value)}
-                placeholder="e.g. Lead Developer, Data Engineer, Product Manager..."
-              />
-            </div>
+              <hr style={{ borderColor: "var(--border)", margin: "8px 0" }} />
 
-            <div>
-              <label className="label">Metrics & Impact</label>
-              <input
-                className="input-field"
-                style={{marginBottom:24}}
-                value={impact}
-                onChange={e => setImpact(e.target.value)}
-                placeholder="e.g. Reduced latency by 40%, Improved user retention by 25%..."
-              />
+              <h3 style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", margin: "8px 0" }}>Core Project Details</h3>
+
+              <div>
+                <label className="label">Product / Mission</label>
+                <input
+                  className="input-field"
+                  value={product}
+                  onChange={e => setProduct(e.target.value)}
+                  placeholder="What was the product or project?"
+                  disabled={loading}
+                />
+              </div>
+
+              <div>
+                <label className="label">Architecture & Tech Stack</label>
+                <textarea
+                  className="input-field"
+                  rows={2}
+                  value={architecture}
+                  onChange={e => setArchitecture(e.target.value)}
+                  placeholder="Describe the architecture and technologies used..."
+                  disabled={loading}
+                />
+              </div>
+
+              <div>
+                <label className="label">Business Value</label>
+                <textarea
+                  className="input-field"
+                  rows={2}
+                  value={businessValue}
+                  onChange={e => setBusinessValue(e.target.value)}
+                  placeholder="Why did this project matter? What problem did it solve?"
+                  disabled={loading}
+                />
+              </div>
+
+              <div>
+                <label className="label">Your Role & Ownership</label>
+                <input
+                  className="input-field"
+                  value={role}
+                  onChange={e => setRole(e.target.value)}
+                  placeholder="e.g. Lead Developer, Data Engineer, Product Manager..."
+                  disabled={loading}
+                />
+              </div>
+
+              <div>
+                <label className="label">Metrics & Impact</label>
+                <input
+                  className="input-field"
+                  style={{marginBottom:24}}
+                  value={impact}
+                  onChange={e => setImpact(e.target.value)}
+                  placeholder="e.g. Reduced latency by 40%, Improved user retention by 25%..."
+                  disabled={loading}
+                />
+              </div>
             </div>
 
             <button
@@ -200,7 +266,7 @@ export default function ProjectExplanationPage() {
                 fontSize: 14,
               }}
             >
-              {loading ? "Evaluating..." : "Evaluate & Generate Case Study"}
+              {loading ? "Extracting / Evaluating..." : "Evaluate & Generate Case Study"}
             </button>
           </div>
         )}

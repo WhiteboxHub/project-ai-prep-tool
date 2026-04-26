@@ -66,12 +66,15 @@ export async function getTopics() {
 }
 
 // ─── Intro Evaluation ─────────────────────────────────────────
-export async function evaluateIntro(sessionId: string, audioBlob: Blob) {
+export async function evaluateIntro(sessionId: string, audioBlob: Blob, visionMetrics?: string) {
   const form = new FormData();
   form.append("session_id", sessionId);
   form.append("audio", audioBlob, "intro.webm");
   const apiKey = typeof window !== "undefined" ? localStorage.getItem("openai_key") || "" : "";
   form.append("api_key", apiKey);
+  if (visionMetrics) {
+    form.append("vision_metrics", visionMetrics);
+  }
   const res = await api.post("/api/intro/evaluate", form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
