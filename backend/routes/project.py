@@ -99,20 +99,18 @@ def save_and_evaluate_project(data: ProjectContextData):
     try:
         conn = get_db_connection()
 
-        # 1. UPSERT Project Context
+        # 1. Atomic UPSERT Project Context
         with conn.cursor() as cursor:
-            cursor.execute("SELECT id FROM project_context WHERE user_id = %s", (data.user_id,))
-            if cursor.fetchone():
-                cursor.execute("""
-                    UPDATE project_context 
-                    SET product=%s, architecture=%s, business_value=%s, role=%s, impact=%s
-                    WHERE user_id=%s
-                """, (data.product, data.architecture, data.business_value, data.role, data.impact, data.user_id))
-            else:
-                cursor.execute("""
-                    INSERT INTO project_context (user_id, product, architecture, business_value, role, impact)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """, (data.user_id, data.product, data.architecture, data.business_value, data.role, data.impact))
+            cursor.execute("""
+                INSERT INTO project_context (user_id, product, architecture, business_value, role, impact)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE 
+                    product = VALUES(product),
+                    architecture = VALUES(architecture),
+                    business_value = VALUES(business_value),
+                    role = VALUES(role),
+                    impact = VALUES(impact)
+            """, (data.user_id, data.product, data.architecture, data.business_value, data.role, data.impact))
 
         conn.commit()
 
@@ -182,8 +180,17 @@ Impact: {data.impact}
         }
 
     except Exception as e:
-        print("Project Error:", str(e))
-        raise HTTPException(status_code=500, detail="Project evaluation failed")
+        err_msg = str(e)
+        print("Project Error:", err_msg)
+        if isinstance(e, HTTPException): raise e
+        
+        # Check for common OpenAI errors
+        if "insufficient_quota" in err_msg or "429" in err_msg or "quota" in err_msg.lower():
+            raise HTTPException(429, detail="AI Provider Error: Your API Key has insufficient quota or is out of credits.")
+        if "AuthenticationError" in err_msg or "invalid api key" in err_msg.lower() or "401" in err_msg:
+            raise HTTPException(401, detail="AI Provider Error: Your API Key is invalid.")
+            
+        raise HTTPException(status_code=500, detail=f"Project evaluation failed. Reason: {err_msg}")
 
     finally:
         if conn:

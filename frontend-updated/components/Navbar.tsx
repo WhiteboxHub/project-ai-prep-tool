@@ -203,7 +203,13 @@ export default function Navbar({ candidateName, onLogout }: NavbarProps) {
 
           <button
             className="btn-secondary"
-            onClick={onLogout}
+            onClick={() => {
+              localStorage.removeItem("session_id");
+              localStorage.removeItem("candidate_name");
+              localStorage.removeItem("openai_key");
+              const wblUrl = process.env.NEXT_PUBLIC_WBL_URL || "https://whitebox-learning.com/user_dashboard";
+              window.location.href = `${wblUrl}/user_dashboard`;
+            }}
             style={{
               display: "flex",
               alignItems: "center",

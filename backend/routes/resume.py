@@ -69,41 +69,40 @@ def extract_project(req: ExtractRequest):
             
         # Store extracted project in project_context so it can be evaluated/generated later
         with conn.cursor() as cursor:
-            cursor.execute("SELECT id FROM project_context WHERE user_id = %s", (req.session_id,))
             proj = extracted.get("core_project", {})
-            if cursor.fetchone():
-                cursor.execute("""
-                    UPDATE project_context 
-                    SET product=%s, architecture=%s, business_value=%s, role=%s, impact=%s
-                    WHERE user_id=%s
-                """, (
-                    proj.get("product", ""),
-                    proj.get("architecture", ""),
-                    proj.get("business_value", ""),
-                    proj.get("role", ""),
-                    proj.get("impact", ""),
-                    req.session_id
-                ))
-            else:
-                cursor.execute("""
-                    INSERT INTO project_context (user_id, product, architecture, business_value, role, impact)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """, (
-                    req.session_id,
-                    proj.get("product", ""),
-                    proj.get("architecture", ""),
-                    proj.get("business_value", ""),
-                    proj.get("role", ""),
-                    proj.get("impact", "")
-                ))
+            cursor.execute("""
+                INSERT INTO project_context (user_id, product, architecture, business_value, role, impact)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE 
+                    product = VALUES(product),
+                    architecture = VALUES(architecture),
+                    business_value = VALUES(business_value),
+                    role = VALUES(role),
+                    impact = VALUES(impact)
+            """, (
+                req.session_id,
+                proj.get("product", ""),
+                proj.get("architecture", ""),
+                proj.get("business_value", ""),
+                proj.get("role", ""),
+                proj.get("impact", "")
+            ))
         conn.commit()
 
         return extracted
 
     except Exception as e:
-        print("Extraction Error:", str(e))
+        err_msg = str(e)
+        print("Extraction Error:", err_msg)
         if isinstance(e, HTTPException): raise e
-        raise HTTPException(500, detail="Failed to extract data from resume.")
+        
+        # Check for common OpenAI errors
+        if "insufficient_quota" in err_msg or "429" in err_msg or "quota" in err_msg.lower():
+            raise HTTPException(429, detail="AI Provider Error: Your API Key has insufficient quota or is out of credits.")
+        if "AuthenticationError" in err_msg or "invalid api key" in err_msg.lower() or "401" in err_msg:
+            raise HTTPException(401, detail="AI Provider Error: Your API Key is invalid.")
+            
+        raise HTTPException(500, detail=f"Failed to extract data from resume. Reason: {err_msg}")
     finally:
         if conn:
             conn.close()

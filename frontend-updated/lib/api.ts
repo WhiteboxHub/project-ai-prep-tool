@@ -1,12 +1,7 @@
 import axios from "axios";
 
 const isProd = process.env.NODE_ENV === "production";
-let API_BASE = "http://127.0.0.1:8000";
-if (process.env.NODE_ENV === "production") {
-  API_BASE = "https://ai-backend-560359652969.us-central1.run.app";
-} else if (typeof window !== "undefined" && window.location.hostname !== "localhost") {
-  API_BASE = `http://${window.location.hostname}:8000`;
-}
+let API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://ai-backend-560359652969.us-central1.run.app";
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -16,6 +11,11 @@ const api = axios.create({
 // ─── Setup ────────────────────────────────────────────────────
 export async function validateApiKey(apiKey: string, provider: string) {
   const res = await api.post("/api/setup/validate", { api_key: apiKey, api_provider: provider });
+  return res.data;
+}
+
+export async function syncWithWbl(prepToken: string) {
+  const res = await api.post("/api/setup/sync-from-wbl", { prep_token: prepToken });
   return res.data;
 }
 
