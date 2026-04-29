@@ -24,6 +24,7 @@ export default function HomePage() {
             if (data.session_id) {
               localStorage.setItem("session_id", data.session_id);
               localStorage.setItem("candidate_name", data.candidate_name || "");
+              localStorage.setItem("login_source", "sso");
           // Redirect to dashboard
           window.location.href = "/dashboard";
         }

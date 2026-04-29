@@ -59,6 +59,7 @@ export default function SetupPage() {
       localStorage.setItem("whisper_key", whisperKey.trim());
       localStorage.setItem("openai_key", apiKey.trim());
       localStorage.setItem(`${apiProvider}_key`, apiKey.trim());
+      localStorage.setItem("login_source", "standalone");
       
       toast.success("API keys verified successfully!");
       setStep("resume");

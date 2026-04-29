@@ -204,11 +204,19 @@ export default function Navbar({ candidateName, onLogout }: NavbarProps) {
           <button
             className="btn-secondary"
             onClick={() => {
+              const loginSource = localStorage.getItem("login_source");
               localStorage.removeItem("session_id");
               localStorage.removeItem("candidate_name");
               localStorage.removeItem("openai_key");
-              const wblUrl = process.env.NEXT_PUBLIC_WBL_URL || "https://whitebox-learning.com/user_dashboard";
-              window.location.href = `${wblUrl}/user_dashboard`;
+              localStorage.removeItem("login_source");
+              
+              if (loginSource === "sso") {
+                const wblUrl = process.env.NEXT_PUBLIC_WBL_URL || "https://whitebox-learning.com/user_dashboard";
+                // If wblUrl already ends with /user_dashboard, don't append it again
+                window.location.href = wblUrl.endsWith('/user_dashboard') ? wblUrl : `${wblUrl}/user_dashboard`;
+              } else {
+                window.location.href = "/";
+              }
             }}
             style={{
               display: "flex",
