@@ -11,7 +11,7 @@ if os.environ.get("K_SERVICE") is None:
     load_dotenv()
 
 from db.init_db import init_db
-from routes import setup, intro, project, interview, context, resume, case_study
+from routes import setup, intro, project, interview, context, resume, case_study, candidate_setup
 
 app = FastAPI(
     title="AI Candidate Evaluation System",
@@ -34,9 +34,12 @@ def startup():
                 sleep(5)
     threading.Thread(target=init).start()
 
-# CORS configuration
+# CORS configuration — includes WBL frontend origins so the setup wizard can call this backend
 origins = [
     "https://ai-prep.whitebox-learning.com",
+    "https://whitebox-learning.com",
+    "https://www.whitebox-learning.com",
+    "https://wbl-frontend-560359652969.us-central1.run.app",
     "http://localhost:3001",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -59,6 +62,9 @@ app.include_router(interview.router)
 app.include_router(context.router)
 app.include_router(resume.router)
 app.include_router(case_study.router)
+
+# Candidate Setup — migrated from wbl-backend
+app.include_router(candidate_setup.router)
 
 @app.get("/")
 def root():

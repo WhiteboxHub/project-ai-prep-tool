@@ -241,6 +241,51 @@ def init_db():
                 )
             """)
 
+            # ---------------------------
+            # 6. CANDIDATE RESUME (from wbl-backend migration)
+            # ---------------------------
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS candidate_resume (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id VARCHAR(255) UNIQUE NOT NULL,
+                    resume_json JSON NOT NULL,
+                    file_name VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_resume_user_id (user_id)
+                )
+            """)
+
+            # ---------------------------
+            # 7. CANDIDATE API KEYS (from wbl-backend migration)
+            # ---------------------------
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS candidate_api_keys (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id VARCHAR(255) NOT NULL,
+                    provider_name VARCHAR(50) NOT NULL,
+                    api_key TEXT NOT NULL,
+                    model_name VARCHAR(100),
+                    voice_enabled BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_apikey_user_id (user_id)
+                )
+            """)
+
+            # ---------------------------
+            # 8. PREP TOKENS (one-time sync tokens, replaces Redis)
+            # ---------------------------
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS prep_tokens (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    token VARCHAR(36) UNIQUE NOT NULL,
+                    user_id VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_prep_token (token)
+                )
+            """)
+
         # ---------------------------
         # SAFE ALTERS (for existing DBs)
         # ---------------------------
