@@ -1,8 +1,9 @@
 import axios from "axios";
 
-const isProd = process.env.NODE_ENV === "production";
-let API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://ai-backend-560359652969.us-central1.run.app"; // Production URL
-// let API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001"; // Local URL
+// Backend URL is set via NEXT_PUBLIC_API_URL environment variable.
+// dev  → http://localhost:8001          (set in .env.development or .env.local)
+// prod → https://ai-backend-560359652969.us-central1.run.app  (set in .env.local or Cloud Run env)
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://ai-backend-560359652969.us-central1.run.app";
 
 const api = axios.create({
   baseURL: API_BASE,
