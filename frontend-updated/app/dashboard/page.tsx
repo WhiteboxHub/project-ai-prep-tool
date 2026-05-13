@@ -82,7 +82,12 @@ export default function DashboardPipeline() {
   const handleLogout = () => {
     localStorage.removeItem("session_id");
     localStorage.removeItem("api_provider");
-    router.push("/");
+    localStorage.removeItem("prep_token");
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+       window.location.href = "http://localhost:3000/dashboard";
+    } else {
+       window.location.href = "https://whitebox-learning.com/dashboard";
+    }
   };
 
   const steps = [
@@ -92,7 +97,7 @@ export default function DashboardPipeline() {
       icon: <User size={24} />,
       title: "Complete Initial Setup",
       desc: "Upload your resume and connect your AI API credentials.",
-      href: "/setup",
+      isSetup: true,
       status: hasSetup ? "completed" : "pending",
       btnText: hasSetup ? "Update Setup" : "Start Setup",
     },
@@ -297,8 +302,29 @@ export default function DashboardPipeline() {
                              }}>
                                 Complete previous steps
                              </button>
+                          ) : step.isSetup ? (
+                             <button 
+                                onClick={() => {
+                                  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                                      window.location.href = "http://localhost:3000/dashboard?openSetup=true";
+                                  } else {
+                                      window.location.href = "https://whitebox-learning.com/dashboard?openSetup=true";
+                                  }
+                                }}
+                                className={isPending ? "btn-primary" : "btn-secondary"} style={{
+                                 display: "inline-flex",
+                                 alignItems: "center",
+                                 gap: 8,
+                                 padding: "11px 20px",
+                                 fontSize: 14,
+                                 border: "none",
+                                 cursor: "pointer",
+                                 textDecoration: "none"
+                               }}>
+                                  {step.btnText} {isPending && <ArrowRight size={16} />}
+                             </button>
                           ) : (
-                             <Link href={step.href} className={isPending ? "btn-primary" : "btn-secondary"} style={{
+                             <Link href={step.href || "#"} className={isPending ? "btn-primary" : "btn-secondary"} style={{
                                  display: "inline-flex",
                                  alignItems: "center",
                                  gap: 8,
