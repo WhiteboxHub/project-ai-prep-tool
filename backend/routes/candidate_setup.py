@@ -1,0 +1,515 @@
+# routes/candidate_setup.py
+# Migrated from wbl-backend/fapi/api/routes/candidate_setup.py
+# Uses AI prep MySQL DB (raw queries) + WBL JWT auth (shared secret).
+
+import json
+import uuid
+import logging
+import requests
+from datetime import datetime, timedelta
+from typing import List, Optional
+
+from fastapi import APIRouter, HTTPException, Request, Depends, status
+from pydantic import BaseModel
+
+from db.connection import get_db_connection
+from utils.security import encrypt, decrypt
+from utils.wbl_auth import get_wbl_user_email
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/candidate", tags=["Candidate Setup"])
+
+# ─────────────────────────────────────────────
+# Pydantic Models
+# ─────────────────────────────────────────────
+
+class ResumeCreate(BaseModel):
+    resume_json: dict
+    file_name: Optional[str] = None
+
+class ResumeUpdate(BaseModel):
+    resume_json: dict
+    file_name: Optional[str] = None
+
+class APIKeyCreate(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    provider_name: str
+    api_key: str
+    model_name: Optional[str] = None
+    voice_enabled: bool = False
+
+
+# ─────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────
+
+def _mask_key(raw: str) -> str:
+    if len(raw) > 4:
+        return "*" * (len(raw) - 4) + raw[-4:]
+    return "****"
+
+
+def _detect_provider(api_key: str) -> str:
+    if api_key.startswith("sk-ant"):
+        return "claude"
+    if api_key.startswith("sk-") or api_key.startswith("sk-proj-"):
+        return "openai"
+    if api_key.startswith("AIzaSy"):
+        return "gemini"
+    return "unknown"
+
+
+def _validate_api_key(provider: str, api_key: str) -> tuple[bool, bool]:
+    """Returns (is_valid, supports_voice). Raises HTTPException on invalid key."""
+    is_valid = False
+    supports_voice = False
+    try:
+        if provider == "openai":
+            res = requests.get(
+                "https://api.openai.com/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=5,
+            )
+            if res.status_code == 200:
+                is_valid = True
+                models = res.json().get("data", [])
+                supports_voice = any(m["id"] == "whisper-1" for m in models)
+        elif provider in ("claude", "anthropic"):
+            res = requests.get(
+                "https://api.anthropic.com/v1/models",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                timeout=5,
+            )
+            if res.status_code == 200:
+                is_valid = True
+                supports_voice = True
+        elif provider in ("gemini", "google"):
+            res = requests.get(
+                f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}",
+                timeout=5,
+            )
+            if res.status_code == 200:
+                is_valid = True
+                models = res.json().get("models", [])
+                supports_voice = any("gemini-1.5" in m["name"] for m in models)
+        else:
+            # Unknown provider — skip validation
+            is_valid = True
+            supports_voice = True
+    except Exception as e:
+        logger.error(f"Error validating API key for {provider}: {e}")
+    return is_valid, supports_voice
+
+
+# ─────────────────────────────────────────────
+# ENDPOINTS
+# ─────────────────────────────────────────────
+
+@router.get("/setup-status")
+def get_setup_status(
+    user_email: str = Depends(get_wbl_user_email),
+):
+    """Check whether resume and API keys are configured for this user."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM candidate_resume WHERE user_id = %s", (user_email,)
+            )
+            resume_exists = cursor.fetchone() is not None
+
+            cursor.execute(
+                "SELECT id FROM candidate_api_keys WHERE user_id = %s LIMIT 1",
+                (user_email,),
+            )
+            keys_exist = cursor.fetchone() is not None
+
+        return {
+            "resume_uploaded": resume_exists,
+            "api_keys_configured": keys_exist,
+            "setup_complete": resume_exists and keys_exist,
+        }
+    except Exception as e:
+        logger.error(f"setup-status error for {user_email}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch setup status")
+    finally:
+        conn.close()
+
+
+@router.post("/resume", status_code=201)
+def upload_resume(
+    body: ResumeCreate,
+    user_email: str = Depends(get_wbl_user_email),
+):
+    """Upload or replace the resume JSON for this user."""
+    conn = get_db_connection()
+    try:
+        resume_str = json.dumps(body.resume_json)
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM candidate_resume WHERE user_id = %s", (user_email,)
+            )
+            existing = cursor.fetchone()
+            if existing:
+                cursor.execute(
+                    """UPDATE candidate_resume
+                       SET resume_json = %s, file_name = %s
+                       WHERE user_id = %s""",
+                    (resume_str, body.file_name, user_email),
+                )
+                cursor.execute(
+                    "SELECT * FROM candidate_resume WHERE user_id = %s", (user_email,)
+                )
+                row = cursor.fetchone()
+            else:
+                cursor.execute(
+                    """INSERT INTO candidate_resume (user_id, resume_json, file_name)
+                       VALUES (%s, %s, %s)""",
+                    (user_email, resume_str, body.file_name),
+                )
+                cursor.execute(
+                    "SELECT * FROM candidate_resume WHERE id = %s",
+                    (cursor.lastrowid,),
+                )
+                row = cursor.fetchone()
+        conn.commit()
+        row["resume_json"] = (
+            json.loads(row["resume_json"])
+            if isinstance(row["resume_json"], str)
+            else row["resume_json"]
+        )
+        return row
+    except Exception as e:
+        logger.error(f"upload_resume error for {user_email}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save resume")
+    finally:
+        conn.close()
+
+
+@router.get("/resume")
+def get_resume(user_email: str = Depends(get_wbl_user_email)):
+    """Get the stored resume JSON for this user."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT * FROM candidate_resume WHERE user_id = %s", (user_email,)
+            )
+            row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Resume not found")
+        row["resume_json"] = (
+            json.loads(row["resume_json"])
+            if isinstance(row["resume_json"], str)
+            else row["resume_json"]
+        )
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"get_resume error for {user_email}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch resume")
+    finally:
+        conn.close()
+
+
+@router.put("/resume")
+def update_resume(
+    body: ResumeUpdate,
+    user_email: str = Depends(get_wbl_user_email),
+):
+    """Update the resume JSON for this user."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM candidate_resume WHERE user_id = %s", (user_email,)
+            )
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Resume not found")
+            resume_str = json.dumps(body.resume_json)
+            cursor.execute(
+                """UPDATE candidate_resume
+                   SET resume_json = %s, file_name = %s
+                   WHERE user_id = %s""",
+                (resume_str, body.file_name, user_email),
+            )
+            cursor.execute(
+                "SELECT * FROM candidate_resume WHERE user_id = %s", (user_email,)
+            )
+            row = cursor.fetchone()
+        conn.commit()
+        row["resume_json"] = (
+            json.loads(row["resume_json"])
+            if isinstance(row["resume_json"], str)
+            else row["resume_json"]
+        )
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"update_resume error for {user_email}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update resume")
+    finally:
+        conn.close()
+
+
+@router.post("/api-keys", status_code=201)
+def add_api_key(
+    body: APIKeyCreate,
+    user_email: str = Depends(get_wbl_user_email),
+):
+    """Add a new API key (validates with provider before storing)."""
+    provider = body.provider_name.lower()
+    is_valid, supports_voice = _validate_api_key(provider, body.api_key)
+
+    if not is_valid:
+        raise HTTPException(status_code=400, detail="Invalid API Key")
+    if body.voice_enabled and not supports_voice:
+        raise HTTPException(
+            status_code=400, detail="API key does not support voice processing"
+        )
+
+    encrypted_key = encrypt(body.api_key)
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Check for exact duplicate (same user + provider + model + key)
+            cursor.execute(
+                """SELECT id FROM candidate_api_keys
+                   WHERE user_id = %s AND provider_name = %s AND model_name = %s AND api_key = %s""",
+                (user_email, body.provider_name, body.model_name, encrypted_key),
+            )
+            dup = cursor.fetchone()
+            if dup:
+                cursor.execute(
+                    "UPDATE candidate_api_keys SET voice_enabled = %s WHERE id = %s",
+                    (body.voice_enabled, dup["id"]),
+                )
+                conn.commit()
+                cursor.execute(
+                    "SELECT * FROM candidate_api_keys WHERE id = %s", (dup["id"],)
+                )
+                row = cursor.fetchone()
+            else:
+                cursor.execute(
+                    """INSERT INTO candidate_api_keys
+                       (user_id, provider_name, api_key, model_name, voice_enabled)
+                       VALUES (%s, %s, %s, %s, %s)""",
+                    (
+                        user_email,
+                        body.provider_name,
+                        encrypted_key,
+                        body.model_name,
+                        body.voice_enabled,
+                    ),
+                )
+                conn.commit()
+                cursor.execute(
+                    "SELECT * FROM candidate_api_keys WHERE id = %s",
+                    (cursor.lastrowid,),
+                )
+                row = cursor.fetchone()
+
+        # Mask the key before returning
+        try:
+            raw = decrypt(row["api_key"])
+            row["masked_key"] = _mask_key(raw)
+        except Exception:
+            row["masked_key"] = "****"
+        row.pop("api_key", None)
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"add_api_key error for {user_email}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save API key")
+    finally:
+        conn.close()
+
+
+@router.get("/api-keys")
+def list_api_keys(user_email: str = Depends(get_wbl_user_email)):
+    """List all API keys for this user (keys are masked)."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT * FROM candidate_api_keys WHERE user_id = %s", (user_email,)
+            )
+            rows = cursor.fetchall()
+
+        result = []
+        for row in rows:
+            try:
+                raw = decrypt(row["api_key"])
+                row["masked_key"] = _mask_key(raw)
+            except Exception:
+                row["masked_key"] = "****"
+            row.pop("api_key", None)
+            result.append(row)
+        return result
+    except Exception as e:
+        logger.error(f"list_api_keys error for {user_email}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list API keys")
+    finally:
+        conn.close()
+
+
+@router.delete("/api-keys/{key_id}")
+def delete_api_key(
+    key_id: int,
+    user_email: str = Depends(get_wbl_user_email),
+):
+    """Delete a specific API key by ID (only if it belongs to this user)."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM candidate_api_keys WHERE id = %s AND user_id = %s",
+                (key_id, user_email),
+            )
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="API key not found")
+            cursor.execute(
+                "DELETE FROM candidate_api_keys WHERE id = %s", (key_id,)
+            )
+        conn.commit()
+        return {"message": "API key deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"delete_api_key error for {user_email}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete API key")
+    finally:
+        conn.close()
+
+
+@router.post("/generate-prep-token")
+def generate_prep_token(user_email: str = Depends(get_wbl_user_email)):
+    """
+    Generate a one-time token (valid 5 mins) that the AI prep frontend
+    can exchange via /sync-data to get resume + API keys.
+    Stored in prep_tokens table (no Redis needed).
+    """
+    token = str(uuid.uuid4())
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Clean up any old tokens for this user first
+            cursor.execute(
+                "DELETE FROM prep_tokens WHERE user_id = %s", (user_email,)
+            )
+            cursor.execute(
+                "INSERT INTO prep_tokens (token, user_id) VALUES (%s, %s)",
+                (token, user_email),
+            )
+        conn.commit()
+        return {"token": token}
+    except Exception as e:
+        logger.error(f"generate_prep_token error for {user_email}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate prep token")
+    finally:
+        conn.close()
+
+
+@router.get("/sync-data")
+def sync_data(token: str):
+    """
+    Called by the AI prep frontend with a one-time prep token.
+    Returns resume JSON + decrypted API keys + candidate name.
+    Token expires after 5 minutes or first use.
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT user_id, created_at FROM prep_tokens WHERE token = %s",
+                (token,),
+            )
+            row = cursor.fetchone()
+
+        if not row:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+        # Check 5-minute TTL
+        token_age = datetime.utcnow() - row["created_at"].replace(tzinfo=None)
+        if token_age > timedelta(minutes=5):
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM prep_tokens WHERE token = %s", (token,)
+                )
+            conn.commit()
+            raise HTTPException(status_code=401, detail="Token has expired")
+
+        user_email = row["user_id"]
+
+        # Delete token (one-time use)
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM prep_tokens WHERE token = %s", (token,))
+
+        # Fetch resume
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT resume_json FROM candidate_resume WHERE user_id = %s",
+                (user_email,),
+            )
+            resume_row = cursor.fetchone()
+
+        # Fetch API keys
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT provider_name, api_key, model_name, voice_enabled FROM candidate_api_keys WHERE user_id = %s",
+                (user_email,),
+            )
+            key_rows = cursor.fetchall()
+
+        conn.commit()
+
+        resume_json = None
+        if resume_row:
+            resume_json = (
+                json.loads(resume_row["resume_json"])
+                if isinstance(resume_row["resume_json"], str)
+                else resume_row["resume_json"]
+            )
+
+        candidate_name = ""
+        if resume_json:
+            candidate_name = (
+                resume_json.get("basics", {}).get("name")
+                or resume_json.get("name", "")
+                or ""
+            )
+
+        decrypted_keys = []
+        for k in key_rows:
+            try:
+                raw = decrypt(k["api_key"])
+                decrypted_keys.append({
+                    "provider": k["provider_name"],
+                    "key": raw,
+                    "model": k["model_name"],
+                    "voice_enabled": k["voice_enabled"],
+                })
+            except Exception as e:
+                logger.error(f"Failed to decrypt key for {user_email}: {e}")
+
+        return {
+            "resume_json": resume_json,
+            "api_keys": decrypted_keys,
+            "candidate_name": candidate_name,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"sync_data error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to sync data")
+    finally:
+        conn.close()
