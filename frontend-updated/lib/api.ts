@@ -105,6 +105,11 @@ export async function getIntroHistory(sessionId: string) {
 }
 
 // ─── Project Extraction ───────────────────────────────────────
+export async function getExtractionStatus(sessionId: string) {
+  const res = await api.get("/api/setup/extraction-status", { params: { session_id: sessionId } });
+  return res.data;
+}
+
 export async function extractProject(sessionId: string) {
   const res = await api.post("/api/resume/extract-project", { session_id: sessionId });
   return res.data;
@@ -191,9 +196,9 @@ export async function getLatestReport(sessionId: string) {
   return res.data;
 }
 
-export async function getStageQuestions(sessionId: string, stageName: string = "General Mock") {
+export async function getStageQuestions(sessionId: string, stageName: string = "General Mock", previousContext: string = "") {
   const apiKey = typeof window !== "undefined" ? localStorage.getItem("openai_key") || "" : "";
-  const res = await api.get("/api/interview/stage-questions", { params: { session_id: sessionId, api_key: apiKey, stage_name: stageName } });
+  const res = await api.get("/api/interview/stage-questions", { params: { session_id: sessionId, api_key: apiKey, stage_name: stageName, previous_context: previousContext } });
   return res.data;
 }
 
@@ -207,5 +212,15 @@ export async function sendQuickChat(sessionId: string, currentQuestion: string, 
     previous_context: previousContext,
     api_key: apiKey
   });
+  return res.data;
+}
+
+export async function completeInterview(sessionId: string) {
+  const res = await api.post("/api/interview/complete", { session_id: sessionId });
+  return res.data;
+}
+
+export async function getFinalReport(sessionId: string) {
+  const res = await api.get("/api/report", { params: { session_id: sessionId } });
   return res.data;
 }

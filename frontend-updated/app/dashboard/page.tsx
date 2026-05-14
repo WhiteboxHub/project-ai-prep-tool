@@ -24,6 +24,7 @@ export default function DashboardPipeline() {
   const [hasSetup, setHasSetup] = useState(false);
   const [hasCaseStudy, setHasCaseStudy] = useState(false);
   const [hasPassedIntro, setHasPassedIntro] = useState(false);
+  const [hasPassedInterview, setHasPassedInterview] = useState(false);
 
   useEffect(() => {
     const sid = localStorage.getItem("session_id");
@@ -46,16 +47,26 @@ export default function DashboardPipeline() {
 
         try {
           const csHist = await getCaseStudyHistory(sid);
-          if (csHist.case_studies && csHist.case_studies.length > 0) {
+          const caseStudies = csHist.aiprep_tool_case_studies || csHist.case_studies || [];
+          if (caseStudies.length > 0) {
             setHasCaseStudy(true);
           }
         } catch (e) {}
 
         try {
           const introHist = await getIntroHistory(sid);
-          if (introHist.attempts && introHist.attempts.length > 0) {
-            const passedAny = introHist.attempts.some((a: any) => a.score >= 70);
+          const attempts = introHist.aiprep_tool_attempts || introHist.history || introHist.attempts || [];
+          if (attempts.length > 0) {
+            const passedAny = attempts.some((a: any) => a.score >= 70);
             setHasPassedIntro(passedAny);
+          }
+        } catch (e) {}
+
+        try {
+          const { getFinalReport } = await import("@/lib/api");
+          const report = await getFinalReport(sid);
+          if (report?.interview_complete) {
+            setHasPassedInterview(true);
           }
         } catch (e) {}
       } catch (err) {
@@ -71,7 +82,12 @@ export default function DashboardPipeline() {
   const handleLogout = () => {
     localStorage.removeItem("session_id");
     localStorage.removeItem("api_provider");
-    router.push("/");
+    localStorage.removeItem("prep_token");
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+       window.location.href = "http://localhost:3000/dashboard";
+    } else {
+       window.location.href = "https://whitebox-learning.com/dashboard";
+    }
   };
 
   const steps = [
@@ -81,7 +97,7 @@ export default function DashboardPipeline() {
       icon: <User size={24} />,
       title: "Complete Initial Setup",
       desc: "Upload your resume and connect your AI API credentials.",
-      href: "/setup",
+      isSetup: true,
       status: hasSetup ? "completed" : "pending",
       btnText: hasSetup ? "Update Setup" : "Start Setup",
     },
@@ -112,8 +128,8 @@ export default function DashboardPipeline() {
       title: "Practice Mock Interviews",
       desc: "Have interactive mock interviews with AI agents who ask questions based on your project context.",
       href: "/interview",
-      status: hasSetup ? "pending" : "locked",
-      btnText: "Start Interviews",
+      status: hasPassedInterview ? "completed" : (hasSetup ? "pending" : "locked"),
+      btnText: hasPassedInterview ? "Retake Interviews" : "Start Interviews",
     }
   ];
 
@@ -286,17 +302,37 @@ export default function DashboardPipeline() {
                              }}>
                                 Complete previous steps
                              </button>
-                          ) : (
-                             <Link href={step.href}>
-                               <button className={isPending ? "btn-primary" : "btn-secondary"} style={{
-                                 display: "flex",
+                          ) : step.isSetup ? (
+                             <button 
+                                onClick={() => {
+                                  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                                      window.location.href = "http://localhost:3000/dashboard?openSetup=true";
+                                  } else {
+                                      window.location.href = "https://whitebox-learning.com/dashboard?openSetup=true";
+                                  }
+                                }}
+                                className={isPending ? "btn-primary" : "btn-secondary"} style={{
+                                 display: "inline-flex",
                                  alignItems: "center",
                                  gap: 8,
                                  padding: "11px 20px",
                                  fontSize: 14,
+                                 border: "none",
+                                 cursor: "pointer",
+                                 textDecoration: "none"
                                }}>
                                   {step.btnText} {isPending && <ArrowRight size={16} />}
-                               </button>
+                             </button>
+                          ) : (
+                             <Link href={step.href || "#"} className={isPending ? "btn-primary" : "btn-secondary"} style={{
+                                 display: "inline-flex",
+                                 alignItems: "center",
+                                 gap: 8,
+                                 padding: "11px 20px",
+                                 fontSize: 14,
+                                 textDecoration: "none"
+                               }}>
+                                  {step.btnText} {isPending && <ArrowRight size={16} />}
                              </Link>
                           )}
                        </div>
@@ -306,6 +342,37 @@ export default function DashboardPipeline() {
               );
            })}
         </div>
+
+        {hasSetup && hasCaseStudy && hasPassedIntro && hasPassedInterview && (
+           <div style={{
+              marginTop: 64,
+              padding: 40,
+              borderRadius: 16,
+              background: "var(--gradient-card)",
+              border: "1px solid var(--accent)",
+              boxShadow: "0 8px 32px var(--accent-glow)",
+              textAlign: "center"
+           }}>
+              <h2 style={{ fontSize: 24, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
+                🎉 Pipeline Completed!
+              </h2>
+              <p style={{ color: "var(--text-secondary)", fontSize: 15, marginBottom: 24, maxWidth: 500, margin: "0 auto 24px" }}>
+                You have successfully completed all modules of the interview preparation pipeline. Click below to view your aggregated final report.
+              </p>
+              <Link href="/progress" className="btn-primary" style={{
+                  padding: "16px 32px",
+                  fontSize: 16,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  boxShadow: "0 4px 16px var(--accent-glow)",
+                  textDecoration: "none"
+                }}>
+                  <FileText size={20} /> View Final Progress Report
+              </Link>
+           </div>
+        )}
+
       </div>
     </div>
   );

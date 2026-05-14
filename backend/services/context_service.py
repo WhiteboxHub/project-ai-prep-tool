@@ -1,9 +1,10 @@
 import json
 from db.connection import get_db_connection
+from services.resume_source import fetch_resume_dict
 
 def get_candidate_context(user_id: str):
     """
-    Fetches full context: resume_json, project_context, intro evaluation.
+    Fetches full context: resume_json, aiprep_tool_project_context, intro evaluation.
     This context MUST be used in ALL AI calls.
     """
     context = {
@@ -15,23 +16,19 @@ def get_candidate_context(user_id: str):
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            # 1. Fetch Resume
-            cursor.execute("SELECT resume_json FROM resumes WHERE user_id = %s", (user_id,))
-            res = cursor.fetchone()
-            if res and res.get('resume_json'):
-                try:
-                    context["resume"] = json.loads(res['resume_json']) if isinstance(res['resume_json'], str) else res['resume_json']
-                except:
-                    pass
+            # 1. Fetch Resume (WBL candidate_marketing or legacy aiprep_tool_resumes)
+            resume_obj = fetch_resume_dict(user_id)
+            if resume_obj:
+                context["resume"] = resume_obj
 
             # 2. Fetch Project Context
-            cursor.execute("SELECT product, architecture, business_value, role, impact FROM project_context WHERE user_id = %s", (user_id,))
+            cursor.execute("SELECT product, architecture, business_value, role, impact FROM aiprep_tool_project_context WHERE user_id = %s", (user_id,))
             proj = cursor.fetchone()
             if proj:
                 context["project"] = proj
                 
             # 3. Fetch Intro Eval 
-            cursor.execute("SELECT score, passed, feedback FROM evaluations WHERE user_id = %s AND type = 'intro' ORDER BY id DESC LIMIT 1", (user_id,))
+            cursor.execute("SELECT score, passed, feedback FROM aiprep_tool_evaluations WHERE user_id = %s AND type = 'intro' ORDER BY id DESC LIMIT 1", (user_id,))
             intro = cursor.fetchone()
             if intro:
                 if 'feedback' in intro and isinstance(intro['feedback'], str):

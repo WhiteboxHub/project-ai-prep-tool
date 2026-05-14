@@ -11,6 +11,7 @@ Include:
 - Impact
 
 Make it interview-ready.
+FIRST PERSON PERSPECTIVE: You MUST write the entire case study from the perspective of the candidate using first-person pronouns ("I", "my", "we"). DO NOT say "The candidate built...", say "I built...".
 
 Input:
 {{data}}

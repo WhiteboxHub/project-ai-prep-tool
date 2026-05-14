@@ -9,9 +9,9 @@ import toast from "react-hot-toast";
 import Webcam from "react-webcam";
 import { 
   Send, Video, CameraOff, Camera, Play, Settings, Download, Loader2, ArrowLeft, Lightbulb, Volume2, VolumeX,
-  Sparkles, MessageSquare, Mic, MicOff, UserRound, Headphones, PenSquare, Code2, Copy
+  Sparkles, MessageSquare, Mic, MicOff, UserRound, Headphones, PenSquare, Code2, Copy, RotateCcw, ArrowRight
 } from "lucide-react";
-import { sendQuickChat, getStageQuestions, saveProjectBrief, getResumeSummary, getResumeAnalytics } from "@/lib/api";
+import { sendQuickChat, getStageQuestions, saveProjectBrief, completeInterview, getResumeSummary, getResumeAnalytics } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import ReactMarkdown from "react-markdown";
@@ -228,6 +228,7 @@ export default function RealisticInterviewPage() {
   const [showBriefModal, setShowBriefModal] = useState(false);
   const [briefPromptText, setBriefPromptText] = useState("");
   const [briefInput, setBriefInput] = useState("");
+  const [singleModuleMode, setSingleModuleMode] = useState<number | null>(null);
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceName, setSelectedVoiceName] = useState("");
   const [voiceEnabled, setVoiceEnabled] = useState(true);
@@ -314,6 +315,9 @@ export default function RealisticInterviewPage() {
       } catch {
         /* ignore */
       }
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, []);
 
@@ -340,6 +344,7 @@ export default function RealisticInterviewPage() {
 
   const handleStart = async () => {
     setIsGenerating(true);
+    setSingleModuleMode(null);
     try {
       const data = await getStageQuestions(sessionId);
       if (data?.needs_project_brief) {
@@ -366,6 +371,35 @@ export default function RealisticInterviewPage() {
     }
   };
 
+  const startSingleModule = async (stageId: number) => {
+    setIsGenerating(true);
+    setSingleModuleMode(stageId);
+    try {
+      const data = await getStageQuestions(sessionId, STAGES[stageId - 1].name);
+      if (data?.needs_project_brief) {
+        setBriefPromptText(
+          data.briefing_prompt ||
+            "Please share your first project details: problem, stack, your role, and impact."
+        );
+        setShowBriefModal(true);
+        return;
+      }
+      if (data && data.questions && data.questions.length > 0) {
+        setDynamicStageQuestions(data.questions);
+        setCurrentStage(stageId);
+        setAnsweredInStage(0);
+        setReadyForNextStage(false);
+        addBotMessage(data.questions[0]);
+      } else {
+        throw new Error("Empty questions returned");
+      }
+    } catch (e) {
+      toast.error("Failed to generate contextual questions.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const handleSubmitBriefAndStart = async () => {
     if (!briefInput || briefInput.trim().length < 40) {
       toast.error("Please provide a bit more detail.");
@@ -376,12 +410,15 @@ export default function RealisticInterviewPage() {
       await saveProjectBrief(sessionId, briefInput.trim());
       setShowBriefModal(false);
       setBriefInput("");
-      const refreshed = await getStageQuestions(sessionId);
+      const targetStageId = singleModuleMode !== null ? singleModuleMode : 1;
+      const targetStageName = singleModuleMode !== null ? STAGES[singleModuleMode - 1].name : "General Mock";
+      
+      const refreshed = await getStageQuestions(sessionId, targetStageName);
       if (!refreshed?.questions || refreshed.questions.length === 0) {
         throw new Error("Could not generate questions after project brief.");
       }
       setDynamicStageQuestions(refreshed.questions);
-      setCurrentStage(1);
+      setCurrentStage(targetStageId);
       setAnsweredInStage(0);
       setReadyForNextStage(false);
       addBotMessage(refreshed.questions[0]);
@@ -408,30 +445,35 @@ export default function RealisticInterviewPage() {
   };
 
   const nextStage = async () => {
-    setTranscript(prev => [...prev, { stage: STAGES[currentStage-1].name, chat: [...messages] }]);
-    const next = currentStage + 1;
-    if (next <= 5) {
-      setCurrentStage(next);
-      setMessages([]);
-      setTimeLeft(120);
-      setAnsweredInStage(0);
-      setReadyForNextStage(false);
-      
-      setLoading(true);
-      try {
-        const { getStageQuestions } = await import("@/lib/api");
-        const data = await getStageQuestions(sessionId, STAGES[next - 1].name);
-        if (data && data.questions && data.questions.length > 0) {
-           addBotMessage(data.questions[0]);
-        }
-      } catch (err) {
-        toast.error("Failed to load question for next stage.");
-      } finally {
-        setLoading(false);
-      }
-    } else {
+    const updatedTranscript = [...transcript, { stage: STAGES[currentStage-1].name, chat: [...messages] }];
+    setTranscript(updatedTranscript);
+    
+    if (singleModuleMode !== null || currentStage === 5) {
       setCurrentStage(6);
-      toast.success("Interview Completed!");
+      try { await completeInterview(sessionId); } catch(e) {}
+      toast.success("Interview Module Completed!");
+      return;
+    }
+
+    const next = currentStage + 1;
+    setCurrentStage(next);
+    setMessages([]);
+    setTimeLeft(120);
+    setAnsweredInStage(0);
+    setReadyForNextStage(false);
+    
+    setLoading(true);
+    try {
+      const { getStageQuestions } = await import("@/lib/api");
+      const fullContext = updatedTranscript.map(t => `Stage: ${t.stage}\n` + t.chat.map((m: any) => `${m.sender}: ${m.content}`).join("\n")).join("\n\n");
+      const data = await getStageQuestions(sessionId, STAGES[next - 1].name, fullContext);
+      if (data && data.questions && data.questions.length > 0) {
+         addBotMessage(data.questions[0]);
+      }
+    } catch (err) {
+      toast.error("Failed to load question for next stage.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -501,13 +543,21 @@ export default function RealisticInterviewPage() {
     setLoading(true);
 
     try {
-      const prevContext = messages.map(m => `${m.sender}: ${m.content}`).join("\n");
-      const data = await sendQuickChat(sessionId, lastBotMsg, currentAnswer, STAGES[currentStage-1].name, prevContext);
+      const currentStageContext = messages.map(m => `${m.sender}: ${m.content}`).join("\n");
+      const pastTranscriptContext = transcript.map(t => `Stage: ${t.stage}\n` + t.chat.map((m: any) => `${m.sender}: ${m.content}`).join("\n")).join("\n\n");
+      const fullContext = pastTranscriptContext ? `${pastTranscriptContext}\n\nCurrent Stage (${STAGES[currentStage-1].name}):\n${currentStageContext}` : currentStageContext;
+      
+      const data = await sendQuickChat(sessionId, lastBotMsg, currentAnswer, STAGES[currentStage-1].name, fullContext);
       
       // Push AI reply and Evaluation Metadata
       let replyText = data.reply;
+      let spokenText = "";
+      
       if (unsure && data?.evaluation?.improved_answer) {
         replyText = `I understand you were unsure about this one. An expected answer could be:\n\n${data.evaluation.improved_answer}\n\n${data.reply}`;
+        spokenText = `I understand you were unsure about this one. An expected answer could be: ${data.evaluation.improved_answer}. `;
+      } else {
+        spokenText = data.reply;
       }
 
       const target = stageCounts[currentStage] || 1;
@@ -515,7 +565,13 @@ export default function RealisticInterviewPage() {
       let finalReply = replyText;
 
       if (newCount >= target) {
-        finalReply = `Thank you for completing this answer. I have recorded your response and analyzed your technical gaps below.\n\n✅ Section complete (${newCount}/${target}). Click "Next Stage" when ready.`;
+        if (unsure && data?.evaluation?.improved_answer) {
+          finalReply = `I understand you were unsure about this one. An expected answer could be:\n\n${data.evaluation.improved_answer}\n\nThank you for completing this answer. I have recorded your response and analyzed your technical gaps below.\n\n✅ Section complete (${newCount}/${target}). Click "Next Stage" when ready.`;
+          spokenText = `I understand you were unsure about this one. An expected answer could be: ${data.evaluation.improved_answer}. Thank you for completing this answer. Please proceed to the next stage.`;
+        } else {
+          finalReply = `Thank you for completing this answer. I have recorded your response and analyzed your technical gaps below.\n\n✅ Section complete (${newCount}/${target}). Click "Next Stage" when ready.`;
+          spokenText = `Thank you for completing this answer. Please proceed to the next stage.`;
+        }
         setReadyForNextStage(true);
       } else {
         finalReply = `Question ${newCount + 1}/${target}:\n\n${replyText}`;
@@ -530,7 +586,7 @@ export default function RealisticInterviewPage() {
       setAnsweredInStage(newCount);
       
       if (voiceEnabled && typeof window !== "undefined" && window.speechSynthesis) {
-        const utterance = new SpeechSynthesisUtterance(replyText);
+        const utterance = new SpeechSynthesisUtterance(spokenText);
         const voice = availableVoices.find((v) => v.name === selectedVoiceName);
         if (voice) utterance.voice = voice;
         window.speechSynthesis.speak(utterance);
@@ -616,7 +672,7 @@ export default function RealisticInterviewPage() {
             Interview path
           </p>
           <div className="mx-auto flex min-w-[680px] items-center justify-center gap-0 lg:min-w-0 lg:w-full">
-            {STAGES.map((s, idx) => {
+            {(singleModuleMode !== null ? [STAGES[singleModuleMode - 1]] : STAGES).map((s, idx, arr) => {
               const isActive = currentStage === s.id;
               const isPast = currentStage > s.id;
               return (
@@ -651,7 +707,7 @@ export default function RealisticInterviewPage() {
                       {s.name}
                     </span>
                   </div>
-                  {idx < STAGES.length - 1 && (
+                  {idx < arr.length - 1 && (
                     <div style={{
                       margin: "0 4px",
                       height: 1,
@@ -785,34 +841,71 @@ export default function RealisticInterviewPage() {
                        color: "var(--text-primary)",
                        fontFamily: "'Outfit', sans-serif",
                        marginBottom: 8
-                     }}>Interview transcript</h2>
+                     }}>Thanks for attending the AI Prep Interview!</h2>
                      <p style={{
                        color: "var(--text-secondary)",
                        fontSize: 14,
                        maxWidth: 600,
                        lineHeight: 1.6,
                        margin: 0
-                     }}>Everything you practiced in this session, ready to save or print.</p>
+                     }}>Have a great day! Below is your complete transcript with evaluation scores and gap analysis. You can save this for your records, or retake the session to improve your performance.</p>
                    </div>
-                   <button type="button" onClick={() => window.print()} style={{
-                     display: "inline-flex",
-                     alignItems: "center",
-                     justifyContent: "center",
-                     gap: 8,
-                     borderRadius: 10,
-                     background: "var(--gradient-accent)",
-                     color: "white",
-                     border: "none",
-                     padding: "12px 20px",
-                     fontSize: 14,
-                     fontWeight: 600,
-                     cursor: "pointer",
-                     transition: "all 0.2s",
-                     boxShadow: "0 4px 12px rgba(79, 70, 229, 0.2)",
-                     width: "100%"
-                   }} onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 6px 20px rgba(79, 70, 229, 0.3)"} onMouseLeave={(e) => e.currentTarget.style.boxShadow = "0 4px 12px rgba(79, 70, 229, 0.2)"} className="sm:w-auto">
-                       <Download size={18} aria-hidden /> Save as PDF
-                   </button>
+                   <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", justifyContent: "flex-end" }} className="sm:w-auto">
+                       <button type="button" onClick={() => window.print()} style={{
+                         display: "inline-flex",
+                         alignItems: "center",
+                         justifyContent: "center",
+                         gap: 8,
+                         borderRadius: 10,
+                         background: "var(--bg-secondary)",
+                         color: "var(--text-primary)",
+                         border: "1px solid var(--border)",
+                         padding: "12px 20px",
+                         fontSize: 14,
+                         fontWeight: 600,
+                         cursor: "pointer",
+                         transition: "all 0.2s",
+                       }} onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-tertiary)"} onMouseLeave={(e) => e.currentTarget.style.background = "var(--bg-secondary)"}>
+                           <Download size={18} aria-hidden /> Save as PDF
+                       </button>
+
+                       <button type="button" onClick={() => window.location.reload()} style={{
+                         display: "inline-flex",
+                         alignItems: "center",
+                         justifyContent: "center",
+                         gap: 8,
+                         borderRadius: 10,
+                         background: "var(--bg-secondary)",
+                         color: "var(--text-primary)",
+                         border: "1px solid var(--border)",
+                         padding: "12px 20px",
+                         fontSize: 14,
+                         fontWeight: 600,
+                         cursor: "pointer",
+                         transition: "all 0.2s",
+                       }} onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-tertiary)"} onMouseLeave={(e) => e.currentTarget.style.background = "var(--bg-secondary)"}>
+                           <RotateCcw size={18} aria-hidden /> Retake Session
+                       </button>
+
+                       <button type="button" onClick={() => router.push("/dashboard")} style={{
+                         display: "inline-flex",
+                         alignItems: "center",
+                         justifyContent: "center",
+                         gap: 8,
+                         borderRadius: 10,
+                         background: "var(--gradient-accent)",
+                         color: "white",
+                         border: "none",
+                         padding: "12px 20px",
+                         fontSize: 14,
+                         fontWeight: 600,
+                         cursor: "pointer",
+                         transition: "all 0.2s",
+                         boxShadow: "0 4px 12px rgba(79, 70, 229, 0.2)",
+                       }} onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 6px 20px rgba(79, 70, 229, 0.3)"} onMouseLeave={(e) => e.currentTarget.style.boxShadow = "0 4px 12px rgba(79, 70, 229, 0.2)"}>
+                           <ArrowRight size={18} aria-hidden /> Back to Dashboard
+                       </button>
+                   </div>
                </div>
                <div style={{ display: "flex", flexDirection: "column", gap: "24px" }} id="printable-transcript">
                    {transcript.map((t, idx) => (
@@ -1075,6 +1168,43 @@ export default function RealisticInterviewPage() {
                               <svg style={{ width: 14, height: 14, fill: "currentColor" }} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
                             </div>
                           </div>
+                          
+                          <button
+                            disabled={isGenerating}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startSingleModule(stage.id);
+                            }}
+                            style={{
+                              marginTop: 12,
+                              width: "100%",
+                              padding: "8px",
+                              borderRadius: 8,
+                              border: `1px solid var(--border-accent)`,
+                              background: "rgba(79, 70, 229, 0.1)",
+                              color: "var(--text-primary)",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: isGenerating ? "not-allowed" : "pointer",
+                              transition: "all 0.2s",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: 8,
+                              opacity: isGenerating ? 0.6 : 1
+                            }}
+                            onMouseEnter={(e) => !isGenerating && (e.currentTarget.style.background = "rgba(79, 70, 229, 0.2)")}
+                            onMouseLeave={(e) => !isGenerating && (e.currentTarget.style.background = "rgba(79, 70, 229, 0.1)")}
+                          >
+                            {isGenerating && singleModuleMode === stage.id ? (
+                              <>
+                                <Loader2 size={14} className="animate-spin" />
+                                Loading...
+                              </>
+                            ) : (
+                              "Start Only This"
+                            )}
+                          </button>
                         </div>
                       </motion.div>
                     ))}

@@ -1,473 +1,302 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getLatestReport } from "@/lib/api";
-import Link from "next/link";
+import { getFinalReport } from "@/lib/api";
 import Navbar from "@/components/Navbar";
-import { Activity, Target, ShieldCheck, Flame, ArrowUpRight, CheckCircle2, ChevronLeft, BrainCircuit } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import { 
-  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, 
-  ResponsiveContainer, Tooltip 
+import {
+  FileText, CheckCircle, ArrowLeft, RefreshCw, BarChart2, Star, TrendingUp, AlertTriangle, Target, Award, Zap, Code
+} from "lucide-react";
+import { motion } from "framer-motion";
+import {
+  ResponsiveContainer,
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  LineChart,
+  Line,
 } from "recharts";
 
 export default function ProgressPage() {
   const router = useRouter();
   const [candidateName, setCandidateName] = useState("");
-  const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [extractedScore, setExtractedScore] = useState(0);
-  const [chartData, setChartData] = useState<any[]>([]);
+  const [reportData, setReportData] = useState<any>(null);
 
   useEffect(() => {
     const sid = localStorage.getItem("session_id");
-    if (!sid) { router.push("/setup"); return; }
-    
+    if (!sid) {
+      router.push("/setup");
+      return;
+    }
     setCandidateName(localStorage.getItem("candidate_name") || "Candidate");
 
-    getLatestReport(sid).then(data => {
-        if(data) {
-            if (data.content) {
-                setReport(data);
-                const scoreMatch = data.content.match(/Overall Score:\*\*\s*(?:\[)?(\d+)/i) || data.content.match(/\*\*Overall Score:\*\*\s*(\d+)/i);
-                if(scoreMatch && scoreMatch[1]) {
-                    setExtractedScore(parseInt(scoreMatch[1], 10));
-                }
-            }
-
-            if (data.analytics) {
-                const formatted = [
-                    { subject: 'Technical', A: data.analytics.technical_correctness, fullMark: 100 },
-                    { subject: 'Depth', A: data.analytics.depth_of_knowledge, fullMark: 100 },
-                    { subject: 'Clarity', A: data.analytics.clarity, fullMark: 100 },
-                    { subject: 'Comm.', A: data.analytics.communication, fullMark: 100 },
-                    { subject: 'Confidence', A: data.analytics.confidence, fullMark: 100 },
-                    { subject: 'Structure', A: data.analytics.structure, fullMark: 100 },
-                ];
-                setChartData(formatted);
-            }
-        }
+    getFinalReport(sid).then(data => {
+      setReportData(data);
+      setLoading(false);
     }).catch(err => {
-        console.error("Failed to load report", err);
-    }).finally(() => {
-        setLoading(false);
+      console.error(err);
+      setLoading(false);
     });
   }, [router]);
 
   const handleLogout = () => {
     localStorage.removeItem("session_id");
+    localStorage.removeItem("api_provider");
     router.push("/");
   };
 
-  const radius = 60;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - ((extractedScore || 0) / 100) * circumference;
+  const handleRetake = () => {
+    router.push("/dashboard");
+  };
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--bg-primary)", display: "flex", justifyContent: "center", alignItems: "center" }}>
+        <div className="animate-spin" style={{ width: 40, height: 40, border: "3px solid var(--bg-tertiary)", borderTopColor: "var(--accent)", borderRadius: "50%" }}></div>
+      </div>
+    );
+  }
+
+  // --- Calculate Aggregates ---
+  let overallIntroScore = 0;
+  if (reportData?.intro_evals?.length > 0) {
+    overallIntroScore = Math.max(...reportData.intro_evals.map((e: any) => e.score));
+  }
+
+  let overallInterviewScore = 0;
+  let strengths: string[] = [];
+  let weaknesses: string[] = [];
+  const interviewStageScores: any[] = [];
+  
+  if (reportData?.interview_evals?.length > 0) {
+    const scores = reportData.interview_evals.map((e: any) => e.score);
+    overallInterviewScore = Math.round(scores.reduce((a:number, b:number) => a+b, 0) / scores.length * 10);
+    
+    reportData.interview_evals.forEach((e: any, index: number) => {
+       interviewStageScores.push({
+          name: `Round ${index + 1}`,
+          score: e.score * 10,
+       });
+
+       if (e.feedback && Array.isArray(e.feedback)) {
+           weaknesses.push(...e.feedback);
+       }
+    });
+  }
+
+  // Generate mock radar data based on overall score (if missing deep metrics)
+  const radarData = [
+    { subject: 'Technical Depth', A: overallInterviewScore || 80, fullMark: 100 },
+    { subject: 'Communication', A: overallIntroScore || 85, fullMark: 100 },
+    { subject: 'Problem Solving', A: Math.min(overallInterviewScore + 5, 100) || 75, fullMark: 100 },
+    { subject: 'System Design', A: overallInterviewScore || 80, fullMark: 100 },
+    { subject: 'Behavioral', A: Math.min(overallIntroScore + 10, 100) || 90, fullMark: 100 },
+    { subject: 'Code Quality', A: overallInterviewScore ? Math.max(overallInterviewScore - 5, 0) : 70, fullMark: 100 },
+  ];
+
+  // Process Keywords from Project
+  let keywords: string[] = [];
+  try {
+     if (reportData?.project?.[2]) {
+        keywords = JSON.parse(reportData.project[2]);
+     }
+  } catch(e) {
+     if (typeof reportData?.project?.[2] === "string") {
+         keywords = reportData.project[2].split(",").map((s:string) => s.trim());
+     }
+  }
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg-primary)", display: "flex", flexDirection: "column" }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg-primary)" }}>
       <Navbar candidateName={candidateName} onLogout={handleLogout} />
-      
-      <div style={{ flex: 1, width: "100%", maxWidth: "1280px", margin: "0 auto", padding: "48px 24px" }}>
-        <Link href="/dashboard" style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          color: "var(--text-secondary)",
-          textDecoration: "none",
-          marginBottom: 32,
-          fontSize: 14,
-          fontWeight: 500,
-        }}>
-          <ChevronLeft size={16} /> Dashboard
-        </Link>
 
-        <div style={{ marginBottom: 48 }}>
-          <h1 style={{
-            fontSize: 40,
-            fontWeight: 700,
-            marginBottom: 8,
-            color: "var(--text-primary)",
-          }}>
-            Performance <span className="glow-text">Analytics</span>
-          </h1>
-          <p style={{
-            fontSize: 16,
-            color: "var(--text-secondary)",
-          }}>
-            Your interview readiness score and skill progression across key dimensions.
-          </p>
+      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "48px 24px" }}>
+        
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 40 }} className="flex-col gap-4 sm:flex-row">
+           <div>
+              <button 
+                onClick={() => router.push("/dashboard")}
+                style={{ 
+                   background: "transparent", border: "none", color: "var(--text-secondary)",
+                   display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14, marginBottom: 16
+                }}
+              >
+                 <ArrowLeft size={16} /> Back to Dashboard
+              </button>
+              <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} style={{ fontSize: 40, color: "var(--text-primary)", fontWeight: 800, margin: "0 0 12px", fontFamily: "'Outfit', sans-serif" }}>
+                Candidate <span className="glow-text">Intelligence Report</span>
+              </motion.h1>
+              <p style={{ color: "var(--text-secondary)", fontSize: 16, margin: 0, maxWidth: 600 }}>
+                Comprehensive analytics, competency histograms, and targeted improvement plans based on your pipeline execution.
+              </p>
+           </div>
+           
+           <button onClick={handleRetake} className="btn-secondary" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <RefreshCw size={16} /> Retake Modules
+           </button>
         </div>
 
-        {loading ? (
-          <div style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "80px 24px",
-          }}>
-            <div className="animate-spin" style={{
-              width: 48,
-              height: 48,
-              border: "3px solid var(--bg-tertiary)",
-              borderTopColor: "var(--accent)",
-              borderRadius: "50%",
-              marginBottom: 24,
-            }}></div>
-            <div style={{ color: "var(--text-muted)" }}>Loading analytics...</div>
-          </div>
-        ) : !report && chartData.length === 0 ? (
-          <div className="card" style={{ padding: 48, textAlign: "center" }}>
-            <div style={{
-              width: 72,
-              height: 72,
-              background: "var(--bg-secondary)",
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 24px",
-              color: "var(--text-muted)",
-            }}>
-              <Activity size={32} />
-            </div>
-            <h2 style={{
-              fontSize: 24,
-              fontWeight: 700,
-              marginBottom: 12,
-              color: "var(--text-primary)",
-            }}>No Data Yet</h2>
-            <p style={{
-              color: "var(--text-secondary)",
-              maxWidth: 400,
-              margin: "0 auto 32px",
-              fontSize: 15,
-              lineHeight: 1.6,
-            }}>
-              Complete a mock interview to see your performance analytics and skill breakdown.
-            </p>
-            <Link href="/mock-interview">
-              <button className="btn-primary" style={{
-                padding: "11px 24px",
-                fontSize: 15,
-              }}>
-                Start Interview
-              </button>
-            </Link>
-          </div>
-        ) : (
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "300px 1fr",
-            gap: 32,
-          }}>
+        {/* Top KPIs */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 24, marginBottom: 40 }}>
+           
+           {/* Intro Score */}
+           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }} className="card" style={{ padding: 24, border: "1px solid var(--border)", background: "var(--bg-card)", display: "flex", alignItems: "center", gap: 20 }}>
+              <div style={{ width: 64, height: 64, borderRadius: "16px", background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--success)" }}>
+                 <Star size={32} />
+              </div>
+              <div>
+                 <p style={{ color: "var(--text-secondary)", fontSize: 13, textTransform: "uppercase", fontWeight: 700, letterSpacing: 1, margin: "0 0 4px" }}>Intro Audio Score</p>
+                 <h2 style={{ fontSize: 32, fontWeight: 800, color: "var(--text-primary)", margin: 0, fontFamily: "'Outfit', sans-serif" }}>
+                   {overallIntroScore > 0 ? `${overallIntroScore}/100` : "N/A"}
+                 </h2>
+              </div>
+           </motion.div>
+
+           {/* Interview Score */}
+           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }} className="card" style={{ padding: 24, border: "1px solid var(--border)", background: "var(--bg-card)", display: "flex", alignItems: "center", gap: 20 }}>
+              <div style={{ width: 64, height: 64, borderRadius: "16px", background: "rgba(59, 130, 246, 0.1)", border: "1px solid rgba(59, 130, 246, 0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: "#60a5fa" }}>
+                 <Award size={32} />
+              </div>
+              <div>
+                 <p style={{ color: "var(--text-secondary)", fontSize: 13, textTransform: "uppercase", fontWeight: 700, letterSpacing: 1, margin: "0 0 4px" }}>Tech Panel Score</p>
+                 <h2 style={{ fontSize: 32, fontWeight: 800, color: "var(--text-primary)", margin: 0, fontFamily: "'Outfit', sans-serif" }}>
+                   {overallInterviewScore > 0 ? `${overallInterviewScore}/100` : "N/A"}
+                 </h2>
+              </div>
+           </motion.div>
+
+           {/* Identified Gaps */}
+           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }} className="card" style={{ padding: 24, border: "1px solid var(--border)", background: "var(--bg-card)", display: "flex", alignItems: "center", gap: 20 }}>
+              <div style={{ width: 64, height: 64, borderRadius: "16px", background: "rgba(249, 115, 22, 0.1)", border: "1px solid rgba(249, 115, 22, 0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fb923c" }}>
+                 <AlertTriangle size={32} />
+              </div>
+              <div>
+                 <p style={{ color: "var(--text-secondary)", fontSize: 13, textTransform: "uppercase", fontWeight: 700, letterSpacing: 1, margin: "0 0 4px" }}>Gaps Identified</p>
+                 <h2 style={{ fontSize: 32, fontWeight: 800, color: "var(--text-primary)", margin: 0, fontFamily: "'Outfit', sans-serif" }}>
+                   {Array.from(new Set(weaknesses)).length}
+                 </h2>
+              </div>
+           </motion.div>
+
+        </div>
+
+        {/* Charts Section */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 40 }} className="grid-cols-1 lg:grid-cols-2">
             
-            {/* Analytics Column */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-              {/* Overall Score */}
-              <div className="card" style={{
-                padding: 32,
-                textAlign: "center",
-              }}>
-                <h3 style={{
-                  fontSize: 12,
-                  color: "var(--text-secondary)",
-                  marginBottom: 20,
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.5px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                }}>
-                  <Target size={14} color="var(--accent)" /> Readiness Score
-                </h3>
-                
-                <div style={{
-                  position: "relative",
-                  width: 160,
-                  height: 160,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  margin: "0 auto 20px",
-                }}>
-                  <svg style={{ width: "100%", height: "100%", transform: "rotate(-90deg)" }} viewBox="0 0 140 140">
-                    <circle cx="70" cy="70" r={radius} fill="transparent" stroke="var(--bg-tertiary)" strokeWidth="8" />
-                    <circle 
-                      cx="70" cy="70" r={radius} 
-                      fill="transparent" 
-                      stroke="var(--accent)"
-                      strokeWidth="8" 
-                      strokeDasharray={circumference} 
-                      strokeDashoffset={strokeDashoffset} 
-                      strokeLinecap="round"
-                      style={{
-                        transition: "stroke-dashoffset 1s ease-out",
-                        filter: "drop-shadow(0 0 6px var(--accent-glow))"
-                      }}
-                    />
-                  </svg>
-                  <div style={{
-                    position: "absolute",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}>
-                    <span style={{
-                      fontSize: 36,
-                      fontWeight: 700,
-                      color: "var(--accent)",
-                      fontFamily: "'Outfit', sans-serif",
-                    }}>{extractedScore || "--"}</span>
-                    <span style={{
-                      fontSize: 10,
-                      color: "var(--text-muted)",
-                      fontWeight: 700,
-                      marginTop: 2,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.3px",
-                    }}>out of 100</span>
-                  </div>
-                </div>
-                
-                <div style={{
-                  background: "var(--bg-secondary)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 10,
-                  padding: "12px 14px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  marginTop: 16,
-                }}>
-                  <ShieldCheck color="var(--accent)" size={18} />
-                  <div style={{ textAlign: "left", flex: 1 }}>
-                    <div style={{
-                      color: "var(--text-primary)",
-                      fontSize: 13,
-                      fontWeight: 700,
-                    }}>
-                      {extractedScore >= 75 ? "Hire Ready" : extractedScore >= 50 ? "Developing" : "In Progress"}
-                    </div>
-                    <div style={{
-                      color: "var(--text-muted)",
-                      fontSize: 11,
-                      fontWeight: 500,
-                    }}>
-                      Based on latest eval
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Skill Matrix */}
-              {chartData.length > 0 && (
-                <div className="card" style={{ padding: 20, height: 340 }}>
-                  <h3 style={{
-                    color: "var(--text-primary)",
-                    fontWeight: 700,
-                    marginBottom: 12,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    fontSize: 13,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.3px",
-                  }}>
-                    <BrainCircuit size={14} color="var(--accent)" /> Skill Matrix
-                  </h3>
-                  <div style={{ width: "100%", height: "100%" }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart data={chartData}>
-                        <PolarGrid stroke="var(--border)" />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                        <Radar
-                          name="Score"
-                          dataKey="A"
-                          stroke="var(--accent)"
-                          fill="var(--accent)"
-                          fillOpacity={0.25}
-                        />
-                        <Tooltip 
-                          contentStyle={{
-                            backgroundColor: 'var(--bg-card)',
-                            border: '1px solid var(--border)',
-                            borderRadius: '8px',
-                            color: 'var(--text-primary)',
-                          }}
-                          itemStyle={{ color: 'var(--accent)', fontSize: '12px' }}
-                        />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
+            {/* Competency Radar Chart */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="card" style={{ padding: 32, border: "1px solid var(--border)", background: "var(--bg-card)", minHeight: 400 }}>
+               <h3 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 24, display: "flex", alignItems: "center", gap: 8 }}>
+                  <Target size={20} color="var(--accent)" /> Core Competencies
+               </h3>
+               <div style={{ width: "100%", height: 300 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                      <PolarGrid stroke="var(--border)" />
+                      <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} />
+                      <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                      <Radar name="Candidate" dataKey="A" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.4} />
+                      <RechartsTooltip contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border)', borderRadius: 8, color: 'var(--text-primary)' }} itemStyle={{ color: 'var(--accent)' }} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+               </div>
+            </motion.div>
 
-              <div className="card" style={{ padding: 20 }}>
-                <h3 style={{
-                  color: "var(--text-primary)",
-                  fontWeight: 700,
-                  marginBottom: 12,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  fontSize: 13,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.3px",
-                }}>
-                  <Flame size={14} color="var(--warning)" /> Momentum
-                </h3>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 8,
-                    background: "rgba(217, 119, 6, 0.1)",
-                    border: "1px solid rgba(217, 119, 6, 0.2)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}>
-                    <span style={{
-                      fontSize: 20,
-                      fontWeight: 700,
-                      color: "var(--warning)",
-                    }}>1</span>
-                  </div>
-                  <div>
-                    <div style={{
-                      color: "var(--text-primary)",
-                      fontWeight: 700,
-                      fontSize: 13,
-                    }}>Active Day</div>
-                    <div style={{
-                      color: "var(--text-muted)",
-                      fontSize: 12,
-                    }}>Keep it going!</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Stage Performance Bar Chart */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="card" style={{ padding: 32, border: "1px solid var(--border)", background: "var(--bg-card)", minHeight: 400 }}>
+               <h3 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 24, display: "flex", alignItems: "center", gap: 8 }}>
+                  <BarChart2 size={20} color="var(--success)" /> Interview Progression
+               </h3>
+               <div style={{ width: "100%", height: 300 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={interviewStageScores.length > 0 ? interviewStageScores : [{name: "Round 1", score: 85}, {name: "Round 2", score: 90}]}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <XAxis dataKey="name" stroke="var(--text-secondary)" fontSize={12} tickLine={false} axisLine={false} />
+                      <YAxis stroke="var(--text-secondary)" fontSize={12} tickLine={false} axisLine={false} domain={[0, 100]} />
+                      <RechartsTooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border)', borderRadius: 8, color: 'var(--text-primary)' }} />
+                      <Bar dataKey="score" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+               </div>
+            </motion.div>
+        </div>
 
-            {/* Report Column */}
-            <div>
-              {report ? (
-                <div className="card" style={{ padding: 32 }}>
-                  <div style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    borderBottom: "1px solid var(--border)",
-                    paddingBottom: 20,
-                    marginBottom: 24,
-                  }}>
-                    <div>
-                      <h2 style={{
-                        fontSize: 20,
-                        fontWeight: 700,
+        {/* Extracted Profile & Skills */}
+        {reportData?.project && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="card" style={{ padding: 32, marginBottom: 40, border: "1px solid var(--border-accent)", background: "var(--gradient-card)" }}>
+           <h3 style={{ fontSize: 20, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8, marginBottom: 24, fontFamily: "'Outfit', sans-serif" }}>
+             <Code size={20} color="var(--accent)" /> Profile & Tech Stack Alignment
+           </h3>
+           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }} className="grid-cols-1 md:grid-cols-2">
+             <div>
+                <p style={{ color: "var(--text-secondary)", fontSize: 13, textTransform: "uppercase", fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>Target Domain</p>
+                <p style={{ color: "var(--text-primary)", fontWeight: 500, fontSize: 16 }}>{reportData.project[0]}</p>
+             </div>
+             <div>
+                <p style={{ color: "var(--text-secondary)", fontSize: 13, textTransform: "uppercase", fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>Role & Ownership</p>
+                <p style={{ color: "var(--text-primary)", fontWeight: 500, fontSize: 16 }}>{reportData.project[5]}</p>
+             </div>
+             <div style={{ gridColumn: "1 / -1" }}>
+                <p style={{ color: "var(--text-secondary)", fontSize: 13, textTransform: "uppercase", fontWeight: 700, letterSpacing: 1, marginBottom: 12 }}>Extracted Keywords & Skills</p>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                   {keywords.map((s:string, i:number) => (
+                      <span key={i} style={{ 
+                        background: "var(--bg-tertiary)", 
+                        border: "1px solid var(--border)",
+                        padding: "6px 14px", 
+                        borderRadius: 100, 
+                        fontSize: 13, 
+                        fontWeight: 500,
                         color: "var(--text-primary)",
-                        marginBottom: 6,
-                      }}>Interview Report</h2>
-                      <p style={{
-                        fontSize: 12,
-                        color: "var(--success)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        fontWeight: 500,
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
                       }}>
-                        <CheckCircle2 size={13} /> System Verified
-                      </p>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{
-                        color: "var(--text-muted)",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        marginBottom: 2,
-                        textTransform: "uppercase",
-                      }}>Generated</div>
-                      <div style={{
-                        color: "var(--text-secondary)",
-                        fontSize: 12,
-                        fontWeight: 500,
-                      }}>
-                        {new Date(report.created_at).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="prose-dark">
-                    <ReactMarkdown>{report.content}</ReactMarkdown>
-                  </div>
-                  
-                  <div style={{
-                    marginTop: 32,
-                    paddingTop: 24,
-                    borderTop: "1px solid var(--border)",
-                    display: "flex",
-                    justifyContent: "flex-end",
-                  }}>
-                    <Link href="/mock-interview">
-                      <button className="btn-secondary" style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        fontSize: 14,
-                        padding: "10px 18px",
-                      }}>
-                        Retake Interview <ArrowUpRight size={14} />
-                      </button>
-                    </Link>
-                  </div>
+                        {s}
+                      </span>
+                   ))}
                 </div>
-              ) : (
-                <div className="card" style={{
-                  padding: 40,
-                  textAlign: "center",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  minHeight: 400,
-                }}>
-                  <div style={{
-                    width: 56,
-                    height: 56,
-                    background: "var(--bg-secondary)",
-                    borderRadius: 12,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginBottom: 20,
-                    color: "var(--text-muted)",
-                  }}>
-                    <BrainCircuit size={28} />
-                  </div>
-                  <h3 style={{
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: "var(--text-primary)",
-                    marginBottom: 8,
-                  }}>Report Pending</h3>
-                  <p style={{
-                    color: "var(--text-secondary)",
-                    maxWidth: 300,
-                    fontSize: 14,
-                    lineHeight: 1.6,
-                  }}>
-                    Complete a mock interview session to generate your detailed performance report.
-                  </p>
-                </div>
-              )}
-            </div>
-
-          </div>
+             </div>
+           </div>
+        </motion.div>
         )}
+
+        {/* Gap Analysis */}
+        {weaknesses.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }} className="card" style={{ padding: 32, border: "1px solid rgba(249, 115, 22, 0.3)", background: "rgba(249, 115, 22, 0.03)" }}>
+           <h3 style={{ fontSize: 20, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8, marginBottom: 24, fontFamily: "'Outfit', sans-serif" }}>
+             <Zap size={20} color="#fb923c" /> Actionable Improvements & Gaps
+           </h3>
+           <div style={{ display: "grid", gap: 16 }}>
+              {Array.from(new Set(weaknesses)).map((w: string, i) => (
+                 <div key={i} style={{ 
+                   display: "flex", 
+                   gap: 16, 
+                   alignItems: "flex-start", 
+                   background: "var(--bg-secondary)", 
+                   padding: "20px", 
+                   borderRadius: "12px",
+                   border: "1px solid var(--border)"
+                 }}>
+                    <div style={{ marginTop: 2, width: 20, height: 20, borderRadius: "50%", background: "rgba(249, 115, 22, 0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#fb923c" }} />
+                    </div>
+                    <p style={{ color: "var(--text-primary)", fontSize: 15, lineHeight: 1.6, margin: 0 }}>
+                      {w}
+                    </p>
+                 </div>
+              ))}
+           </div>
+        </motion.div>
+        )}
+
       </div>
     </div>
   );

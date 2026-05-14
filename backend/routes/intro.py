@@ -30,7 +30,7 @@
 #         conn = get_db_connection()
 #         ideal_intro = "A professional overview covering name, background, and alignment with the requested role."
 #         with conn.cursor() as cursor:
-#             # try to fetch generated template if we added it to resumes or project (simplification here)
+#             # try to fetch generated template if we added it to aiprep_tool_resumes or project (simplification here)
 #             pass
             
 #         eval_result = evaluate_intro(session_id, transcript, ideal_intro, api_key=api_key)
@@ -44,7 +44,7 @@
         
 #         with conn.cursor() as cursor:
 #             cursor.execute("""
-#                 INSERT INTO evaluations (user_id, type, score, passed, feedback, raw_response)
+#                 INSERT INTO aiprep_tool_evaluations (user_id, type, score, passed, feedback, raw_response)
 #                 VALUES (%s, %s, %s, %s, %s, %s)
 #             """, (
 #                 session_id, 
@@ -56,12 +56,12 @@
 #             ))
             
 #             # Upsert attempt
-#             cursor.execute("SELECT attempt_count FROM attempts WHERE user_id = %s AND attempt_type = 'intro'", (session_id,))
+#             cursor.execute("SELECT attempt_count FROM aiprep_tool_attempts WHERE user_id = %s AND attempt_type = 'intro'", (session_id,))
 #             attn = cursor.fetchone()
 #             if attn:
-#                 cursor.execute("UPDATE attempts SET attempt_count = attempt_count + 1 WHERE user_id = %s AND attempt_type = 'intro'", (session_id,))
+#                 cursor.execute("UPDATE aiprep_tool_attempts SET attempt_count = attempt_count + 1 WHERE user_id = %s AND attempt_type = 'intro'", (session_id,))
 #             else:
-#                 cursor.execute("INSERT INTO attempts (user_id, attempt_type, attempt_count) VALUES (%s, %s, %s)", (session_id, 'intro', 1))
+#                 cursor.execute("INSERT INTO aiprep_tool_attempts (user_id, attempt_type, attempt_count) VALUES (%s, %s, %s)", (session_id, 'intro', 1))
 
 #             conn.commit()
         
@@ -108,7 +108,7 @@
         
 #         with conn.cursor() as cursor:
 #             cursor.execute("""
-#                 INSERT INTO evaluations (user_id, type, score, passed, feedback, raw_response)
+#                 INSERT INTO aiprep_tool_evaluations (user_id, type, score, passed, feedback, raw_response)
 #                 VALUES (%s, %s, %s, %s, %s, %s)
 #             """, (
 #                 data.session_id, 
@@ -120,12 +120,12 @@
 #             ))
             
 #             # Upsert attempt
-#             cursor.execute("SELECT attempt_count FROM attempts WHERE user_id = %s AND attempt_type = 'intro'", (data.session_id,))
+#             cursor.execute("SELECT attempt_count FROM aiprep_tool_attempts WHERE user_id = %s AND attempt_type = 'intro'", (data.session_id,))
 #             attn = cursor.fetchone()
 #             if attn:
-#                 cursor.execute("UPDATE attempts SET attempt_count = attempt_count + 1 WHERE user_id = %s AND attempt_type = 'intro'", (data.session_id,))
+#                 cursor.execute("UPDATE aiprep_tool_attempts SET attempt_count = attempt_count + 1 WHERE user_id = %s AND attempt_type = 'intro'", (data.session_id,))
 #             else:
-#                 cursor.execute("INSERT INTO attempts (user_id, attempt_type, attempt_count) VALUES (%s, %s, %s)", (data.session_id, 'intro', 1))
+#                 cursor.execute("INSERT INTO aiprep_tool_attempts (user_id, attempt_type, attempt_count) VALUES (%s, %s, %s)", (data.session_id, 'intro', 1))
 
 #             conn.commit()
             
@@ -152,10 +152,10 @@
 #     try:
 #         conn = get_db_connection()
 #         with conn.cursor() as cursor:
-#             cursor.execute("SELECT score FROM evaluations WHERE user_id = %s AND type = 'intro' ORDER BY id DESC", (session_id,))
+#             cursor.execute("SELECT score FROM aiprep_tool_evaluations WHERE user_id = %s AND type = 'intro' ORDER BY id DESC", (session_id,))
 #             res = cursor.fetchall()
-#             attempts = [{"score": row['score']} for row in res]
-#             return {"attempts": attempts}
+#             aiprep_tool_attempts = [{"score": row['score']} for row in res]
+#             return {"aiprep_tool_attempts": aiprep_tool_attempts}
 #     except Exception as e:
 #         raise HTTPException(status_code=500, detail=str(e))
 #     finally:
@@ -253,7 +253,7 @@ async def evaluate_audio_intro(
 
         with conn.cursor() as cursor:
             cursor.execute("""
-                INSERT INTO evaluations (user_id, type, score, feedback)
+                INSERT INTO aiprep_tool_evaluations (user_id, type, score, feedback)
                 VALUES (%s, %s, %s, %s)
             """, (
                 session_id,
@@ -315,7 +315,7 @@ def evaluate_text_intro(data: dict):
         try:
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    INSERT INTO evaluations (user_id, type, score, feedback)
+                    INSERT INTO aiprep_tool_evaluations (user_id, type, score, feedback)
                     VALUES (%s, %s, %s, %s)
                 """, (
                     session_id,
@@ -349,17 +349,17 @@ def evaluate_text_intro(data: dict):
 
 #         # Get project context (optional personalization)
 #         conn = get_db_connection()
-#         project_context = ""
+#         aiprep_tool_project_context = ""
 
 #         try:
 #             with conn.cursor() as cursor:
 #                 cursor.execute(
-#                     "SELECT product, role FROM project_context WHERE user_id = %s",
+#                     "SELECT product, role FROM aiprep_tool_project_context WHERE user_id = %s",
 #                     (session_id,)
 #                 )
 #                 res = cursor.fetchone()
 #                 if res:
-#                     project_context = f"Product: {res.get('product')}, Role: {res.get('role')}"
+#                     aiprep_tool_project_context = f"Product: {res.get('product')}, Role: {res.get('role')}"
 #         finally:
 #             conn.close()
 
@@ -376,7 +376,7 @@ def evaluate_text_intro(data: dict):
 # Create a personalized introduction.
 
 # Context:
-# {project_context}
+# {aiprep_tool_project_context}
 # """
 
 #         response = call_llm_with_context(
@@ -409,7 +409,7 @@ def get_dynamic_intro_template(session_id: str):
             with conn.cursor() as cursor:
                 cursor.execute("""
                     SELECT product, architecture, business_value, role, impact
-                    FROM project_context
+                    FROM aiprep_tool_project_context
                     WHERE user_id = %s
                 """, (session_id,))
                 res = cursor.fetchone()
@@ -435,76 +435,19 @@ Impact: {res.get('impact')}
         with open(template_path, "r", encoding="utf-8") as f:
             raw_template = f.read()
 
-        # 🔥 UPDATED SYSTEM PROMPT (NO MARKDOWN, CLEAN FORMAT)
+        # 🔥 UPDATED SYSTEM PROMPT
         system_prompt = """
 You are a senior AI interview coach.
 
-Generate a detailed, structured introduction EXACTLY like a real engineer explains in interviews.
+You have been provided with a REFERENCE TEMPLATE. Your ONLY task is to generate an introduction that EXACTLY matches the structure, tone, and flow of the REFERENCE TEMPLATE. 
 
 FORMAT REQUIREMENTS:
-
-1. Plain text only (NO markdown, NO **, NO symbols)
-2. Use clean paragraphs
-3. Use bullet points with "•" symbol only
-4. Use section headings like:
-   - Current Project
-   - Phase One – System
-   - Phase Two – System
-   - Previous Experience
-
-STRUCTURE:
-
-Start with:
-Hi, I am <name>.
-
-Then:
-- Career journey (short)
-- Current focus
-
-Then:
-
-Current Project
-<Explain clearly>
-
-Then:
-
-Phase One – System
-• Explain ingestion pipeline
-• Explain retrieval system
-• Explain tools used
-• Explain architecture
-• Explain deployment
-• Explain evaluation
-• Explain optimization
-
-Then (if possible):
-
-Phase Two – System
-• Agents
-• Memory
-• Routing
-• Tools
-
-Then:
-
-Previous Experience
-• MLOps
-• Infra
-• Cloud
-• Monitoring
-
-RULES:
-- MUST be detailed (not short)
-- MUST use user's project data
-- MUST expand architecture into explanation
-- DO NOT summarize too much
-- DO NOT use generic lines
-- DO NOT use markdown (** etc)
-- DO NOT hallucinate tools not present in input
-
-Make it 2–3 minute speaking length.
-
-Return clean text.
+1. Plain text only (NO markdown, NO **, NO symbols).
+2. Maintain the exact same section flow as the reference template.
+3. Replace the placeholder or example information in the template with the Candidate's actual data from the USER PROJECT DATA.
+4. The generated intro MUST include the candidate's company name (if available), problem statement, how they solved it, what they did, and the tech stack.
+5. If the user data is missing certain sections present in the template, you may adapt slightly, but keep the template's overall narrative and structure.
+6. FIRST PERSON PERSPECTIVE: You MUST write the entire introduction from the perspective of the candidate using first-person pronouns ("I", "my", "we"). DO NOT say "The candidate...", say "I...".
 """
 
         # 🔥 PROMPT
@@ -516,9 +459,10 @@ REFERENCE TEMPLATE:
 {raw_template}
 
 INSTRUCTIONS:
-- Convert project data into structured explanation
-- Expand architecture into technical story
-- Use template only as guidance, not output
+- STRICTLY adhere to the layout and narrative flow of the REFERENCE TEMPLATE.
+- DO NOT invent a new structure.
+- Just add the user's own data and project details into the respective sections of the template.
+- Ensure the problem statement, solution, and tech stack are clearly articulated based on the USER PROJECT DATA.
 
 Generate the introduction.
 """
@@ -551,7 +495,7 @@ def get_intro_history(session_id: str):
         with conn.cursor() as cursor:
             cursor.execute("""
                 SELECT id, score, feedback, created_at
-                FROM evaluations
+                FROM aiprep_tool_evaluations
                 WHERE user_id = %s AND type = 'intro'
                 ORDER BY created_at DESC
                 LIMIT 5
@@ -560,6 +504,7 @@ def get_intro_history(session_id: str):
             rows = cursor.fetchall()
 
         return {
+            "aiprep_tool_attempts": rows or [],
             "history": rows or []
         }
 

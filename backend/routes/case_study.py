@@ -5,6 +5,8 @@ from typing import Optional
 from db.connection import get_db_connection
 from services.user_context import get_user_api_key
 from services.llm_service import call_llm_with_context
+import os
+import fitz  # PyMuPDF
 
 router = APIRouter(prefix="/api/case-study", tags=["case-study"])
 
@@ -27,7 +29,7 @@ def generate_standard_case_study(req: GenerateRequest):
 
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            cursor.execute("SELECT product, architecture, business_value, role, impact FROM project_context WHERE user_id = %s", (req.session_id,))
+            cursor.execute("SELECT product, architecture, business_value, role, impact FROM aiprep_tool_project_context WHERE user_id = %s", (req.session_id,))
             res = cursor.fetchone()
             if not res:
                 raise HTTPException(404, "No project context found. Please extract your project first.")
@@ -47,6 +49,7 @@ Input:
 {answers}
 
 Make sure to include sections like: Overview, Architecture, Key Challenges, and Impact.
+FIRST PERSON PERSPECTIVE: You MUST write the entire case study from the perspective of the candidate using first-person pronouns ("I", "my", "we"). DO NOT say "The candidate built...", say "I built...".
 """
 
         system_prompt = "You are an expert technical writer and interviewer building a realistic project case study."
@@ -61,7 +64,7 @@ Make sure to include sections like: Overview, Architecture, Key Challenges, and 
 
         with conn.cursor() as cursor:
             cursor.execute("""
-                INSERT INTO case_studies (user_id, content, topic)
+                INSERT INTO aiprep_tool_case_studies (user_id, content, topic)
                 VALUES (%s, %s, %s)
             """, (req.session_id, res_str, req.topic or "Resume Project"))
         conn.commit()
@@ -84,32 +87,152 @@ def generate_template_case_study(req: GenerateTemplateRequest):
         if not api_key:
             raise HTTPException(401, "API key not found")
 
-        templates = {
-            "rag": "Retrieval-Augmented Generation (RAG) System architecture, detailing vector databases, chunking strategies, embedding models, and LLM orchestration.",
-            "agentic": "Agentic AI System architecture, detailing autonomous planning, tool use (APIs/Databases), memory management, and reasoning loops.",
-            "mlops": "MLOps and Model Deployment pipeline, detailing CI/CD for ML, model monitoring, drift detection, and scalable inference serving."
+        template_files = {
+            "rag": "case_study_rag.pdf",
+            "agentic": "case_study_agentic_ai.pdf",
+            "mlops": "case_study_mlops.pdf"
         }
 
-        domain_focus = templates.get(req.template_key.lower(), "Technical System Design")
+        template_filename = template_files.get(req.template_key.lower())
+        raw_template = ""
+        
+        if template_filename:
+            pdf_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                "templates",
+                template_filename
+            )
+            try:
+                doc = fitz.open(pdf_path)
+                for page in doc:
+                    raw_template += page.get_text() + "\n"
+            except Exception as e:
+                print("Failed to read PDF template:", e)
 
         prompt = f"""
-You are an expert technical writer and AI Architect. Generate a highly detailed, professional Study Guide and Case Study focused strictly on the domain of: {domain_focus}.
+You are a Principal AI Architect designing enterprise-grade systems.
 
-The candidate's core background is:
+Your task is to generate a COMPLETE, production-ready STUDY GUIDE for the following project.
+
+Project Description / Candidate Background:
 {req.project_details}
 
-Blend the candidate's existing background into this domain to create a realistic, challenging case study. The study guide MUST be written in clean Markdown.
+System Type / Domain Context:
+{req.template_key.upper()}
 
-Include the following sections:
-# {domain_focus} Study Guide
-## 1. Executive Summary
-## 2. Target Architecture (Design the system)
-## 3. Core Components & Technologies
-## 4. Key Challenges & Trade-offs
-## 5. Mock Interview Questions (Provide 3 technical questions the candidate should prepare for)
+Reference Domain Knowledge (Use this to inspire the technical depth and architecture specific to this domain):
+{raw_template}
+
+---
+
+STRICT INSTRUCTIONS:
+
+* Do NOT skip any section
+* Do NOT be generic — include real-world constraints, trade-offs, and metrics
+* Explain WHY decisions were made (not just WHAT)
+* Include failures and rejected approaches
+* Use structured, deep technical explanations
+* Make it comparable to enterprise case studies (FAANG-level)
+* FIRST PERSON PERSPECTIVE: You MUST write the entire case study from the perspective of the candidate using first-person pronouns ("I", "my", "we"). DO NOT say "The candidate built...", say "I built...".
+
+---
+
+GENERATE THE STUDY GUIDE USING THIS STRUCTURE:
+
+1. BUSINESS PROBLEM & OBJECTIVES
+* Detailed problem
+* Users, scale, workflows
+* Metrics (latency, AHT, accuracy, cost)
+
+2. CURRENT SYSTEM CHALLENGES
+* Operational issues
+* Why existing system fails
+
+3. SOLUTION EVALUATION
+* At least 3–4 approaches
+* Pros/cons
+* Why rejected
+* Final selected solution (with reasoning)
+
+4. PROOF OF CONCEPT (POC)
+* How it started
+* What was built
+* Tools used
+* Results
+* Learnings (what worked, failed, surprises)
+
+5. SYSTEM REQUIREMENTS
+* Latency, accuracy, scalability
+* Compliance
+* grounding / determinism
+* real-time vs batch constraints
+
+6. FULL SYSTEM ARCHITECTURE
+(Adapt based on system type: RAG, MLOps, or Agentic)
+* Core architecture
+* Tech stack
+
+7. INPUT / QUERY PIPELINE
+* cleaning
+* validation
+* PII masking
+* intent detection
+* query rewriting
+
+8. CORE EXECUTION FLOW
+* Step-by-step flow of how system works end-to-end
+
+9. MEMORY & STATE MANAGEMENT
+* short-term
+* long-term
+* session context
+
+10. EVALUATION STRATEGY
+* Define metrics clearly
+* How evaluation is done
+* offline vs online evaluation
+
+11. MONITORING & OBSERVABILITY
+* logs, metrics, alerts
+* tools used
+
+12. GUARDRAILS & SAFETY
+* prompt injection protection
+* access control
+* audit trails
+* human-in-loop
+
+13. FAILURE HANDLING
+* retry logic
+* fallback strategies
+* escalation paths
+
+14. INFRASTRUCTURE & DEPLOYMENT
+* cloud architecture
+* containers
+* orchestration
+* storage systems
+
+15. ADVANCED DESIGN PATTERNS
+* ReAct, multi-agent, caching, batching, etc.
+
+16. FUTURE IMPROVEMENTS
+* scaling
+* optimization
+* roadmap
+
+---
+
+OUTPUT REQUIREMENTS:
+
+* Deep technical detail
+* Structured sections with clear headings in Markdown
+* Real-world system thinking
+* No shallow explanations
+* No missing components
 """
 
-        system_prompt = "You are an expert technical interviewer creating a domain-specific study guide for a candidate."
+        system_prompt = "You are a Principal AI Architect. You MUST follow the EXACT 16-point FAANG structure provided."
 
         res_str = call_llm_with_context(
             user_id=req.session_id,
@@ -123,7 +246,7 @@ Include the following sections:
         topic_name = req.template_key.upper() + " Guide"
         with conn.cursor() as cursor:
             cursor.execute("""
-                INSERT INTO case_studies (user_id, content, topic)
+                INSERT INTO aiprep_tool_case_studies (user_id, content, topic)
                 VALUES (%s, %s, %s)
             """, (req.session_id, res_str, topic_name))
         conn.commit()

@@ -152,12 +152,25 @@ Project Input:
 # CASE STUDY
 # ---------------------------
 def generate_case_study(user_id: str, data: str, api_key: str = None) -> str:
-    system_prompt = load_prompt("case_study.txt")
+    # Use direct explicit prompt instead of generic case_study.txt
+    system_prompt = "You are an expert technical product manager and AI architect."
 
     prompt = f"""
-Generate a structured case study.
+Generate a structured case study (not a single text block) with the following sections:
+- Domain
+- Product/Mission
+- Customer
+- Business Problem
+- Solution (how it solves the problem)
+- Roles & Responsibilities (list format)
+- Architecture
+- Tools Used
 
-Input:
+Generate two versions of the case study:
+1. Agent-based solution
+2. RAG-based solution
+
+Input Context:
 {data}
 """
 

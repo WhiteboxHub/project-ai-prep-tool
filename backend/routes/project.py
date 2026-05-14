@@ -15,16 +15,16 @@
 #         conn = get_db_connection()
 #         with conn.cursor() as cursor:
 #             # 1. UPSERT Project Context
-#             cursor.execute("SELECT id FROM project_context WHERE user_id = %s", (data.user_id,))
+#             cursor.execute("SELECT id FROM aiprep_tool_project_context WHERE user_id = %s", (data.user_id,))
 #             if cursor.fetchone():
 #                 cursor.execute("""
-#                     UPDATE project_context 
+#                     UPDATE aiprep_tool_project_context 
 #                     SET product=%s, architecture=%s, business_value=%s, role=%s, impact=%s
 #                     WHERE user_id=%s
 #                 """, (data.product, data.architecture, data.business_value, data.role, data.impact, data.user_id))
 #             else:
 #                 cursor.execute("""
-#                     INSERT INTO project_context (user_id, product, architecture, business_value, role, impact)
+#                     INSERT INTO aiprep_tool_project_context (user_id, product, architecture, business_value, role, impact)
 #                     VALUES (%s, %s, %s, %s, %s, %s)
 #                 """, (data.user_id, data.product, data.architecture, data.business_value, data.role, data.impact))
                 
@@ -37,7 +37,7 @@
 #         # 3. Store Evaluation
 #         with conn.cursor() as cursor:
 #             cursor.execute("""
-#                 INSERT INTO evaluations (user_id, type, score, passed, feedback, raw_response)
+#                 INSERT INTO aiprep_tool_evaluations (user_id, type, score, passed, feedback, raw_response)
 #                 VALUES (%s, %s, %s, %s, %s, %s)
 #             """, (
 #                 data.user_id, 
@@ -72,10 +72,10 @@
 #     try:
 #         conn = get_db_connection()
 #         with conn.cursor() as cursor:
-#             cursor.execute("SELECT id FROM project_context WHERE user_id = %s", (session_id,))
+#             cursor.execute("SELECT id FROM aiprep_tool_project_context WHERE user_id = %s", (session_id,))
 #             if cursor.fetchone():
-#                 return {"case_studies": [{"id": 1}]} # Mock format for dashboard
-#         return {"case_studies": []}
+#                 return {"aiprep_tool_case_studies": [{"id": 1}]} # Mock format for dashboard
+#         return {"aiprep_tool_case_studies": []}
 #     except Exception as e:
 #         raise HTTPException(status_code=500, detail=str(e))
 #     finally:
@@ -102,15 +102,46 @@ def save_and_evaluate_project(data: ProjectContextData):
         # 1. Atomic UPSERT Project Context
         with conn.cursor() as cursor:
             cursor.execute("""
-                INSERT INTO project_context (user_id, product, architecture, business_value, role, impact)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO aiprep_tool_project_context (
+                    user_id, product, architecture, business_value, role, impact,
+                    business_problem, previous_system, key_objectives, users_scale,
+                    agents_components, key_workflows, tools_integrations, tech_stack,
+                    ai_techniques, evaluation_approach, challenges_learnings,
+                    safety_guardrails, future_roadmap, company_name, key_problems,
+                    agent_usage, learnings
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE 
                     product = VALUES(product),
                     architecture = VALUES(architecture),
                     business_value = VALUES(business_value),
                     role = VALUES(role),
-                    impact = VALUES(impact)
-            """, (data.user_id, data.product, data.architecture, data.business_value, data.role, data.impact))
+                    impact = VALUES(impact),
+                    business_problem = VALUES(business_problem),
+                    previous_system = VALUES(previous_system),
+                    key_objectives = VALUES(key_objectives),
+                    users_scale = VALUES(users_scale),
+                    agents_components = VALUES(agents_components),
+                    key_workflows = VALUES(key_workflows),
+                    tools_integrations = VALUES(tools_integrations),
+                    tech_stack = VALUES(tech_stack),
+                    ai_techniques = VALUES(ai_techniques),
+                    evaluation_approach = VALUES(evaluation_approach),
+                    challenges_learnings = VALUES(challenges_learnings),
+                    safety_guardrails = VALUES(safety_guardrails),
+                    future_roadmap = VALUES(future_roadmap),
+                    company_name = VALUES(company_name),
+                    key_problems = VALUES(key_problems),
+                    agent_usage = VALUES(agent_usage),
+                    learnings = VALUES(learnings)
+            """, (
+                data.user_id, data.product, data.architecture, data.business_value, data.role, data.impact,
+                data.business_problem, data.previous_system, data.key_objectives, data.users_scale,
+                data.agents_components, data.key_workflows, data.tools_integrations, data.tech_stack,
+                data.ai_techniques, data.evaluation_approach, data.challenges_learnings,
+                data.safety_guardrails, data.future_roadmap, data.company_name, data.key_problems,
+                data.agent_usage, data.learnings
+            ))
 
         conn.commit()
 
@@ -123,14 +154,19 @@ def save_and_evaluate_project(data: ProjectContextData):
         # 3. Prepare input
         skills_str = ", ".join(data.skills) if data.skills else ""
         answers = f"""
+Company Name: {data.company_name}
 Domain: {data.domain}
-Background: {data.background}
-Skills: {skills_str}
-Product: {data.product}
-Architecture: {data.architecture}
-Business Value: {data.business_value}
-Role: {data.role}
-Impact: {data.impact}
+Product/System: {data.product}
+Business Problem: {data.business_problem}
+Previous System: {data.previous_system}
+Key Problems: {data.key_problems}
+LLM Techniques Used: {data.ai_techniques}
+Agent Usage: {data.agent_usage}
+Results & Impact: {data.impact}
+Evaluation Approach: {data.evaluation_approach}
+Challenges: {data.challenges_learnings}
+Learnings: {data.learnings}
+Future Scope: {data.future_roadmap}
 """
 
         # 4. Evaluate
@@ -154,7 +190,7 @@ Impact: {data.impact}
                 db_score = int(score)
 
             cursor.execute("""
-                INSERT INTO evaluations (user_id, type, score, passed, feedback, raw_response)
+                INSERT INTO aiprep_tool_evaluations (user_id, type, score, passed, feedback, raw_response)
                 VALUES (%s, %s, %s, %s, %s, %s)
             """, (
                 data.user_id,
@@ -203,10 +239,10 @@ def get_project_history(session_id: str):
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            cursor.execute("SELECT id FROM project_context WHERE user_id = %s", (session_id,))
+            cursor.execute("SELECT id FROM aiprep_tool_project_context WHERE user_id = %s", (session_id,))
             if cursor.fetchone():
-                return {"case_studies": [{"id": 1}]}
-        return {"case_studies": []}
+                return {"aiprep_tool_case_studies": [{"id": 1}]}
+        return {"aiprep_tool_case_studies": []}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

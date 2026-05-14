@@ -72,6 +72,12 @@ export default function IntroPage() {
       loadVoices();
       window.speechSynthesis.onvoiceschanged = loadVoices;
     }
+
+    return () => {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
   }, [router, selectedVoiceName]);
 
   const handleLogout = () => {

@@ -11,7 +11,7 @@ PASS_SCORE = 7  # Score threshold out of 10
 EVAL_PROMPT = """
 You are evaluating a candidate's interview self-introduction.
 
-Intro Template (ideal structure candidates should follow):
+Intro Template (ideal structure aiprep_tool_candidates should follow):
 \"\"\"{intro_template}\"\"\"
 
 Candidate's Introduction:
@@ -59,7 +59,7 @@ Return ONLY a valid JSON object with this exact format (no extra text, no markdo
 INTRO_TRAINING_PROMPT = """
 You are an interview communication trainer helping a candidate prepare their self-introduction.
 
-Below is the ideal introduction template candidates must follow during interviews:
+Below is the ideal introduction template aiprep_tool_candidates must follow during interviews:
 
 Intro Template:
 {intro_template}
