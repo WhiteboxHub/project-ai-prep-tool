@@ -59,15 +59,6 @@ export function TopNav({ readiness }: TopNavProps) {
           </motion.div>
         )}
 
-        {/* AI Status */}
-        <motion.div
-          className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20"
-          animate={{ opacity: [1, 0.7, 1] }}
-          transition={{ duration: 2, repeat: Infinity }}
-        >
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-xs text-green-300">AI Ready</span>
-        </motion.div>
 
         {/* Upload Resume */}
         <motion.button
@@ -80,13 +71,6 @@ export function TopNav({ readiness }: TopNavProps) {
           Resume
         </motion.button>
 
-        {/* Notifications */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          className="p-2 rounded-lg hover:bg-white/10 smooth-transition relative"
-        >
-          <Bell className="w-5 h-5 text-muted-foreground" />
-        </motion.button>
 
         {/* User Menu */}
         <DropdownMenu>
