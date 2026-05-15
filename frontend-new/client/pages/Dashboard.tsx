@@ -142,7 +142,7 @@ export default function Dashboard() {
         {/* Welcome */}
         <motion.div variants={itemVariants} className="space-y-2">
           <h2 className="text-3xl font-bold text-foreground">
-            {greeting()}, {candidateName.split(" ")[0]}
+            Welcome, {candidateName.split(" ")[0]}
           </h2>
           <p className="text-muted-foreground">
             {readiness === 100
