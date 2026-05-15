@@ -15,7 +15,7 @@ export default function Auth() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const token = searchParams.get("prep_token");
+    const token = searchParams.get("prep_token") || searchParams.get("token");
     if (!token) {
       setError("No authentication token found. Please log in via the WBL platform.");
       return;
