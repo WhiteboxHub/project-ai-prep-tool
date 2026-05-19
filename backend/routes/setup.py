@@ -17,6 +17,7 @@ from services.resume_source import (
     count_llm_keys_for_candidate,
     list_llm_keys_for_candidate,
     upsert_llm_api_key_row,
+    check_wbl_tables_exist,
 )
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
@@ -95,9 +96,10 @@ def init_session(data: SetupInit):
         with conn.cursor() as cursor:
             if data.candidate_id is not None:
                 cid = data.candidate_id
-                cursor.execute("SELECT id FROM candidate WHERE id = %s", (cid,))
-                if not cursor.fetchone():
-                    raise HTTPException(404, "Candidate not found")
+                if check_wbl_tables_exist():
+                    cursor.execute("SELECT id FROM candidate WHERE id = %s", (cid,))
+                    if not cursor.fetchone():
+                        raise HTTPException(404, "Candidate not found")
 
                 session_id = str(cid)
                 cursor.execute(
@@ -463,7 +465,17 @@ def init_and_summary(data: SetupInit):
             if data.candidate_id is not None:
                 cid = data.candidate_id
                 session_id = str(cid)
-                # DO NOT insert into aiprep_tool_candidates. They belong to WBL's `candidate` table.
+                if not check_wbl_tables_exist():
+                    cursor.execute(
+                        """
+                        INSERT INTO aiprep_tool_candidates (user_id, wbl_email, name)
+                        VALUES (%s, %s, %s)
+                        ON DUPLICATE KEY UPDATE
+                            name = %s,
+                            wbl_email = %s
+                        """,
+                        (session_id, data.wbl_email or "", data.name or "", data.name or "", data.wbl_email or ""),
+                    )
             else:
                 if not data.wbl_email:
                     raise HTTPException(400, "wbl_email or candidate_id is required")

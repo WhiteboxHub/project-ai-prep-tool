@@ -11,8 +11,29 @@ from typing import Any, List, Optional
 from db.connection import get_db_connection
 
 
+_wbl_tables_exist = None
+
+def check_wbl_tables_exist() -> bool:
+    global _wbl_tables_exist
+    if _wbl_tables_exist is not None:
+        return _wbl_tables_exist
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SHOW TABLES LIKE 'candidate_resume'")
+                res = cursor.fetchone()
+                _wbl_tables_exist = bool(res)
+                return _wbl_tables_exist
+        finally:
+            conn.close()
+    except Exception:
+        _wbl_tables_exist = False
+        return False
+
+
 def is_wbl_candidate_session(session_id: str) -> bool:
-    return bool(session_id and session_id.isdigit())
+    return bool(session_id and session_id.isdigit() and check_wbl_tables_exist())
 
 
 def _parse_json_field(raw: Any) -> Optional[dict]:
