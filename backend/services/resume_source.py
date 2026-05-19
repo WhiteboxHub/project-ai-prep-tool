@@ -132,6 +132,17 @@ def save_resume_for_session(session_id: str, resume_data: dict) -> None:
                         """,
                         (cid, resume_json_str, file_name),
                     )
+                
+                # Also save to candidate_marketing
+                _ensure_candidate_marketing_row(cursor, cid)
+                cursor.execute(
+                    """
+                    UPDATE candidate_marketing
+                    SET candidate_json = %s
+                    WHERE candidate_id = %s
+                    """,
+                    (resume_json_str, cid),
+                )
             else:
                 cursor.execute(
                     """
