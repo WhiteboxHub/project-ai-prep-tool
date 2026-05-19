@@ -420,7 +420,16 @@ def get_resume_summary(session_id: str):
                 cursor.execute("SELECT api_key_encrypted FROM aiprep_tool_candidates WHERE user_id = %s", (session_id,))
                 key_res = cursor.fetchone()
                 has_api_key = bool(key_res and key_res.get("api_key_encrypted"))
-                llm_keys = []
+                if has_api_key:
+                    llm_keys = [{
+                        "id": 1,
+                        "provider_name": "OpenAI",
+                        "model_name": "Active",
+                        "voice_enabled": False,
+                        "created_at": None
+                    }]
+                else:
+                    llm_keys = []
 
             # Process resume JSON
             resume_json_out = None
@@ -551,7 +560,16 @@ def init_and_summary(data: SetupInit):
                 cursor.execute("SELECT api_key_encrypted FROM aiprep_tool_candidates WHERE user_id = %s", (session_id,))
                 key_res = cursor.fetchone()
                 has_api_key = bool(key_res and key_res.get("api_key_encrypted"))
-                llm_keys = []
+                if has_api_key:
+                    llm_keys = [{
+                        "id": 1,
+                        "provider_name": "OpenAI",
+                        "model_name": "Active",
+                        "voice_enabled": False,
+                        "created_at": None
+                    }]
+                else:
+                    llm_keys = []
 
             resume_json_out = None
             resume_filename = ""
