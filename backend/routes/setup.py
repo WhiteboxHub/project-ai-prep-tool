@@ -81,6 +81,59 @@ def validate_key(req: ValidationRequest):
     except Exception as e:
         print("ERROR:", str(e))
         raise HTTPException(400, "Invalid API Key")
+def upsert_and_migrate_candidate(cursor, session_id: str, email: str, name: str):
+    if email:
+        # 1. Check if email already exists
+        cursor.execute("SELECT user_id FROM aiprep_tool_candidates WHERE wbl_email = %s", (email,))
+        row_by_email = cursor.fetchone()
+        
+        if row_by_email:
+            old_user_id = row_by_email["user_id"]
+            if old_user_id != session_id:
+                # Delete any stale row with the new session_id to avoid unique key conflict
+                cursor.execute("DELETE FROM aiprep_tool_candidates WHERE user_id = %s", (session_id,))
+                
+                # Migrate the old_user_id to the new session_id across all tables
+                cursor.execute(
+                    "UPDATE aiprep_tool_candidates SET user_id = %s, name = %s WHERE user_id = %s",
+                    (session_id, name or "", old_user_id)
+                )
+                for table in [
+                    "aiprep_tool_resumes",
+                    "aiprep_tool_attempts",
+                    "aiprep_tool_evaluations",
+                    "aiprep_tool_project_context",
+                    "aiprep_tool_case_studies"
+                ]:
+                    try:
+                        cursor.execute(
+                            f"UPDATE {table} SET user_id = %s WHERE user_id = %s",
+                            (session_id, old_user_id)
+                        )
+                    except Exception:
+                        pass
+            else:
+                # Email already belongs to this session_id. Just update name.
+                cursor.execute(
+                    "UPDATE aiprep_tool_candidates SET name = %s WHERE user_id = %s",
+                    (name or "", session_id)
+                )
+            return
+
+    # 2. Email does not exist. Check if session_id exists.
+    cursor.execute("SELECT user_id FROM aiprep_tool_candidates WHERE user_id = %s", (session_id,))
+    row_by_id = cursor.fetchone()
+    
+    if row_by_id:
+        cursor.execute(
+            "UPDATE aiprep_tool_candidates SET wbl_email = %s, name = %s WHERE user_id = %s",
+            (email or "", name or "", session_id)
+        )
+    else:
+        cursor.execute(
+            "INSERT INTO aiprep_tool_candidates (user_id, wbl_email, name) VALUES (%s, %s, %s)",
+            (session_id, email or "", name or "")
+        )
 
 
 class SetupInit(BaseModel):
@@ -102,16 +155,7 @@ def init_session(data: SetupInit):
                         raise HTTPException(404, "Candidate not found")
 
                 session_id = str(cid)
-                cursor.execute(
-                    """
-                    INSERT INTO aiprep_tool_candidates (user_id, wbl_email, name)
-                    VALUES (%s, %s, %s)
-                    ON DUPLICATE KEY UPDATE
-                        name = %s,
-                        wbl_email = %s
-                    """,
-                    (session_id, data.wbl_email or "", data.name or "", data.name or "", data.wbl_email or ""),
-                )
+                upsert_and_migrate_candidate(cursor, session_id, data.wbl_email, data.name)
                 conn.commit()
                 return {"session_id": session_id}
 
@@ -466,16 +510,7 @@ def init_and_summary(data: SetupInit):
                 cid = data.candidate_id
                 session_id = str(cid)
                 if not check_wbl_tables_exist():
-                    cursor.execute(
-                        """
-                        INSERT INTO aiprep_tool_candidates (user_id, wbl_email, name)
-                        VALUES (%s, %s, %s)
-                        ON DUPLICATE KEY UPDATE
-                            name = %s,
-                            wbl_email = %s
-                        """,
-                        (session_id, data.wbl_email or "", data.name or "", data.name or "", data.wbl_email or ""),
-                    )
+                    upsert_and_migrate_candidate(cursor, session_id, data.wbl_email, data.name)
             else:
                 if not data.wbl_email:
                     raise HTTPException(400, "wbl_email or candidate_id is required")
