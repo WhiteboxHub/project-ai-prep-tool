@@ -73,8 +73,8 @@ export function ControlBar({
             isAudioDenied
               ? "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
               : isRecording
-                ? "bg-red-500 text-white animate-pulse"
-                : "bg-primary/20 text-primary hover:bg-primary/30"
+                ? "bg-primary/20 text-primary hover:bg-primary/30"
+                : "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
           }`}
         >
           {isAudioDenied || !isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -88,20 +88,15 @@ export function ControlBar({
           className={`p-2.5 rounded-xl transition-all ${
             isVideoDenied
               ? "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
-              : isCameraOn ? "bg-white/5 hover:bg-white/10 text-foreground" : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+              : isCameraOn 
+                ? "bg-primary/20 text-primary hover:bg-primary/30" 
+                : "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
           }`}
         >
-          {isVideoDenied || !isCameraOn ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+          {isVideoDenied ? <VideoOff className="w-4 h-4" /> : !isCameraOn ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
         </motion.button>
 
-        {/* Volume */}
-        <motion.button
-          whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-          title="Volume"
-          className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-muted-foreground transition-all"
-        >
-          <Volume2 className="w-4 h-4" />
-        </motion.button>
+
 
         {/* Divider */}
         <div className="w-px h-6 bg-border/50 mx-0.5" />

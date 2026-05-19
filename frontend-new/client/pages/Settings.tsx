@@ -222,14 +222,17 @@ export default function Settings() {
                       ) : (
                         <div className="space-y-3">
                           {keys.map((k) => (
-                            <div key={k.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
-                              <div className="flex items-center gap-3">
-                                <div className="p-2 rounded-lg bg-primary/20 text-primary"><Key className="w-4 h-4" /></div>
-                                <div>
-                                  <p className="text-sm font-semibold text-foreground uppercase">{k.provider}</p>
-                                  <p className="text-xs text-muted-foreground">Added on {new Date(k.created_at).toLocaleDateString()}</p>
-                                </div>
-                              </div>
+                                <div key={k.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
+                                              <div className="flex items-center gap-3">
+                                                <div className="p-2 rounded-lg bg-primary/20 text-primary"><Key className="w-4 h-4" /></div>
+                                                <div>
+                                                  <p className="text-sm font-semibold text-foreground uppercase">{k.provider_name || k.provider || "Unknown"}</p>
+                                                  <p className="text-xs text-muted-foreground">
+                                                    {k.model_name ? `Model: ${k.model_name}` : ""}
+                                                    {k.created_at ? ` · Added on ${new Date(k.created_at).toLocaleDateString()}` : " · Active"}
+                                                  </p>
+                                                </div>
+                                              </div>
                               <button onClick={() => handleDeleteKey(k.id)} className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors">
                                 <Trash2 className="w-4 h-4" />
                               </button>

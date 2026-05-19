@@ -37,6 +37,20 @@ def fetch_resume_raw(session_id: str) -> Any:
                 cid = int(session_id)
                 cursor.execute(
                     """
+                    SELECT resume_json
+                    FROM candidate_resume
+                    WHERE candidate_id = %s AND resume_json IS NOT NULL
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """,
+                    (cid,),
+                )
+                row = cursor.fetchone()
+                if row and row["resume_json"]:
+                    return row["resume_json"]
+
+                cursor.execute(
+                    """
                     SELECT candidate_json
                     FROM candidate_marketing
                     WHERE candidate_id = %s AND candidate_json IS NOT NULL
@@ -69,10 +83,9 @@ def save_resume_for_session(session_id: str, resume_data: dict) -> None:
         with conn.cursor() as cursor:
             if is_wbl_candidate_session(session_id):
                 cid = int(session_id)
-                _ensure_candidate_marketing_row(cursor, cid)
                 cursor.execute(
                     """
-                    SELECT id FROM candidate_marketing
+                    SELECT id FROM candidate_resume
                     WHERE candidate_id = %s
                     ORDER BY id DESC
                     LIMIT 1
@@ -83,19 +96,20 @@ def save_resume_for_session(session_id: str, resume_data: dict) -> None:
                 if row:
                     cursor.execute(
                         """
-                        UPDATE candidate_marketing
-                        SET candidate_json = %s
+                        UPDATE candidate_resume
+                        SET resume_json = %s, updated_at = NOW()
                         WHERE id = %s
                         """,
                         (resume_json_str, row["id"]),
                     )
                 else:
+                    file_name = resume_data.get("_meta_filename", f"candidate_{cid}_resume.json")
                     cursor.execute(
                         """
-                        INSERT INTO candidate_marketing (candidate_id, start_date, status, candidate_json)
-                        VALUES (%s, %s, 'active', %s)
+                        INSERT INTO candidate_resume (candidate_id, resume_json, file_name, created_at, updated_at)
+                        VALUES (%s, %s, %s, NOW(), NOW())
                         """,
-                        (cid, date.today(), resume_json_str),
+                        (cid, resume_json_str, file_name),
                     )
             else:
                 cursor.execute(

@@ -1,4 +1,4 @@
-// client/pages/PreparationHub.tsx
+// client/pages/ProjectAnalysis.tsx
 import React, { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { motion, AnimatePresence } from "framer-motion";
@@ -12,7 +12,7 @@ import {
 import { useAuth } from "@/lib/AuthContext";
 import {
   getLatestProject, submitProject, getProjectHistory,
-  generateTypedCaseStudy, getCaseStudyHistory,
+  generateTypedCaseStudy, getCaseStudyHistory, extractProject
 } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -221,18 +221,20 @@ function CaseStudyCard({
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function PreparationHub() {
+export default function ProjectAnalysis() {
   const navigate = useNavigate();
   const { sessionId } = useAuth();
 
   const [step, setStep] = useState<FlowStep>(() => {
     return (sessionStorage.getItem("prep_hub_step") as FlowStep) || "form";
   });
+  const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState<ProjectForm>(EMPTY_FORM);
   const [evaluation, setEvaluation] = useState<any>(null);
   const [error, setError] = useState("");
   const [isPreviouslyEvaluated, setIsPreviouslyEvaluated] = useState(false);
   const [generatedTopics, setGeneratedTopics] = useState<Set<string>>(new Set());
+  const [isExtracting, setIsExtracting] = useState(false);
 
   // Persist step to sessionStorage
   useEffect(() => {
@@ -244,7 +246,15 @@ export default function PreparationHub() {
 
     // Check prior completion
     getProjectHistory(sessionId).then((d) => {
-      if (d?.completed) setIsPreviouslyEvaluated(true);
+      if (d?.completed) {
+        setIsPreviouslyEvaluated(true);
+        if (d.history?.[0]?.raw_response) {
+          setEvaluation(d.history[0].raw_response);
+        }
+        if (!isEditing && step !== "loading") {
+          setStep("results");
+        }
+      }
     }).catch(() => {});
 
     // Load generated documents to restore card states
@@ -253,33 +263,67 @@ export default function PreparationHub() {
       setGeneratedTopics(topics);
     }).catch(() => {});
 
-    // Prefill form
-    getLatestProject(sessionId).then((d) => {
-      if (d && Object.keys(d).length > 0) {
-        setForm((p) => ({
-          ...p,
-          companyName: d.company_name || p.companyName,
-          domain: d.domain || p.domain,
-          product: d.product || p.product,
-          businessProblem: d.business_problem || p.businessProblem,
-          businessMetrics: d.impact || p.businessMetrics,
-          techStack: d.tech_stack || d.ai_techniques || p.techStack,
-          agentUsage: d.agent_usage || p.agentUsage,
-          role: d.role || p.role,
-          challenges: d.challenges_learnings || p.challenges,
-          results: d.impact || p.results,
-          deployment: d.future_roadmap || p.deployment,
-          architecture: d.architecture || p.architecture,
-        }));
-        if (d.domain && d.product) {
-          setIsPreviouslyEvaluated(true);
-          // If we reloaded and the backend already has it, and we were on loading, jump to results
-          if (step === "loading") {
-             setStep("results");
-          }
-        }
-      }
-    }).catch(() => {});
+        // Prefill form
+        const loadProjectData = async () => {
+            try {
+                let d = await getLatestProject(sessionId);
+                const invalidDomains = ["genai", "rag", "llm", "ai ", "machine learning", "langchain", "platform", "system", "enterprise"];
+                const hasInvalidDomain = d?.domain ? invalidDomains.some(term => d.domain.toLowerCase().includes(term)) : false;
+
+                // Auto-extract from resume if the project is empty, missing core fields, or has an invalid technical domain
+                if (!d || Object.keys(d).length === 0 || !d.product || !d.company_name || !d.domain || hasInvalidDomain) {
+                    setIsExtracting(true);
+                    try {
+                        const ep = await extractProject(sessionId);
+                        if (ep && ep.core_project) {
+                            d = {
+                                ...d,
+                                company_name: ep.company_name || d?.company_name || "",
+                                domain: ep.domain || d?.domain || "",
+                                product: ep.core_project.product || d?.product || "",
+                                business_problem: ep.core_project.business_problem || d?.business_problem || "",
+                                key_problems: ep.core_project.key_problems || d?.key_problems || "",
+                                tech_stack: ep.core_project.tech_stack || d?.tech_stack || "",
+                                role: ep.core_project.role || d?.role || "",
+                                challenges_learnings: ep.core_project.challenges_learnings || d?.challenges_learnings || "",
+                                impact: ep.core_project.impact || d?.impact || "",
+                                architecture: ep.core_project.architecture || d?.architecture || ep.core_project.tech_stack || d?.tech_stack || "",
+                                agent_usage: ep.core_project.agent_usage || d?.agent_usage || "Agent",
+                                future_roadmap: ep.core_project.deployment || d?.future_roadmap || "",
+                            };
+                        }
+                        // Ensure the loader takes 3.5 seconds as requested by the user
+                        await new Promise((resolve) => setTimeout(resolve, 3500));
+                    } catch(e) {
+                        console.error("Failed to extract project from resume:", e);
+                    } finally {
+                        setIsExtracting(false);
+                    }
+                }
+
+                if (d && Object.keys(d).length > 0) {
+                    setForm((p) => ({
+                        ...p,
+                        companyName: d.company_name || p.companyName,
+                        domain: d.domain || p.domain,
+                        product: d.product || p.product,
+                        businessProblem: d.business_problem || p.businessProblem,
+                        businessMetrics: d.key_problems || d.impact || p.businessMetrics,
+                        techStack: d.tech_stack || d.ai_techniques || p.techStack,
+                        agentUsage: d.agent_usage || p.agentUsage,
+                        role: d.role || p.role,
+                        challenges: d.challenges_learnings || p.challenges,
+                        results: d.impact || p.results,
+                        deployment: d.future_roadmap || p.deployment,
+                        architecture: d.architecture || d.tech_stack || p.architecture,
+                    }));
+                }
+            } catch (err) {
+                console.error(err);
+                setIsExtracting(false);
+            }
+        };
+    loadProjectData();
   }, [sessionId]);
 
   const setField = (key: keyof ProjectForm) =>
@@ -307,6 +351,7 @@ export default function PreparationHub() {
       });
       setEvaluation(res.evaluation);
       setIsPreviouslyEvaluated(true);
+      setIsEditing(false);
       // Refresh card states from DB (in case prior generations exist)
       if (sessionId) {
         getCaseStudyHistory(sessionId).then((d) => {
@@ -336,8 +381,18 @@ export default function PreparationHub() {
               <Code2 className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h2 className="text-3xl font-bold text-foreground">Project Preparation</h2>
-              <p className="text-muted-foreground text-sm">Evaluate your project → Unlock Interview → Generate case studies anytime</p>
+              <div className="flex items-center gap-3">
+                <h2 className="text-3xl font-bold text-foreground">Project Analysis</h2>
+                {isExtracting && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 text-primary rounded-full border border-primary/20">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-xs font-semibold uppercase tracking-wider">Extracting from Resume...</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-muted-foreground text-sm mt-1">
+                {isExtracting ? "We are pulling the details from your uploaded resume. Please wait a moment." : "Analyze project architecture, retrieve AI feedback, and generate domain case studies."}
+              </p>
             </div>
           </div>
         </div>
@@ -348,26 +403,50 @@ export default function PreparationHub() {
           {step === "form" && (
             <motion.div key="form" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-5">
 
-              {isPreviouslyEvaluated && (
-                <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-green-500/10 border border-green-500/30">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
-                    <div>
-                      <p className="font-semibold text-foreground text-sm">Project previously evaluated</p>
-                      <p className="text-xs text-muted-foreground">Edit details and re-evaluate, or proceed to Introduction Practice.</p>
-                    </div>
+              {isExtracting ? (
+                <div className="glass-card p-12 rounded-2xl border border-primary/20 flex flex-col items-center justify-center gap-6 min-h-[400px]">
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                    <Sparkles className="absolute inset-0 m-auto w-6 h-6 text-primary animate-pulse" />
                   </div>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                    onClick={() => navigate("/intro-practice")}
-                    className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-secondary text-white font-bold text-sm"
-                  >
-                    <Users className="w-4 h-4" /> Practice Introduction <ArrowRight className="w-3.5 h-3.5" />
-                  </motion.button>
+                  <div className="text-center space-y-2 max-w-md">
+                    <h3 className="text-xl font-bold text-foreground">Analyzing Resume &amp; Extracting Project...</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Our AI is scanning your resume for core project details, architecture, tech stack, and impact metrics. This takes 3-5 seconds.
+                    </p>
+                  </div>
                 </div>
-              )}
+              ) : (
+                <>
+                  {isPreviouslyEvaluated && (
+                    <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-green-500/10 border border-green-500/30">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+                        <div>
+                          <p className="font-semibold text-foreground text-sm">Project analysis completed</p>
+                          <p className="text-xs text-muted-foreground">You can edit details and re-evaluate, or view current analysis results.</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <motion.button
+                          whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                          onClick={() => { setIsEditing(false); setStep("results"); }}
+                          className="px-4 py-2 rounded-xl bg-white/5 border border-border hover:bg-white/10 text-foreground font-semibold text-sm transition-colors"
+                        >
+                          Cancel &amp; View Results
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                          onClick={() => navigate("/intro-practice")}
+                          className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-secondary text-white font-bold text-sm"
+                        >
+                          <Users className="w-4 h-4" /> Practice Introduction <ArrowRight className="w-3.5 h-3.5" />
+                        </motion.button>
+                      </div>
+                    </div>
+                  )}
 
-              <div className="glass-card p-6 rounded-2xl border border-border/50 space-y-5">
+                  <div className="glass-card p-6 rounded-2xl border border-border/50 space-y-5">
                 <div>
                   <h3 className="text-lg font-semibold text-foreground">Project Details</h3>
                   <p className="text-sm text-muted-foreground mt-1">
@@ -415,10 +494,10 @@ export default function PreparationHub() {
                   whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSubmit}
                   className="w-full py-4 rounded-xl bg-gradient-to-r from-primary to-secondary text-white font-bold text-base flex items-center justify-center gap-2"
                 >
-                  <TrendingUp className="w-5 h-5" /> Evaluate Project <ArrowRight className="w-5 h-5" />
+                  <TrendingUp className="w-5 h-5" /> Analyze &amp; Evaluate Project <ArrowRight className="w-5 h-5" />
                 </motion.button>
               </div>
-            </motion.div>
+            </>)}</motion.div>
           )}
 
           {/* ── STEP 2 — LOADING ──────────────────────────────────────────── */}
@@ -437,7 +516,7 @@ export default function PreparationHub() {
                 <div className="flex items-center gap-3">
                   <CheckCircle2 className="w-8 h-8 text-green-400 flex-shrink-0" />
                   <div>
-                    <p className="font-bold text-foreground">Project Evaluated Successfully!</p>
+                    <p className="font-bold text-foreground">Project Analysis Completed!</p>
                     <p className="text-sm text-muted-foreground">Introduction Practice is now unlocked. Case studies are optional — generate anytime.</p>
                   </div>
                 </div>
@@ -516,9 +595,9 @@ export default function PreparationHub() {
 
               {/* Footer */}
               <div className="flex items-center gap-4 pt-1">
-                <button onClick={() => { setStep("form"); setEvaluation(null); }}
+                <button onClick={() => { setIsEditing(true); setStep("form"); }}
                   className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  <RefreshCw className="w-3.5 h-3.5" /> Edit &amp; Re-evaluate
+                  <RefreshCw className="w-3.5 h-3.5" /> Edit Project Details
                 </button>
                 <span className="text-border">|</span>
                 <button onClick={() => navigate("/documents")}

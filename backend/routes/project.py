@@ -184,8 +184,8 @@ Future Scope: {data.future_roadmap}
             except (ValueError, TypeError):
                 score = 0.0
 
-            if score and score <= 10:
-                db_score = int(score * 10)
+            if score > 100:
+                db_score = 100
             else:
                 db_score = int(score)
 
@@ -196,7 +196,7 @@ Future Scope: {data.future_roadmap}
                 data.user_id,
                 "project",
                 db_score,
-                score >= 7.0,
+                db_score >= 75,
                 json.dumps(eval_result.get("feedback", [])),
                 json.dumps(eval_result)
             ))
@@ -233,12 +233,19 @@ def get_project_history(session_id: str):
         with conn.cursor() as cursor:
             # 1. Fetch evaluations for project
             cursor.execute("""
-                SELECT id, score, passed, created_at 
+                SELECT id, score, passed, created_at, raw_response 
                 FROM aiprep_tool_evaluations 
                 WHERE user_id = %s AND type = 'project' 
                 ORDER BY created_at DESC
             """, (session_id,))
-            evaluations = cursor.fetchall()
+            raw_evals = cursor.fetchall()
+            evaluations = []
+            for ev in raw_evals:
+                ev_dict = dict(ev)
+                if ev_dict.get("raw_response") and isinstance(ev_dict["raw_response"], str):
+                    try: ev_dict["raw_response"] = json.loads(ev_dict["raw_response"])
+                    except: pass
+                evaluations.append(ev_dict)
 
             # 2. Check if project context exists (e.g. from resume auto-population)
             cursor.execute("SELECT id FROM aiprep_tool_project_context WHERE user_id = %s", (session_id,))

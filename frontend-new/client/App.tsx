@@ -9,14 +9,12 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
 
 import Dashboard from "./pages/Dashboard";
-import PreparationHub from "./pages/PreparationHub";
+import ProjectAnalysis from "./pages/ProjectAnalysis";
 import InterviewSelect from "./pages/InterviewSelect";
 import InterviewRoom from "./pages/InterviewRoom";
 import IntroPracticeRoom from "./pages/IntroPracticeRoom";
-import StudyGuides from "./pages/StudyGuides";
 import Documents from "./pages/Documents";
 import Progress from "./pages/Progress";
-import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Setup from "./pages/Setup";
 import Auth from "./pages/Auth";
@@ -45,14 +43,12 @@ const App = () => (
 
             {/* Protected routes */}
             <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
-            <Route path="/preparation" element={<RequireAuth><PreparationHub /></RequireAuth>} />
+            <Route path="/preparation" element={<RequireAuth><ProjectAnalysis /></RequireAuth>} />
             <Route path="/interview-select" element={<RequireAuth><InterviewSelect /></RequireAuth>} />
             <Route path="/interview-room" element={<RequireAuth><InterviewRoom /></RequireAuth>} />
             <Route path="/intro-practice" element={<RequireAuth><IntroPracticeRoom /></RequireAuth>} />
-            <Route path="/study-guides" element={<RequireAuth><StudyGuides /></RequireAuth>} />
             <Route path="/documents" element={<RequireAuth><Documents /></RequireAuth>} />
             <Route path="/progress" element={<RequireAuth><Progress /></RequireAuth>} />
-            <Route path="/reports" element={<RequireAuth><Reports /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />
           </Routes>

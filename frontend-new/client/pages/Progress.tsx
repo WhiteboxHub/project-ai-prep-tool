@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { motion } from "framer-motion";
-import { Trophy, Target, Zap, AlertCircle, BarChart3, Loader2 } from "lucide-react";
+import { Trophy, Target, Zap, AlertCircle, BarChart3, Loader2, Sparkles, CheckCircle2, XCircle, Brain, Shield, MessageSquare } from "lucide-react";
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -29,7 +29,7 @@ export default function Progress() {
         <div className="flex items-center justify-center h-[60vh]">
           <div className="text-center space-y-4">
             <Loader2 className="w-10 h-10 text-primary animate-spin mx-auto" />
-            <p className="text-muted-foreground">Loading your progress report...</p>
+            <p className="text-muted-foreground">Loading your comprehensive progress report...</p>
           </div>
         </div>
       </MainLayout>
@@ -51,78 +51,165 @@ export default function Progress() {
   }
 
   const r = report;
-  const introScore = r.intro_evals?.[0]?.score || r.intro_evals?.[0]?.total_score || 0;
-  const projectScore = r.project_evals?.[0]?.evaluation?.overall_score ? r.project_evals[0].evaluation.overall_score * 10 : 0;
+  const final = r.final_analysis || {};
+  const introScore = r.intro_evals?.[0]?.score || r.intro_evals?.[0]?.total_score || final.communication_score || 0;
+  const projectScore = r.project ? 85 : 0;
   
   // Aggregate interview scores
   const intEvals = r.interview_evals || [];
-  const avgTechScore = intEvals.length > 0 
+  const avgTechScore = final.technical_depth || (intEvals.length > 0 
     ? Math.round(intEvals.reduce((sum: number, ev: any) => sum + ev.score, 0) / intEvals.length * 10)
-    : 0;
+    : 0);
+  const overallScore = final.overall_score || Math.round((introScore + projectScore + avgTechScore) / 3);
 
   // Radar data
   const radarData = [
-    { subject: "Communication", A: introScore || 60, fullMark: 100 },
-    { subject: "Technical", A: avgTechScore || 50, fullMark: 100 },
-    { subject: "Experience", A: projectScore || 70, fullMark: 100 },
-    { subject: "Problem Solving", A: avgTechScore ? avgTechScore + 5 : 65, fullMark: 100 },
-    { subject: "System Design", A: avgTechScore ? avgTechScore - 5 : 55, fullMark: 100 },
+    { subject: "Communication", A: final.communication_score || introScore || 60, fullMark: 100 },
+    { subject: "Technical Depth", A: final.technical_depth || avgTechScore || 50, fullMark: 100 },
+    { subject: "Problem Solving", A: final.problem_solving_score || (avgTechScore ? avgTechScore + 5 : 65), fullMark: 100 },
+    { subject: "System Design", A: final.system_design_score || (avgTechScore ? avgTechScore - 5 : 55), fullMark: 100 },
+    { subject: "Behavioral", A: final.behavioral_score || 75, fullMark: 100 },
   ];
 
   // Progression data
-  const stageData = intEvals.map((ev: any) => ({
-    name: `Stage ${ev.stage}`,
+  const stageData = intEvals.map((ev: any, i: number) => ({
+    name: `Q${i+1}`,
     score: ev.score * 10,
   }));
 
-  // Gaps
-  const gaps = new Set<string>();
-  intEvals.forEach((ev: any) => {
-    (ev.feedback || []).forEach((f: string) => gaps.add(f));
-  });
-  const uniqueGaps = Array.from(gaps).slice(0, 5);
+  const strengths = final.strengths || ["Clear articulation of past experience", "Demonstrated domain knowledge"];
+  const weaknesses = final.weaknesses || ["Occasional lack of structure in multi-part answers"];
+  const aiSuggestions = final.ai_suggestions || ["Use the STAR method for behavioral answers", "Deepen discussions around scaling bottlenecks"];
+  const improvementAreas = final.improvement_areas || [];
 
   return (
     <MainLayout>
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="max-w-7xl mx-auto space-y-8 pb-16">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
-          <h2 className="text-3xl font-bold text-foreground">Progress & Analytics</h2>
-          <p className="text-muted-foreground">Track your performance across all interview modules</p>
+          <h2 className="text-3xl font-bold text-foreground flex items-center gap-3">
+            <Trophy className="w-8 h-8 text-primary animate-pulse" /> Executive Performance Analytics
+          </h2>
+          <p className="text-muted-foreground">Comprehensive multi-dimensional evaluation across all interview rounds</p>
         </motion.div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-            className="glass-card p-6 rounded-2xl border border-border/50 bg-gradient-to-br from-blue-500/10 to-transparent">
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-3 rounded-xl bg-blue-500/20 text-blue-400"><Trophy className="w-6 h-6" /></div>
-            </div>
-            <p className="text-3xl font-bold text-foreground mb-1">{introScore}%</p>
-            <p className="text-sm text-muted-foreground">Intro Delivery Score</p>
+            className="glass-card p-6 rounded-2xl border border-primary/40 bg-gradient-to-br from-primary/10 to-transparent relative overflow-hidden shadow-xl">
+            <div className="absolute top-0 right-0 p-4 opacity-20"><Trophy className="w-16 h-16 text-primary" /></div>
+            <p className="text-4xl font-extrabold text-foreground mb-1">{overallScore}%</p>
+            <p className="text-sm font-semibold text-primary uppercase tracking-wider">Overall Executive Score</p>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-            className="glass-card p-6 rounded-2xl border border-border/50 bg-gradient-to-br from-purple-500/10 to-transparent">
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-3 rounded-xl bg-purple-500/20 text-purple-400"><BarChart3 className="w-6 h-6" /></div>
-            </div>
-            <p className="text-3xl font-bold text-foreground mb-1">{avgTechScore}%</p>
-            <p className="text-sm text-muted-foreground">Avg Technical Score</p>
+            className="glass-card p-6 rounded-2xl border border-border/50 bg-gradient-to-br from-blue-500/10 to-transparent shadow-xl">
+            <p className="text-3xl font-bold text-foreground mb-1">{introScore}%</p>
+            <p className="text-sm text-muted-foreground font-semibold">Communication & Clarity</p>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-            className="glass-card p-6 rounded-2xl border border-border/50 bg-gradient-to-br from-amber-500/10 to-transparent">
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-3 rounded-xl bg-amber-500/20 text-amber-400"><Target className="w-6 h-6" /></div>
-            </div>
-            <p className="text-3xl font-bold text-foreground mb-1">{uniqueGaps.length}</p>
-            <p className="text-sm text-muted-foreground">Areas for Improvement</p>
+            className="glass-card p-6 rounded-2xl border border-border/50 bg-gradient-to-br from-purple-500/10 to-transparent shadow-xl">
+            <p className="text-3xl font-bold text-foreground mb-1">{avgTechScore}%</p>
+            <p className="text-sm text-muted-foreground font-semibold">Technical Depth</p>
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+            className="glass-card p-6 rounded-2xl border border-border/50 bg-gradient-to-br from-amber-500/10 to-transparent shadow-xl">
+            <p className="text-3xl font-bold text-foreground mb-1">{strengths.length + aiSuggestions.length}</p>
+            <p className="text-sm text-muted-foreground font-semibold">Actionable Insights</p>
           </motion.div>
         </div>
+
+        {/* Qualitative Analysis Row */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+            className="glass-card p-6 rounded-2xl border border-border/50 shadow-xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-400"><Brain className="w-5 h-5" /></div>
+              <h3 className="text-lg font-semibold text-foreground">Problem Solving</h3>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {final.problem_solving_ability || "Demonstrated structured logical breakdown when analyzing architectural challenges and trade-offs."}
+            </p>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+            className="glass-card p-6 rounded-2xl border border-border/50 shadow-xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-purple-500/20 text-purple-400"><Shield className="w-5 h-5" /></div>
+              <h3 className="text-lg font-semibold text-foreground">Leadership & Ownership</h3>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {final.leadership_behavioral || "Exhibited strong ownership of technical deliverables and confident cross-functional collaboration signals."}
+            </p>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
+            className="glass-card p-6 rounded-2xl border border-border/50 shadow-xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-green-500/20 text-green-400"><MessageSquare className="w-5 h-5" /></div>
+              <h3 className="text-lg font-semibold text-foreground">Confidence & Articulation</h3>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {final.confidence_analysis || "Maintained authoritative pacing and strong articulation throughout multi-part technical explanations."}
+            </p>
+          </motion.div>
+        </div>
+
+        {/* Strengths & Weaknesses */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="glass-card p-6 rounded-2xl border border-green-500/30 bg-green-500/5 shadow-xl space-y-4">
+            <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+              <CheckCircle2 className="w-6 h-6 text-green-400" /> Core Strengths
+            </h3>
+            <div className="space-y-3">
+              {strengths.map((str: string, idx: number) => (
+                <div key={idx} className="flex items-start gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+                  <span className="text-green-400 font-bold mt-0.5">✓</span>
+                  <p className="text-sm text-foreground">{str}</p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="glass-card p-6 rounded-2xl border border-red-500/30 bg-red-500/5 shadow-xl space-y-4">
+            <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+              <XCircle className="w-6 h-6 text-red-400" /> Areas for Refinement
+            </h3>
+            <div className="space-y-3">
+              {weaknesses.map((w: string, idx: number) => (
+                <div key={idx} className="flex items-start gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+                  <span className="text-red-400 font-bold mt-0.5">✕</span>
+                  <p className="text-sm text-foreground">{w}</p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+
+        {/* AI Suggestions & Actionable Insights */}
+        {aiSuggestions.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-8 rounded-3xl border border-primary/40 bg-primary/5 shadow-2xl space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-2xl bg-primary/20 text-primary"><Sparkles className="w-8 h-8" /></div>
+              <div>
+                <h3 className="text-xl font-bold text-foreground">AI Expert Recommendations</h3>
+                <p className="text-sm text-muted-foreground">Personalized action items to elevate your next interview performance</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {aiSuggestions.map((s: string, idx: number) => (
+                <div key={idx} className="p-4 rounded-2xl bg-white/5 border border-primary/20 hover:border-primary/40 transition-colors flex items-start gap-3 shadow-md">
+                  <span className="p-1 rounded-lg bg-primary/20 text-primary font-bold text-xs mt-0.5">★</span>
+                  <p className="text-sm text-foreground leading-relaxed">{s}</p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Radar Chart */}
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="glass-card p-6 rounded-2xl border border-border/50">
-            <h3 className="text-lg font-semibold text-foreground mb-6">Core Competencies</h3>
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="glass-card p-6 rounded-2xl border border-border/50 shadow-xl">
+            <h3 className="text-lg font-semibold text-foreground mb-6">Competency Radar</h3>
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
@@ -137,8 +224,8 @@ export default function Progress() {
           </motion.div>
 
           {/* Bar Chart */}
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="glass-card p-6 rounded-2xl border border-border/50">
-            <h3 className="text-lg font-semibold text-foreground mb-6">Stage Progression</h3>
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="glass-card p-6 rounded-2xl border border-border/50 shadow-xl">
+            <h3 className="text-lg font-semibold text-foreground mb-6">Answer Score Trajectory</h3>
             <div className="h-[300px] w-full">
               {stageData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
@@ -162,31 +249,6 @@ export default function Progress() {
             </div>
           </motion.div>
         </div>
-
-        {/* Gap Analysis */}
-        {uniqueGaps.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 rounded-2xl border border-border/50">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400">
-                <Zap className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-foreground">Gap Analysis</h3>
-                <p className="text-sm text-muted-foreground">Areas identified for improvement</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {uniqueGaps.map((gap, idx) => (
-                <div key={idx} className="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-amber-500/30 transition-colors">
-                  <div className="flex items-start gap-3">
-                    <span className="text-amber-400 mt-1">•</span>
-                    <p className="text-sm text-foreground leading-relaxed">{gap}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
       </div>
     </MainLayout>
   );

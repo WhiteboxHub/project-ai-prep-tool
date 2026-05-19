@@ -360,25 +360,14 @@ def get_resume_summary(session_id: str):
             candidate_name = candidate_res["name"] if candidate_res and candidate_res.get("name") else ""
 
             # 2. Get raw resume
-            if is_wbl_candidate_session(session_id):
-                cid = int(session_id)
-                cursor.execute(
-                    "SELECT candidate_json FROM candidate_marketing WHERE candidate_id = %s AND candidate_json IS NOT NULL ORDER BY id DESC LIMIT 1",
-                    (cid,)
-                )
-                row = cursor.fetchone()
-                raw_resume = row["candidate_json"] if row else None
-            else:
-                cursor.execute("SELECT resume_json FROM aiprep_tool_resumes WHERE user_id = %s", (session_id,))
-                row = cursor.fetchone()
-                raw_resume = row["resume_json"] if row else None
+            raw_resume = fetch_resume_raw(session_id)
 
             has_resume = raw_resume is not None
 
             # 3. Get LLM Keys
             if is_wbl_candidate_session(session_id):
                 cid = int(session_id)
-                cursor.execute("SELECT id, provider_name, model_name, voice_enabled FROM candidate_llm_api_keys WHERE candidate_id = %s ORDER BY id ASC", (cid,))
+                cursor.execute("SELECT id, provider_name, model_name, voice_enabled, created_at FROM candidate_llm_api_keys WHERE candidate_id = %s ORDER BY id ASC", (cid,))
                 llm_keys = list(cursor.fetchall() or [])
                 has_api_key = len(llm_keys) > 0
             else:
@@ -435,22 +424,34 @@ def sync_from_wbl(data: SyncFromWblRequest):
     if not resume:
         raise HTTPException(status_code=400, detail="Setup not completed yet")
 
-    session_id = data.prep_token
+    needs_extraction = False
+    name = "Candidate"
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
+            cursor.execute("SELECT id FROM aiprep_tool_project_context WHERE user_id = %s", (session_id,))
+            needs_extraction = not cursor.fetchone()
+
             if is_wbl_candidate_session(session_id):
                 cursor.execute("SELECT full_name as name FROM candidate WHERE id = %s", (session_id,))
             else:
                 cursor.execute("SELECT name FROM aiprep_tool_candidates WHERE user_id = %s", (session_id,))
             
             row = cursor.fetchone()
-            name = row["name"] if row and row["name"] else "Candidate"
-            return {"session_id": session_id, "candidate_name": name}
+            if row and row["name"]:
+                name = row["name"]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+    if needs_extraction:
+        try:
+            extract_latest_company_bg(session_id, resume)
+        except Exception as e:
+            print(f"Extraction failed during sync: {e}")
+
+    return {"session_id": session_id, "candidate_name": name}
 
 @router.post("/init-and-summary")
 def init_and_summary(data: SetupInit):
@@ -490,24 +491,13 @@ def init_and_summary(data: SetupInit):
             candidate_res = cursor.fetchone()
             candidate_name = candidate_res["name"] if candidate_res and candidate_res.get("name") else ""
 
-            if is_wbl_candidate_session(session_id):
-                cid = int(session_id)
-                cursor.execute(
-                    "SELECT candidate_json FROM candidate_marketing WHERE candidate_id = %s AND candidate_json IS NOT NULL ORDER BY id DESC LIMIT 1",
-                    (cid,)
-                )
-                row = cursor.fetchone()
-                raw_resume = row["candidate_json"] if row else None
-            else:
-                cursor.execute("SELECT resume_json FROM aiprep_tool_resumes WHERE user_id = %s", (session_id,))
-                row = cursor.fetchone()
-                raw_resume = row["resume_json"] if row else None
+            raw_resume = fetch_resume_raw(session_id)
 
             has_resume = raw_resume is not None
 
             if is_wbl_candidate_session(session_id):
                 cid = int(session_id)
-                cursor.execute("SELECT id, provider_name, model_name, voice_enabled FROM candidate_llm_api_keys WHERE candidate_id = %s ORDER BY id ASC", (cid,))
+                cursor.execute("SELECT id, provider_name, model_name, voice_enabled, created_at FROM candidate_llm_api_keys WHERE candidate_id = %s ORDER BY id ASC", (cid,))
                 llm_keys = list(cursor.fetchall() or [])
                 has_api_key = len(llm_keys) > 0
             else:

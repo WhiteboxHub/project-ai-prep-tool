@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Loader2,
-  CheckCircle2, AlertCircle, ArrowRight, Volume2, Camera
+  CheckCircle2, AlertCircle, ArrowRight, Volume2, Camera, Lock
 } from "lucide-react";
 import { VideoPanel } from "@/components/interview/VideoPanel";
 import { ControlBar } from "@/components/interview/ControlBar";
@@ -14,7 +14,6 @@ import { useAuth } from "@/lib/AuthContext";
 import { usePipeline } from "@/hooks/use-pipeline";
 import { useMediaStream } from "@/hooks/useMediaStream";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { Lock } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface ChatMessage { role: "ai" | "user"; text: string; }
@@ -25,7 +24,7 @@ const QUESTIONS_PER_STAGE = 2; // backend gates on answeredInStage
 
 export default function InterviewRoom() {
   const navigate = useNavigate();
-  const { sessionId } = useAuth();
+  const { sessionId, candidateName, initials } = useAuth();
   const { pipeline, loading: pipelineLoading } = usePipeline();
 
   const type = sessionStorage.getItem("interviewType") || "technical";
@@ -44,7 +43,7 @@ export default function InterviewRoom() {
   // Media permissions & streams
   const {
     stream, audioError, videoError, audioState, videoState,
-    requestAudio, requestVideo, toggleVideo, toggleAudio
+    requestAudio, requestVideo, toggleVideo, toggleAudio, isSpeaking: isCandidateSpeaking
   } = useMediaStream(true);
 
   // Interview state
@@ -60,12 +59,15 @@ export default function InterviewRoom() {
   const [completed, setCompleted] = useState(false);
   const [error, setError] = useState("");
   const [timeElapsed, setTimeElapsed] = useState(0);
+  const [silenceRemaining, setSilenceRemaining] = useState<number | null>(null);
 
   // Refs
   const transcriptRef = useRef("");
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Global Cleanup & Timer ────────────────────────────────────────────────
   useEffect(() => {
@@ -74,6 +76,8 @@ export default function InterviewRoom() {
       if (timerRef.current) clearInterval(timerRef.current); 
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       if (recognitionRef.current) recognitionRef.current.stop();
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     };
   }, []);
 
@@ -134,26 +138,62 @@ export default function InterviewRoom() {
           return newText;
         });
       }
+
+      // Reset silence detection timer (6.0 seconds) whenever speech is detected
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      
+      setSilenceRemaining(6);
+      countdownIntervalRef.current = setInterval(() => {
+        setSilenceRemaining((r) => (r !== null && r > 1 ? r - 1 : null));
+      }, 1000);
+
+      silenceTimerRef.current = setTimeout(() => {
+        if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+        setSilenceRemaining(null);
+        if (transcriptRef.current.trim()) {
+          stopRecognition();
+          submitAnswer();
+        }
+      }, 6000);
     };
     rec.onerror = () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      setSilenceRemaining(null);
       setRecording(false);
       if (transcriptRef.current.trim()) submitAnswer(transcriptRef.current.trim());
     };
     rec.onend = () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      setSilenceRemaining(null);
       setRecording(false);
-      // If we stopped naturally or manually, submit what we have
-      if (transcriptRef.current.trim()) submitAnswer(transcriptRef.current.trim());
     };
     recognitionRef.current = rec;
     rec.start();
     setRecording(true);
-    // Clear old transcript when starting new
     setTranscript("");
     transcriptRef.current = "";
+    setSilenceRemaining(6);
+    countdownIntervalRef.current = setInterval(() => {
+      setSilenceRemaining((r) => (r !== null && r > 1 ? r - 1 : null));
+    }, 1000);
+    silenceTimerRef.current = setTimeout(() => {
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      setSilenceRemaining(null);
+      if (transcriptRef.current.trim()) {
+        stopRecognition();
+        submitAnswer();
+      }
+    }, 6000);
   };
 
   const stopRecognition = () => {
-    recognitionRef.current?.stop(); // This triggers onend, which handles submission
+    recognitionRef.current?.stop();
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    setSilenceRemaining(null);
     setRecording(false);
   };
 
@@ -178,7 +218,7 @@ export default function InterviewRoom() {
     const currentStageName = getStageName(stage);
 
     try {
-      const evalRes = await evaluateLiveAnswer(sessionId, stage, userText, currentStageName, prevCtx);
+      const evalRes = await evaluateLiveAnswer(sessionId, stage, userText, currentStageName, prevCtx, currentQuestion);
       const newAnswered = answeredInStage + 1;
       setAnsweredInStage(newAnswered);
 
@@ -188,7 +228,7 @@ export default function InterviewRoom() {
         setEvals((e) => [...e, { score: evalRes.score, feedback: evalRes.feedback || [], stage }]);
       }
 
-      const aiResponse = evalRes.response || evalRes.next_question || evalRes.follow_up;
+      const aiResponse = evalRes.reply || evalRes.response || evalRes.next_question || evalRes.follow_up;
 
       // Advance stage if needed
       if (newAnswered >= QUESTIONS_PER_STAGE && stage < TOTAL_STAGES) {
@@ -212,20 +252,27 @@ export default function InterviewRoom() {
         }, 3000);
       } else if (newAnswered >= QUESTIONS_PER_STAGE && stage >= TOTAL_STAGES) {
         // All stages done
-        const doneMsg = "Excellent! You've completed all interview stages. Generating your report...";
+        const doneMsg = "Excellent! You've completed all interview stages. Generating your executive report...";
         setMessages((m) => [...m, { role: "ai", text: doneMsg }]);
         speak(doneMsg);
         await completeInterview(sessionId);
         setCompleted(true);
         setTimeout(() => navigate("/progress"), 3000);
-      } else if (aiResponse || evalRes.reply) {
-        const resp = aiResponse || evalRes.reply;
+      } else if (aiResponse) {
+        const resp = aiResponse;
         setCurrentQuestion(resp);
         setMessages((m) => [...m, { role: "ai", text: resp }]);
         speak(resp);
       }
     } catch (e: any) {
-      setError(e.message || "Evaluation failed. Please try again.");
+      let errorMsg = "Evaluation failed. Please try again.";
+      if (e?.message && typeof e.message === "string") {
+        if (e.message.includes("[object Object]")) errorMsg = "Server evaluation error. Please check your transcript and try again.";
+        else errorMsg = e.message;
+      } else if (typeof e === "string") {
+        errorMsg = e;
+      }
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -240,7 +287,7 @@ export default function InterviewRoom() {
             <CheckCircle2 className="w-10 h-10 text-green-400" />
           </div>
           <h2 className="text-2xl font-bold text-foreground">Interview Complete!</h2>
-          <p className="text-muted-foreground">Generating your progress report...</p>
+          <p className="text-muted-foreground">Generating your comprehensive executive evaluation report...</p>
           <Loader2 className="w-6 h-6 text-primary animate-spin mx-auto" />
         </motion.div>
       </div>
@@ -285,52 +332,33 @@ export default function InterviewRoom() {
         </div>
       )}
 
-      {/* Minimal Permission Warning Toasts */}
-      <AnimatePresence>
-        {(audioState === "denied" || videoState === "denied") && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2"
+      {/* Compact permission pills — top-right corner, non-blocking */}
+      <div className="fixed top-3 right-[340px] z-50 flex flex-col gap-1.5 pointer-events-none">
+        {audioState === "denied" && (
+          <motion.div
+            initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 backdrop-blur-sm pointer-events-auto"
           >
-            {audioState === "denied" && (
-              <div className="glass-card px-4 py-3 rounded-xl border border-amber-500/30 shadow-lg flex items-center gap-3 w-max max-w-[90vw]">
-                <div className="p-2 rounded-full bg-amber-500/10 text-amber-500">
-                  <MicOff className="w-4 h-4" />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-semibold text-foreground">Microphone Access Denied</p>
-                  <p className="text-xs text-muted-foreground">{audioError || "Microphone unavailable."}</p>
-                </div>
-                <motion.button 
-                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                  onClick={requestAudio}
-                  className="ml-4 px-3 py-1.5 bg-amber-500/20 text-amber-500 hover:bg-amber-500/30 rounded-lg text-xs font-bold transition-all"
-                >
-                  Retry Mic
-                </motion.button>
-              </div>
-            )}
-            {videoState === "denied" && (
-              <div className="glass-card px-4 py-3 rounded-xl border border-amber-500/30 shadow-lg flex items-center gap-3 w-max max-w-[90vw]">
-                <div className="p-2 rounded-full bg-amber-500/10 text-amber-500">
-                  <VideoOff className="w-4 h-4" />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-semibold text-foreground">Camera Access Denied</p>
-                  <p className="text-xs text-muted-foreground">{videoError || "Camera unavailable."}</p>
-                </div>
-                <motion.button 
-                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                  onClick={requestVideo}
-                  className="ml-4 px-3 py-1.5 bg-amber-500/20 text-amber-500 hover:bg-amber-500/30 rounded-lg text-xs font-bold transition-all"
-                >
-                  Retry Camera
-                </motion.button>
-              </div>
-            )}
+            <MicOff className="w-3 h-3 text-amber-400 flex-shrink-0" />
+            <span className="text-[11px] text-amber-300 font-medium">Mic unavailable</span>
+            <button onClick={requestAudio} className="ml-1 text-[10px] text-amber-400 underline hover:text-amber-200 transition-colors">
+              retry
+            </button>
           </motion.div>
         )}
-      </AnimatePresence>
+        {videoState === "denied" && (
+          <motion.div
+            initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 backdrop-blur-sm pointer-events-auto"
+          >
+            <VideoOff className="w-3 h-3 text-amber-400 flex-shrink-0" />
+            <span className="text-[11px] text-amber-300 font-medium">Camera unavailable</span>
+            <button onClick={requestVideo} className="ml-1 text-[10px] text-amber-400 underline hover:text-amber-200 transition-colors">
+              retry
+            </button>
+          </motion.div>
+        )}
+      </div>
 
       {/* Main area */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}
@@ -338,11 +366,12 @@ export default function InterviewRoom() {
         <div className="hidden md:flex gap-4 w-full h-full max-h-[calc(100vh-180px)]">
           <div className={`transition-all duration-500 ease-in-out ${focusedPanel === "candidate" ? "flex-1" : focusedPanel === "ai" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>
             <VideoPanel 
-              title="You (Candidate)" 
+              title={candidateName} 
               isMuted={!isMicOn} 
               isCameraOff={!isCameraOn} 
-              initials="ME" 
+              initials={initials} 
               isCandidate={true} 
+              isSpeaking={isCandidateSpeaking && recording}
               isExpanded={focusedPanel === "candidate"}
               onExpand={() => setFocusedPanel(p => p === "candidate" ? null : "candidate")}
               mediaStream={stream}
@@ -351,7 +380,7 @@ export default function InterviewRoom() {
           <div className={`transition-all duration-500 ease-in-out ${focusedPanel === "ai" ? "flex-1" : focusedPanel === "candidate" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>
             <VideoPanel 
               title="AI Interviewer" 
-              isAISpeaking={isAISpeaking} 
+              isSpeaking={isAISpeaking} 
               isCameraOff={false} 
               initials="AI" 
               isExpanded={focusedPanel === "ai"}
@@ -360,11 +389,11 @@ export default function InterviewRoom() {
           </div>
         </div>
         <div className="md:hidden h-full w-full">
-          <VideoPanel title="AI Interviewer" isAISpeaking={isAISpeaking} isCameraOff={false} initials="AI" />
+          <VideoPanel title="AI Interviewer" isSpeaking={isAISpeaking} isCameraOff={false} initials="AI" />
         </div>
       </motion.div>
 
-      {/* Stage progress bar — top-right, clear of ControlBar */}
+      {/* Stage progress bar — top-right */}
       <div className="fixed top-4 right-6 z-40 flex items-center gap-2 glass-card px-4 py-2 rounded-full border border-border/50">
         {Array.from({ length: TOTAL_STAGES }).map((_, i) => (
           <div key={i} className={`w-3 h-3 rounded-full transition-all ${i + 1 < stage ? "bg-green-400" : i + 1 === stage ? "bg-primary animate-pulse" : "bg-white/20"}`} />
@@ -391,6 +420,11 @@ export default function InterviewRoom() {
               <div className="flex items-center justify-center gap-2 mb-2">
                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                 <span className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Live Transcript</span>
+                {silenceRemaining !== null && (
+                  <span className="ml-2 px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold uppercase animate-pulse">
+                    Auto-evaluating in ({silenceRemaining}s)
+                  </span>
+                )}
               </div>
               <p className="text-sm text-foreground leading-relaxed">{transcript}</p>
             </motion.div>
@@ -401,19 +435,19 @@ export default function InterviewRoom() {
               className="glass-card px-6 py-4 rounded-2xl border border-primary/30 flex items-center justify-center gap-3 shadow-2xl backdrop-blur-xl"
             >
               <Loader2 className="w-5 h-5 text-primary animate-spin" />
-              <span className="text-sm text-foreground">Analyzing your response...</span>
+              <span className="text-sm text-foreground">Evaluating answer & generating interviewer response...</span>
             </motion.div>
           )}
         </AnimatePresence>
 
         <ControlBar
           onToggleMic={(enabled) => {
-            setIsMicOn(!enabled);
-            toggleAudio(!enabled);
+            setIsMicOn(enabled);
+            toggleAudio(enabled);
           }}
           onToggleCamera={(enabled) => {
-            setIsCameraOn(!enabled);
-            toggleVideo(!enabled);
+            setIsCameraOn(enabled);
+            toggleVideo(enabled);
           }}
           onRecordToggle={() => recording ? stopRecognition() : startRecognition()}
           isRecording={recording}
@@ -452,7 +486,6 @@ export default function InterviewRoom() {
           )}
         </div>
       </motion.div>
-
 
       <CopilotPanel
         isOpen={isCopilotOpen}

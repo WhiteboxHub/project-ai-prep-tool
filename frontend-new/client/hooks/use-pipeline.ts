@@ -39,13 +39,13 @@ export function usePipeline() {
         const hasApiKey = Boolean(s?.has_api_key);
         const hasProjectData = Boolean(ph?.has_project);
         const isProjectCompleted = Boolean(ph?.completed);
-        const hasIntro = ih?.history?.length > 0 || ih?.evaluations?.length > 0;
+        const hasIntroPassed = ih?.passed === true || (ih?.best_score && ih?.best_score >= 75);
 
         const newPipeline: PipelineStatus = {
           setup: hasResume && hasApiKey ? "completed" : "pending",
           project: hasResume && hasApiKey ? (isProjectCompleted ? "completed" : "ready") : "locked",
-          intro: isProjectCompleted ? (hasIntro ? "completed" : "ready") : "locked",
-          interview: hasIntro ? "ready" : "locked",
+          intro: isProjectCompleted ? (hasIntroPassed ? "completed" : "ready") : "locked",
+          interview: hasIntroPassed ? "ready" : "locked",
         };
 
         setPipeline(newPipeline);

@@ -31,6 +31,60 @@ export default function Dashboard() {
   const [skills, setSkills] = useState<string[]>([]);
   const [introScore, setIntroScore] = useState<number | null>(null);
 
+  // ── Robust skill extraction — handles WBL format (skills[{name, keywords}]) and many others
+  const extractSkillsFromJson = (rj: any): string[] => {
+    if (!rj || typeof rj !== "object") return [];
+
+    // BFS deep search for any key containing "skill"
+    const bfsFind = (root: any): string[] => {
+      const queue: any[] = [root];
+      while (queue.length) {
+        const node = queue.shift();
+        if (!node || typeof node !== "object") continue;
+        for (const key of Object.keys(node)) {
+          if (key.toLowerCase().includes("skill")) {
+            const val = node[key];
+            if (Array.isArray(val) && val.length > 0) {
+              const found = val.flatMap((sk: any) => {
+                if (typeof sk === "string") return sk ? [sk] : [];
+                if (typeof sk === "object" && sk !== null) {
+                  // Standard JSON Resume format: { name, keywords: [] }
+                  let extracted: string[] = [];
+                  if (Array.isArray(sk.keywords) && sk.keywords.length > 0) {
+                    extracted = sk.keywords.filter((k: any) => typeof k === "string");
+                  }
+                  if (extracted.length === 0 && sk.name) {
+                    extracted = [sk.name as string];
+                  }
+                  return extracted;
+                }
+                return [];
+              }).filter(Boolean);
+              if (found.length > 0) return found;
+            } else if (val && typeof val === "object" && !Array.isArray(val)) {
+              // WBL parsed resume format: { mlops: ["Model Deployment", ...], databases: ["MongoDB", ...] }
+              const found: string[] = [];
+              for (const subVal of Object.values(val)) {
+                if (Array.isArray(subVal)) {
+                  found.push(...subVal.filter((item: any) => typeof item === "string" && item.trim().length > 0));
+                } else if (typeof subVal === "string" && subVal.trim().length > 0) {
+                  found.push(subVal.trim());
+                }
+              }
+              if (found.length > 0) return Array.from(new Set(found));
+            }
+          }
+          if (typeof node[key] === "object" && node[key] !== null) {
+            queue.push(node[key]);
+          }
+        }
+      }
+      return [];
+    };
+
+    return bfsFind(rj);
+  };
+
   useEffect(() => {
     if (!sessionId || pipelineLoading) return;
 
@@ -47,11 +101,8 @@ export default function Dashboard() {
         setSummary(s);
 
         if (s?.resume_json) {
-          const rj = s.resume_json;
-          const rawSkills =
-            rj?.skills?.map((sk: any) => (typeof sk === "string" ? sk : sk.name || sk.keywords?.[0] || "")) ||
-            rj?.basics?.skills || [];
-          setSkills(rawSkills.filter(Boolean).slice(0, 8));
+          const extracted = extractSkillsFromJson(s.resume_json);
+          setSkills(extracted.slice(0, 12));
         }
 
         const evals = ih?.history || ih?.evaluations || [];
@@ -67,6 +118,26 @@ export default function Dashboard() {
     };
     load();
   }, [sessionId, pipelineLoading]);
+
+  const getMotivationalMessage = () => {
+    if (readiness === 100) {
+      if (introScore && introScore < 80) {
+        return "All setup steps are complete! Let's continue practicing mock interviews and refining your introduction to elevate your communication confidence.";
+      }
+      return "Your preparation environment is configured. Start simulating mock interviews to hone your technical articulation and system design responses.";
+    }
+    
+    if (pipeline.interview === "ready") {
+      return "You're set to begin mock interview practice. Launch a session to train under real-world simulation constraints.";
+    }
+    if (pipeline.intro === "ready") {
+      return "Project analysis is finalized. We recommend practicing your introduction next to build pacing and professional delivery.";
+    }
+    if (pipeline.project === "ready") {
+      return "Setup complete. Let's analyze your project architecture to structure your upcoming interview talking points.";
+    }
+    return `You're ${readiness}% of the way through setup. Complete the remaining steps to kickstart your mock practice sessions.`;
+  };
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -86,8 +157,8 @@ export default function Dashboard() {
     },
     {
       id: "project",
-      title: "Project Explanation",
-      description: "Describe your core project for AI evaluation",
+      title: "Project Analysis",
+      description: "Describe and evaluate your core project architecture",
       href: "/preparation",
       status: pipeline.project,
       icon: <Code2 className="w-5 h-5" />,
@@ -145,9 +216,7 @@ export default function Dashboard() {
             Welcome, {candidateName.split(" ")[0]}
           </h2>
           <p className="text-muted-foreground">
-            {readiness === 100
-              ? "🎉 You're fully prepared! Time to nail that interview."
-              : `You're ${readiness}% prepared. Keep going!`}
+            {getMotivationalMessage()}
           </p>
         </motion.div>
 
@@ -261,18 +330,22 @@ export default function Dashboard() {
           <div className="lg:col-span-2">
             <div className="glass-card-hover p-4 rounded-xl border border-border/50 space-y-3 h-full flex flex-col justify-center">
               <h3 className="text-base font-semibold text-foreground self-start mb-1">Resume Insights</h3>
-              {skills.length > 0 ? (
+              {summary?.resume_text ? (
                 <>
                   <div className="space-y-2.5">
                     <div className="flex items-start gap-2.5">
                       <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">Skills extracted from your resume</p>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {skills.map((s, i) => (
-                            <span key={i} className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">{s}</span>
-                          ))}
-                        </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-foreground">Resume connected from WBL</p>
+                        {skills.length > 0 ? (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {skills.map((s, i) => (
+                              <span key={i} className="px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-semibold tracking-wide shadow-[0_0_8px_rgba(59,130,246,0.15)] hover:bg-primary/20 transition-colors cursor-default">{s}</span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground mt-1">Skills data available in your resume — start practising to see insights.</p>
+                        )}
                       </div>
                     </div>
                     {introScore !== null && (
@@ -287,37 +360,45 @@ export default function Dashboard() {
                     <div className="flex items-start gap-2.5">
                       <Zap className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-sm font-semibold text-foreground">Next recommended step</p>
+                        <p className="text-sm font-semibold text-foreground">Recommended Next Focus</p>
                         <p className="text-xs text-muted-foreground">
-                          {pipeline.project === "locked" ? "Complete setup first to unlock project evaluation" :
-                            pipeline.project === "ready" ? "Fill in your project explanation to generate a case study" :
-                              pipeline.intro === "ready" ? "Start your Introduction Practice interview" :
-                                pipeline.interview !== "locked" ? "You're ready — start the technical interview!" :
-                                  "Great progress! Complete remaining modules."}
+                          {pipeline.project === "locked" ? "Connect your resume and setup API keys to activate your dashboard." :
+                            pipeline.project === "ready" ? "Start project analysis to retrieve AI evaluation and construct architecture diagrams." :
+                              pipeline.intro === "ready" ? "Practice and record your professional introduction to hone technical clarity." :
+                                pipeline.interview === "ready" ? "Initiate a mock technical interview round to practice answering under pressure." :
+                                  "Select a mock round to start practicing interactive technical scenarios."}
                         </p>
                       </div>
                     </div>
                   </div>
                   <motion.button
                     whileHover={{ x: 4 }}
-                    onClick={() => navigate("/preparation")}
-                    className="flex items-center gap-1.5 text-primary text-xs font-semibold mt-2"
+                    onClick={() => {
+                      if (pipeline.interview === "ready") navigate("/interview-select");
+                      else if (pipeline.intro === "ready") navigate("/intro-practice");
+                      else if (pipeline.project === "ready") navigate("/preparation");
+                      else navigate("/settings");
+                    }}
+                    className="flex items-center gap-1.5 text-primary text-xs font-semibold mt-2 animate-pulse"
                   >
-                    Continue Preparation <ArrowRight className="w-3.5 h-3.5" />
+                    {pipeline.interview === "ready" ? "Begin Mock Interview" :
+                     pipeline.intro === "ready" ? "Practice Introduction Again" :
+                     pipeline.project === "ready" ? "Start Project Analysis" :
+                     "Complete Setup"} <ArrowRight className="w-3.5 h-3.5" />
                   </motion.button>
                 </>
               ) : (
                 <div className="text-center py-6 space-y-3">
                   <Upload className="w-10 h-10 text-muted-foreground mx-auto" />
                   <p className="text-sm font-semibold text-foreground">No resume uploaded yet</p>
-                  <p className="text-xs text-muted-foreground">Upload your JSON resume to get AI-powered insights</p>
+                  <p className="text-xs text-muted-foreground">Upload your JSON resume to your WBL profile to get AI-powered insights</p>
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => navigate("/settings")}
                     className="px-4 py-2 rounded-lg bg-primary/20 text-primary text-sm font-semibold hover:bg-primary/30 transition-colors"
                   >
-                    Upload Resume
+                    Go to Settings
                   </motion.button>
                 </div>
               )}
@@ -331,7 +412,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
               { label: "View Progress Report", icon: <BarChart2 className="w-5 h-5" />, href: "/progress", color: "from-blue-500/20 to-blue-600/10" },
-              { label: "Generate Study Guide", icon: <BookOpen className="w-5 h-5" />, href: "/study-guides", color: "from-purple-500/20 to-purple-600/10" },
+              { label: "View Documents", icon: <BookOpen className="w-5 h-5" />, href: "/documents", color: "from-purple-500/20 to-purple-600/10" },
               { label: "Start Mock Interview", icon: <Star className="w-5 h-5" />, href: "/interview-select", color: "from-amber-500/20 to-amber-600/10" },
             ].map((action, i) => (
               <motion.button

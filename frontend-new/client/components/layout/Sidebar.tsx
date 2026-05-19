@@ -4,10 +4,8 @@ import {
   LayoutDashboard,
   Lightbulb,
   Video,
-  BookOpen,
   FileText,
   TrendingUp,
-  BarChart3,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -20,12 +18,10 @@ import { clearSession } from "@/lib/auth";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/" },
-  { label: "Preparation Hub", icon: Lightbulb, href: "/preparation" },
+  { label: "Project Analysis", icon: Lightbulb, href: "/preparation" },
   { label: "Interview Practice", icon: Video, href: "/interview-select" },
-  { label: "Study Guides", icon: BookOpen, href: "/study-guides" },
   { label: "Documents", icon: FileText, href: "/documents" },
   { label: "Progress", icon: TrendingUp, href: "/progress" },
-  { label: "Reports", icon: BarChart3, href: "/reports" },
   { label: "Settings", icon: Settings, href: "/settings" },
 ];
 

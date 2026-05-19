@@ -4,8 +4,8 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Loader2, AlertCircle, Sparkles } from "lucide-react";
-import { syncWithWbl } from "@/lib/api";
-import { setSession } from "@/lib/auth";
+import { syncWithWbl, getResumeSummary } from "@/lib/api";
+import { setSession, setCandidateName } from "@/lib/auth";
 import { useAuth } from "@/lib/AuthContext";
 
 export default function Auth() {
@@ -21,19 +21,56 @@ export default function Auth() {
       return;
     }
 
-    syncWithWbl(token)
-      .then((data) => {
-        setSession(data.session_id, data.candidate_name);
+    const run = async () => {
+      try {
+        // Step 1: Store the token as session_id immediately (mirrors old frontend approach)
+        // WBL sends the numeric candidate_id as the token — this IS the session_id
+        setSession(token, "Candidate");
         refresh();
-        navigate("/");
-      })
-      .catch((e) => {
-        // If sync fails (setup not completed), redirect to setup with the token as session_id
-        const fallbackSessionId = token;
-        setSession(fallbackSessionId, "Candidate");
-        refresh();
-        navigate("/setup");
-      });
+
+        // Step 2: Try to sync with WBL to get the real candidate name and trigger
+        // project extraction if needed. This is best-effort — don't fail on error.
+        try {
+          const syncData = await syncWithWbl(token);
+          if (syncData?.candidate_name) {
+            setCandidateName(syncData.candidate_name);
+            setSession(token, syncData.candidate_name);
+            refresh();
+          }
+        } catch {
+          // sync-from-wbl throws 400 if no resume yet — that's OK, we still continue
+        }
+
+        // Step 3: Fetch summary to determine where to route the candidate
+        try {
+          const summary = await getResumeSummary(token);
+          const hasResume = Boolean(summary?.resume_text);
+          const hasApiKey = Boolean(summary?.has_api_key);
+
+          // Update name from resume/DB if available
+          if (summary?.candidate_name) {
+            setCandidateName(summary.candidate_name);
+            setSession(token, summary.candidate_name);
+            refresh();
+          }
+
+          if (hasResume && hasApiKey) {
+            // Both resume and API key present — go straight to dashboard
+            navigate("/");
+          } else {
+            // Missing one or both — guide through setup wizard
+            navigate("/setup");
+          }
+        } catch {
+          // If summary fetch fails, fall back to dashboard — let it handle gracefully
+          navigate("/");
+        }
+      } catch (e: any) {
+        setError(e?.message || "Authentication failed. Please try again.");
+      }
+    };
+
+    run();
   }, [searchParams, navigate, refresh]);
 
   return (

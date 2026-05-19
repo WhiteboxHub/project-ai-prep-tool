@@ -132,9 +132,7 @@ export function getLatestProject(sessionId: string) {
 }
 
 export function extractProject(sessionId: string) {
-  const form = new FormData();
-  form.append("session_id", sessionId);
-  return postForm("/api/resume/extract-project", form);
+  return post("/api/resume/extract-project", { session_id: sessionId });
 }
 
 export function getProjectHistory(sessionId: string) {
@@ -161,24 +159,7 @@ export function saveProjectBrief(sessionId: string, brief: string) {
 
 // ─── Case Study ───────────────────────────────────────────────────────────────
 
-export function generateCaseStudy(sessionId: string, topic?: string) {
-  return post("/api/case-study/generate", {
-    session_id: sessionId,
-    ...(topic ? { topic } : {}),
-  });
-}
 
-export function generateCaseStudyFromTemplate(
-  sessionId: string,
-  projectDetails: string,
-  templateKey: string
-) {
-  return post("/api/case-study/generate-from-template", {
-    session_id: sessionId,
-    project_details: projectDetails,
-    template_key: templateKey,
-  });
-}
 
 export function getCaseStudyHistory(sessionId: string) {
   return get("/api/case-study/history", { session_id: sessionId });
@@ -191,9 +172,7 @@ export function generateTypedCaseStudy(sessionId: string, caseType: string) {
   });
 }
 
-export function getTopics() {
-  return get<{ topics: string[] }>("/api/case-study/topics");
-}
+
 
 // ─── Interview ────────────────────────────────────────────────────────────────
 
@@ -211,11 +190,12 @@ export function evaluateLiveAnswer(
   stage: number,
   transcript: string,
   stageName: string,
-  previousContext: string = ""
+  previousContext: string = "",
+  currentQuestion: string = ""
 ) {
   return post("/api/interview/evaluate-live", {
     session_id: sessionId,
-    current_question: "Unknown question", // To be provided correctly from InterviewRoom
+    current_question: currentQuestion,
     user_answer: transcript,
     stage_name: stageName,
     previous_context: previousContext
