@@ -53,7 +53,15 @@ Question:
 Candidate Answer:
 {answer}
 
-Evaluate the answer on the following parameters (each scored out of 10):
+Evaluate the answer STRICTLY on the following parameters (each scored out of 10):
+
+CRITICAL ANTI-INFLATION RULES:
+1. PENALIZE SHORT/INCOMPLETE ANSWERS: If the candidate gives a 1-2 sentence vague answer, all scores MUST be extremely low (1-4).
+2. SCORING CALIBRATION:
+   - 1-4: Very weak, incomplete, lacks basic technical depth.
+   - 5-6: Mediocre, answered basics but missing architecture or deep details.
+   - 7-8: Good, solid answer with structure and accuracy.
+   - 9-10: Elite, detailed, exceptional depth and clarity.
 
 1. Technical Correctness — Is the answer factually and technically accurate?
 2. Depth of Knowledge — Does the candidate show deep understanding, not just surface level?

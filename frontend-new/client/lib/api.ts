@@ -1,0 +1,239 @@
+// client/lib/api.ts
+// Central API service layer — mirrors frontend-updated/lib/api.ts exactly.
+// All backend calls go through here. BASE_URL resolves from env var.
+
+const BASE_URL =
+  (import.meta as any).env?.VITE_API_URL || "http://127.0.0.1:8000";
+
+// ─── Generic fetch helpers ────────────────────────────────────────────────────
+
+async function get<T = any>(path: string, params?: Record<string, string>): Promise<T> {
+  const url = new URL(`${BASE_URL}${path}`);
+  if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Request failed" }));
+    throw new Error(err.detail || "Request failed");
+  }
+  return res.json();
+}
+
+async function post<T = any>(path: string, body: any): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Request failed" }));
+    throw new Error(err.detail || "Request failed");
+  }
+  return res.json();
+}
+
+async function postForm<T = any>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, { method: "POST", body: form });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Request failed" }));
+    throw new Error(err.detail || "Request failed");
+  }
+  return res.json();
+}
+
+async function del<T = any>(path: string, params?: Record<string, string>): Promise<T> {
+  const url = new URL(`${BASE_URL}${path}`);
+  if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const res = await fetch(url.toString(), { method: "DELETE" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Request failed" }));
+    throw new Error(err.detail || "Request failed");
+  }
+  return res.json();
+}
+
+// ─── Setup / Auth ─────────────────────────────────────────────────────────────
+
+export function syncWithWbl(prepToken: string) {
+  return post("/api/setup/sync-from-wbl", { prep_token: prepToken });
+}
+
+export function initAndSummary(data: {
+  wbl_email?: string;
+  name?: string;
+  candidate_id?: number;
+}) {
+  return post("/api/setup/init-and-summary", data);
+}
+
+export function validateApiKey(data: {
+  session_id: string;
+  api_key: string;
+  api_provider: string;
+  model_name?: string;
+  voice_enabled?: boolean;
+}) {
+  return post("/api/setup/validate", data);
+}
+
+export function uploadResume(sessionId: string, file: File) {
+  const form = new FormData();
+  form.append("session_id", sessionId);
+  form.append("file", file);
+  return postForm("/api/setup/resume", form);
+}
+
+export function getResumeSummary(sessionId: string) {
+  return get("/api/setup/summary", { session_id: sessionId });
+}
+
+export function getExtractionStatus(sessionId: string) {
+  return get<{ status: string }>("/api/setup/extraction-status", {
+    session_id: sessionId,
+  });
+}
+
+export function deleteLlmKey(keyId: number, sessionId: string) {
+  return del(`/api/setup/llm-key/${keyId}`, { session_id: sessionId });
+}
+
+// ─── Intro Evaluation ─────────────────────────────────────────────────────────
+
+export function evaluateIntro(sessionId: string, audioBlob: Blob, mimeType = "audio/webm") {
+  const form = new FormData();
+  form.append("session_id", sessionId);
+  form.append("audio", audioBlob, "recording.webm");
+  form.append("mime_type", mimeType);
+  return postForm("/api/intro/evaluate", form);
+}
+
+export function evaluateIntroText(sessionId: string, transcript: string) {
+  const form = new FormData();
+  form.append("session_id", sessionId);
+  form.append("transcript", transcript);
+  return postForm("/api/intro/evaluate-text", form);
+}
+
+export function getIntroHistory(sessionId: string) {
+  return get("/api/intro/history", { session_id: sessionId });
+}
+
+export function getDynamicTemplate(sessionId: string) {
+  return get("/api/intro/dynamic-template", { session_id: sessionId });
+}
+
+// ─── Project / Context ────────────────────────────────────────────────────────
+
+export function submitProject(data: Record<string, any>) {
+  return post("/api/project/", data);
+}
+
+export function getLatestProject(sessionId: string) {
+  return get("/api/resume/latest-project", { session_id: sessionId });
+}
+
+export function extractProject(sessionId: string) {
+  return post("/api/resume/extract-project", { session_id: sessionId });
+}
+
+export function getProjectHistory(sessionId: string) {
+  return get("/api/project/history", { session_id: sessionId });
+}
+
+export function evaluateProjectExplanation(sessionId: string, explanation: string) {
+  const form = new FormData();
+  form.append("session_id", sessionId);
+  form.append("explanation", explanation);
+  return postForm("/api/project/evaluate-explanation", form);
+}
+
+export function generateFromUseCase(sessionId: string, useCase: string) {
+  const form = new FormData();
+  form.append("session_id", sessionId);
+  form.append("use_case", useCase);
+  return postForm("/api/project/generate-use-case", form);
+}
+
+export function saveProjectBrief(sessionId: string, brief: string) {
+  return post("/api/resume/project-brief", { session_id: sessionId, brief });
+}
+
+// ─── Case Study ───────────────────────────────────────────────────────────────
+
+
+
+export function getCaseStudyHistory(sessionId: string) {
+  return get("/api/case-study/history", { session_id: sessionId });
+}
+
+export function generateTypedCaseStudy(sessionId: string, caseType: string) {
+  return post("/api/case-study/generate-typed", {
+    session_id: sessionId,
+    case_type: caseType,
+  });
+}
+
+
+
+// ─── Interview ────────────────────────────────────────────────────────────────
+
+export function getStageQuestions(sessionId: string, stage: number, stageName?: string, previousContext?: string) {
+  return get("/api/interview/stage-questions", {
+    session_id: sessionId,
+    stage: String(stage),
+    ...(stageName ? { stage_name: stageName } : {}),
+    ...(previousContext ? { previous_context: previousContext } : {}),
+  });
+}
+
+export function evaluateLiveAnswer(
+  sessionId: string,
+  stage: number,
+  transcript: string,
+  stageName: string,
+  previousContext: string = "",
+  currentQuestion: string = ""
+) {
+  return post("/api/interview/evaluate-live", {
+    session_id: sessionId,
+    current_question: currentQuestion,
+    user_answer: transcript,
+    stage_name: stageName,
+    previous_context: previousContext
+  });
+}
+
+export function completeInterview(sessionId: string) {
+  return post("/api/interview/complete", { session_id: sessionId });
+}
+
+// ─── Mock Interview ───────────────────────────────────────────────────────────
+
+export function startMockInterview(sessionId: string) {
+  return post("/api/mock-interview/start", { session_id: sessionId });
+}
+
+export function getMockSession(sessionId: string) {
+  return get("/api/mock-interview/session", { session_id: sessionId });
+}
+
+export function evaluateMockAnswer(
+  sessionId: string,
+  questionId: string,
+  answer: string
+) {
+  const form = new FormData();
+  form.append("session_id", sessionId);
+  form.append("question_id", questionId);
+  form.append("answer", answer);
+  return postForm("/api/mock-interview/evaluate-answer", form);
+}
+
+export function getMockAnswers(sessionId: string) {
+  return get("/api/mock-interview/answers", { session_id: sessionId });
+}
+
+// ─── Report ───────────────────────────────────────────────────────────────────
+
+export function getFinalReport(sessionId: string) {
+  return get("/api/report", { session_id: sessionId });
+}

@@ -1,0 +1,113 @@
+/** @import must precede all other statements */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /**
+   * WBL SmartPrep Premium Dark Theme
+   * tailwind.config.ts expects the following color variables to be expressed as HSL values.
+  */
+  :root {
+    /* Premium Dark Background */
+    --background: 216 30% 8%;
+    --foreground: 210 40% 98%;
+
+    /* Card & Surface */
+    --card: 217 33% 11%;
+    --card-foreground: 210 40% 98%;
+
+    /* Popover & Dialogs */
+    --popover: 217 33% 11%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Primary - Vibrant Blue */
+    --primary: 217 91% 60%;
+    --primary-foreground: 216 30% 8%;
+
+    /* Secondary - Violet Accent */
+    --secondary: 280 85% 57%;
+    --secondary-foreground: 210 40% 98%;
+
+    /* Muted */
+    --muted: 217 32% 17%;
+    --muted-foreground: 215 13% 72%;
+
+    /* Accent - Cyan Glow */
+    --accent: 190 100% 50%;
+    --accent-foreground: 216 30% 8%;
+
+    /* Destructive - Error Red */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    /* Border & Input */
+    --border: 217 32% 17%;
+    --input: 217 32% 15%;
+    --ring: 217 91% 60%;
+
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+  }
+
+  :where(p, span, li, h1, h2, h3, h4, h5, h6, a, button, label, td, th) {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  pre,
+  code {
+    overflow-x: auto;
+    white-space: pre;
+  }
+}
+
+@layer utilities {
+  .glow-primary {
+    @apply shadow-lg shadow-primary/50;
+  }
+
+  .glow-primary-lg {
+    @apply shadow-2xl shadow-primary/40;
+  }
+
+  .glow-accent {
+    @apply shadow-lg shadow-accent/50;
+  }
+
+  .glass-card {
+    @apply bg-white/[0.05] backdrop-blur-md border border-white/[0.1];
+  }
+
+  .glass-card-hover {
+    @apply glass-card hover:bg-white/[0.08] hover:shadow-lg hover:shadow-primary/20 transition-all duration-300;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent;
+  }
+
+  .gradient-border {
+    @apply relative before:absolute before:inset-0 before:rounded-lg before:p-[1px] before:bg-gradient-to-r before:from-primary before:to-secondary;
+  }
+
+  .neon-glow {
+    @apply shadow-[0_0_20px_rgba(59,130,246,0.5)];
+  }
+
+  .smooth-transition {
+    @apply transition-all duration-300 ease-out;
+  }
+}

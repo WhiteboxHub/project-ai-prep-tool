@@ -87,7 +87,7 @@ import json
 from fastapi import APIRouter, HTTPException
 from db.connection import get_db_connection
 from models.candidate import ProjectContextData
-from services.evaluator import evaluate_project, generate_case_study
+from services.evaluator import evaluate_project
 from services.user_context import get_user_api_key  # ✅ NEW
 
 router = APIRouter(prefix="/api/project", tags=["project"])
@@ -184,8 +184,8 @@ Future Scope: {data.future_roadmap}
             except (ValueError, TypeError):
                 score = 0.0
 
-            if score and score <= 10:
-                db_score = int(score * 10)
+            if score > 100:
+                db_score = 100
             else:
                 db_score = int(score)
 
@@ -196,23 +196,15 @@ Future Scope: {data.future_roadmap}
                 data.user_id,
                 "project",
                 db_score,
-                score >= 7.0,
+                db_score >= 75,
                 json.dumps(eval_result.get("feedback", [])),
                 json.dumps(eval_result)
             ))
 
         conn.commit()
 
-        # 6. Generate case study
-        case_study_markdown = generate_case_study(
-            data.user_id,
-            answers,
-            api_key=api_key
-        )
-
         return {
             "evaluation": eval_result,
-            "case_study": case_study_markdown
         }
 
     except Exception as e:
@@ -239,10 +231,39 @@ def get_project_history(session_id: str):
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
+            # 1. Fetch evaluations for project
+            cursor.execute("""
+                SELECT id, score, passed, created_at, raw_response 
+                FROM aiprep_tool_evaluations 
+                WHERE user_id = %s AND type = 'project' 
+                ORDER BY created_at DESC
+            """, (session_id,))
+            raw_evals = cursor.fetchall()
+            evaluations = []
+            for ev in raw_evals:
+                ev_dict = dict(ev)
+                if ev_dict.get("raw_response") and isinstance(ev_dict["raw_response"], str):
+                    try: ev_dict["raw_response"] = json.loads(ev_dict["raw_response"])
+                    except: pass
+                evaluations.append(ev_dict)
+
+            # 2. Check if project context exists (e.g. from resume auto-population)
             cursor.execute("SELECT id FROM aiprep_tool_project_context WHERE user_id = %s", (session_id,))
-            if cursor.fetchone():
-                return {"aiprep_tool_case_studies": [{"id": 1}]}
-        return {"aiprep_tool_case_studies": []}
+            has_project = cursor.fetchone() is not None
+
+            # 3. Check case studies for backward compatibility / dashboard
+            cursor.execute("SELECT id FROM aiprep_tool_case_studies WHERE user_id = %s", (session_id,))
+            case_studies = cursor.fetchall()
+
+            # Project is ONLY completed if the user actually clicked evaluate and generated an evaluation
+            is_completed = len(evaluations) > 0
+
+            return {
+                "has_project": has_project,
+                "completed": is_completed,
+                "history": evaluations,
+                "aiprep_tool_case_studies": case_studies
+            }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

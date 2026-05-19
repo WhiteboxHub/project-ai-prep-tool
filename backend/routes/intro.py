@@ -197,6 +197,30 @@ router = APIRouter(prefix="/api/intro", tags=["intro"])
 
 
 # -----------------------------------
+# Helper to get candidate ideal intro context
+# -----------------------------------
+def get_candidate_ideal_intro(session_id: str) -> str:
+    conn = get_db_connection()
+    context_data = "Professional self-introduction covering background, core technical expertise, accomplishments, and role alignment."
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT product, architecture, role, company_name, domain
+                FROM aiprep_tool_project_context
+                WHERE user_id = %s
+            """, (session_id,))
+            res = cursor.fetchone()
+            if res:
+                context_data = f"Candidate worked at {res.get('company_name', 'Enterprise')} ({res.get('domain', 'Tech')}) as {res.get('role', 'AI Engineer')}. Built {res.get('product', '')} using {res.get('architecture', '')}."
+    except:
+        pass
+    finally:
+        if conn:
+            conn.close()
+    return context_data
+
+
+# -----------------------------------
 # 🎤 AUDIO INTRO EVALUATION
 # -----------------------------------
 @router.post("/evaluate")
@@ -220,11 +244,12 @@ async def evaluate_audio_intro(
             f.write(await audio.read())
 
         transcript = transcribe_audio(file_path, api_key=api_key)
+        ideal_ctx = get_candidate_ideal_intro(session_id)
 
         eval_result = evaluate_intro(
             user_id=session_id,
             transcript=transcript,
-            ideal_intro="Professional introduction",
+            ideal_intro=ideal_ctx,
             api_key=api_key
         )
 
@@ -246,8 +271,8 @@ async def evaluate_audio_intro(
         except (ValueError, TypeError):
             score = 0.0
 
-        if score and score <= 10:
-            db_score = int(score * 10)
+        if score > 100:
+            db_score = 100
         else:
             db_score = int(score)
 
@@ -285,18 +310,20 @@ async def evaluate_audio_intro(
 # ✍️ TEXT INTRO EVALUATION
 # -----------------------------------
 @router.post("/evaluate-text")
-def evaluate_text_intro(data: dict):
+def evaluate_text_intro(
+    session_id: str = Form(...),
+    transcript: str = Form(...)
+):
     try:
-        session_id = data.get("session_id")
-        intro_text = data.get("intro_text")
-
         api_key = get_user_api_key(session_id)
         if not api_key:
             raise Exception("User not initialized")
 
+        ideal_ctx = get_candidate_ideal_intro(session_id)
         eval_result = evaluate_intro(
             user_id=session_id,
-            transcript=intro_text,
+            transcript=transcript,
+            ideal_intro=ideal_ctx,
             api_key=api_key
         )
 
@@ -306,8 +333,8 @@ def evaluate_text_intro(data: dict):
         except (ValueError, TypeError):
             score = 0.0
 
-        if score and score <= 10:
-            db_score = int(score * 10)
+        if score > 100:
+            db_score = 100
         else:
             db_score = int(score)
 
@@ -329,7 +356,8 @@ def evaluate_text_intro(data: dict):
 
         return {
             "evaluation": eval_result,
-            "score": db_score
+            "score": db_score,
+            "feedback": eval_result.get("feedback", [])
         }
 
     except Exception as e:
@@ -498,14 +526,21 @@ def get_intro_history(session_id: str):
                 FROM aiprep_tool_evaluations
                 WHERE user_id = %s AND type = 'intro'
                 ORDER BY created_at DESC
-                LIMIT 5
+                LIMIT 10
             """, (session_id,))
 
             rows = cursor.fetchall()
 
+        best_score = max([r.get("score", 0) for r in rows]) if rows else 0
+        latest_score = rows[0].get("score", 0) if rows else 0
+        passed = best_score >= 75
+
         return {
             "aiprep_tool_attempts": rows or [],
-            "history": rows or []
+            "history": rows or [],
+            "best_score": best_score,
+            "latest_score": latest_score,
+            "passed": passed
         }
 
     except Exception as e:
