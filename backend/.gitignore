@@ -5,3 +5,5 @@ myvenv
 __pycache__/
 *.py[cod]
 *$py.class
+backend/venv/
+venv/*
