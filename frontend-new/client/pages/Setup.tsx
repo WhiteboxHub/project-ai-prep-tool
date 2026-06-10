@@ -237,7 +237,7 @@ export default function Setup() {
                     className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-border text-foreground text-sm focus:border-primary outline-none transition-colors"
                   >
                     {PROVIDERS.find((p) => p.id === provider)?.models.map((m) => (
-                      <option key={m} value={m}>{m}</option>
+                      <option key={m} value={m} className="bg-[#0b0f19] text-[#f8fafc]">{m}</option>
                     ))}
                   </select>
                 </div>

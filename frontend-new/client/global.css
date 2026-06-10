@@ -72,6 +72,11 @@
     overflow-x: auto;
     white-space: pre;
   }
+
+  select option {
+    background-color: #404d70;
+    color: #f8fafc;
+  }
 }
 
 @layer utilities {

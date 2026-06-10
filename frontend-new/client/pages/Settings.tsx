@@ -246,8 +246,8 @@ export default function Settings() {
                         <div className="flex items-center gap-2">
                           <select value={provider} onChange={(e) => setProvider(e.target.value)}
                             className="w-1/3 px-3 py-2.5 rounded-xl bg-white/5 border border-border text-foreground text-sm focus:border-primary outline-none">
-                            <option value="openai">OpenAI</option>
-                            <option value="anthropic">Anthropic</option>
+                            <option value="openai" className="bg-[#0b0f19] text-[#f8fafc]">OpenAI</option>
+                            <option value="anthropic" className="bg-[#0b0f19] text-[#f8fafc]">Anthropic</option>
                           </select>
                           <input type="password" value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder="sk-..."
                             className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-border text-foreground text-sm placeholder-muted-foreground focus:border-primary outline-none" />
