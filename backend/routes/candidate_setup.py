@@ -110,6 +110,17 @@ def _validate_api_key(provider: str, api_key: str) -> tuple[bool, bool]:
 # ENDPOINTS
 # ─────────────────────────────────────────────
 
+def _get_candidate_id(cursor, email: str) -> int:
+    cursor.execute("SELECT id FROM candidate WHERE email = %s", (email,))
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Candidate profile not found for email: {email}"
+        )
+    return row["id"]
+
+
 @router.get("/setup-status")
 def get_setup_status(
     user_email: str = Depends(get_wbl_user_email),
@@ -118,14 +129,16 @@ def get_setup_status(
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
+            candidate_id = _get_candidate_id(cursor, user_email)
+
             cursor.execute(
-                "SELECT id FROM candidate_resume WHERE user_id = %s", (user_email,)
+                "SELECT id FROM candidate_resume WHERE candidate_id = %s", (candidate_id,)
             )
             resume_exists = cursor.fetchone() is not None
 
             cursor.execute(
-                "SELECT id FROM candidate_api_keys WHERE user_id = %s LIMIT 1",
-                (user_email,),
+                "SELECT id FROM candidate_llm_api_keys WHERE candidate_id = %s LIMIT 1",
+                (candidate_id,),
             )
             keys_exist = cursor.fetchone() is not None
 
@@ -134,6 +147,8 @@ def get_setup_status(
             "api_keys_configured": keys_exist,
             "setup_complete": resume_exists and keys_exist,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"setup-status error for {user_email}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch setup status")
@@ -151,26 +166,28 @@ def upload_resume(
     try:
         resume_str = json.dumps(body.resume_json)
         with conn.cursor() as cursor:
+            candidate_id = _get_candidate_id(cursor, user_email)
+
             cursor.execute(
-                "SELECT id FROM candidate_resume WHERE user_id = %s", (user_email,)
+                "SELECT id FROM candidate_resume WHERE candidate_id = %s", (candidate_id,)
             )
             existing = cursor.fetchone()
             if existing:
                 cursor.execute(
                     """UPDATE candidate_resume
                        SET resume_json = %s, file_name = %s
-                       WHERE user_id = %s""",
-                    (resume_str, body.file_name, user_email),
+                       WHERE candidate_id = %s""",
+                    (resume_str, body.file_name, candidate_id),
                 )
                 cursor.execute(
-                    "SELECT * FROM candidate_resume WHERE user_id = %s", (user_email,)
+                    "SELECT * FROM candidate_resume WHERE candidate_id = %s", (candidate_id,)
                 )
                 row = cursor.fetchone()
             else:
                 cursor.execute(
-                    """INSERT INTO candidate_resume (user_id, resume_json, file_name)
+                    """INSERT INTO candidate_resume (candidate_id, resume_json, file_name)
                        VALUES (%s, %s, %s)""",
-                    (user_email, resume_str, body.file_name),
+                    (candidate_id, resume_str, body.file_name),
                 )
                 cursor.execute(
                     "SELECT * FROM candidate_resume WHERE id = %s",
@@ -184,6 +201,8 @@ def upload_resume(
             else row["resume_json"]
         )
         return row
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"upload_resume error for {user_email}: {e}")
         raise HTTPException(status_code=500, detail="Failed to save resume")
@@ -197,8 +216,9 @@ def get_resume(user_email: str = Depends(get_wbl_user_email)):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
+            candidate_id = _get_candidate_id(cursor, user_email)
             cursor.execute(
-                "SELECT * FROM candidate_resume WHERE user_id = %s", (user_email,)
+                "SELECT * FROM candidate_resume WHERE candidate_id = %s", (candidate_id,)
             )
             row = cursor.fetchone()
         if not row:
@@ -227,8 +247,9 @@ def update_resume(
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
+            candidate_id = _get_candidate_id(cursor, user_email)
             cursor.execute(
-                "SELECT id FROM candidate_resume WHERE user_id = %s", (user_email,)
+                "SELECT id FROM candidate_resume WHERE candidate_id = %s", (candidate_id,)
             )
             if not cursor.fetchone():
                 raise HTTPException(status_code=404, detail="Resume not found")
@@ -236,11 +257,11 @@ def update_resume(
             cursor.execute(
                 """UPDATE candidate_resume
                    SET resume_json = %s, file_name = %s
-                   WHERE user_id = %s""",
-                (resume_str, body.file_name, user_email),
+                   WHERE candidate_id = %s""",
+                (resume_str, body.file_name, candidate_id),
             )
             cursor.execute(
-                "SELECT * FROM candidate_resume WHERE user_id = %s", (user_email,)
+                "SELECT * FROM candidate_resume WHERE candidate_id = %s", (candidate_id,)
             )
             row = cursor.fetchone()
         conn.commit()
@@ -280,30 +301,31 @@ def add_api_key(
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
+            candidate_id = _get_candidate_id(cursor, user_email)
             # Check for exact duplicate (same user + provider + model + key)
             cursor.execute(
-                """SELECT id FROM candidate_api_keys
-                   WHERE user_id = %s AND provider_name = %s AND model_name = %s AND api_key = %s""",
-                (user_email, body.provider_name, body.model_name, encrypted_key),
+                """SELECT id FROM candidate_llm_api_keys
+                   WHERE candidate_id = %s AND provider_name = %s AND model_name = %s AND api_key = %s""",
+                (candidate_id, body.provider_name, body.model_name, encrypted_key),
             )
             dup = cursor.fetchone()
             if dup:
                 cursor.execute(
-                    "UPDATE candidate_api_keys SET voice_enabled = %s WHERE id = %s",
+                    "UPDATE candidate_llm_api_keys SET voice_enabled = %s WHERE id = %s",
                     (body.voice_enabled, dup["id"]),
                 )
                 conn.commit()
                 cursor.execute(
-                    "SELECT * FROM candidate_api_keys WHERE id = %s", (dup["id"],)
+                    "SELECT * FROM candidate_llm_api_keys WHERE id = %s", (dup["id"],)
                 )
                 row = cursor.fetchone()
             else:
                 cursor.execute(
-                    """INSERT INTO candidate_api_keys
-                       (user_id, provider_name, api_key, model_name, voice_enabled)
+                    """INSERT INTO candidate_llm_api_keys
+                       (candidate_id, provider_name, api_key, model_name, voice_enabled)
                        VALUES (%s, %s, %s, %s, %s)""",
                     (
-                        user_email,
+                        candidate_id,
                         body.provider_name,
                         encrypted_key,
                         body.model_name,
@@ -312,7 +334,7 @@ def add_api_key(
                 )
                 conn.commit()
                 cursor.execute(
-                    "SELECT * FROM candidate_api_keys WHERE id = %s",
+                    "SELECT * FROM candidate_llm_api_keys WHERE id = %s",
                     (cursor.lastrowid,),
                 )
                 row = cursor.fetchone()
@@ -340,8 +362,9 @@ def list_api_keys(user_email: str = Depends(get_wbl_user_email)):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
+            candidate_id = _get_candidate_id(cursor, user_email)
             cursor.execute(
-                "SELECT * FROM candidate_api_keys WHERE user_id = %s", (user_email,)
+                "SELECT * FROM candidate_llm_api_keys WHERE candidate_id = %s", (candidate_id,)
             )
             rows = cursor.fetchall()
 
@@ -355,6 +378,8 @@ def list_api_keys(user_email: str = Depends(get_wbl_user_email)):
             row.pop("api_key", None)
             result.append(row)
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"list_api_keys error for {user_email}: {e}")
         raise HTTPException(status_code=500, detail="Failed to list API keys")
@@ -371,14 +396,15 @@ def delete_api_key(
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
+            candidate_id = _get_candidate_id(cursor, user_email)
             cursor.execute(
-                "SELECT id FROM candidate_api_keys WHERE id = %s AND user_id = %s",
-                (key_id, user_email),
+                "SELECT id FROM candidate_llm_api_keys WHERE id = %s AND candidate_id = %s",
+                (key_id, candidate_id),
             )
             if not cursor.fetchone():
                 raise HTTPException(status_code=404, detail="API key not found")
             cursor.execute(
-                "DELETE FROM candidate_api_keys WHERE id = %s", (key_id,)
+                "DELETE FROM candidate_llm_api_keys WHERE id = %s", (key_id,)
             )
         conn.commit()
         return {"message": "API key deleted successfully"}
@@ -454,19 +480,21 @@ def sync_data(token: str):
         with conn.cursor() as cursor:
             cursor.execute("DELETE FROM prep_tokens WHERE token = %s", (token,))
 
-        # Fetch resume
+        # Fetch candidate_id and resume/keys
         with conn.cursor() as cursor:
+            candidate_id = _get_candidate_id(cursor, user_email)
+
+            # Fetch resume
             cursor.execute(
-                "SELECT resume_json FROM candidate_resume WHERE user_id = %s",
-                (user_email,),
+                "SELECT resume_json FROM candidate_resume WHERE candidate_id = %s",
+                (candidate_id,),
             )
             resume_row = cursor.fetchone()
 
-        # Fetch API keys
-        with conn.cursor() as cursor:
+            # Fetch API keys
             cursor.execute(
-                "SELECT provider_name, api_key, model_name, voice_enabled FROM candidate_api_keys WHERE user_id = %s",
-                (user_email,),
+                "SELECT provider_name, api_key, model_name, voice_enabled FROM candidate_llm_api_keys WHERE candidate_id = %s",
+                (candidate_id,),
             )
             key_rows = cursor.fetchall()
 

@@ -11,7 +11,7 @@ if os.environ.get("K_SERVICE") is None:
     load_dotenv()
 
 from db.init_db import init_db
-from routes import setup, intro, project, interview, context, resume, case_study, candidate_setup
+from routes import setup, intro, project, interview, context, resume, case_study, candidate_setup, report
 
 app = FastAPI(
     title="AI Candidate Evaluation System",

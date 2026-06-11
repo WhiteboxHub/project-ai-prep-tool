@@ -100,7 +100,7 @@ def load_prompt(filename: str) -> str:
 # ---------------------------
 # INTRO EVALUATION
 # ---------------------------
-def evaluate_intro(user_id: str, transcript: str, ideal_intro: str = "A clear description of background.", api_key: str = None) -> dict:
+async def evaluate_intro(user_id: str, transcript: str, ideal_intro: str = "A clear description of background.", api_key: str = None) -> dict:
     system_prompt = load_prompt("intro_eval.txt")
 
     prompt = f"""
@@ -113,7 +113,7 @@ Candidate Answer:
 {transcript}
 """
 
-    res_str = call_llm_with_context(
+    res_str = await call_llm_with_context(
         user_id=user_id,
         prompt=prompt,
         system_prompt=system_prompt,
@@ -127,7 +127,7 @@ Candidate Answer:
 # ---------------------------
 # PROJECT EVALUATION
 # ---------------------------
-def evaluate_project(user_id: str, answers: str, api_key: str = None) -> dict:
+async def evaluate_project(user_id: str, answers: str, api_key: str = None) -> dict:
     system_prompt = load_prompt("project_eval.txt")
 
     prompt = f"""
@@ -137,7 +137,7 @@ Project Input:
 {answers}
 """
 
-    res_str = call_llm_with_context(
+    res_str = await call_llm_with_context(
         user_id=user_id,
         prompt=prompt,
         system_prompt=system_prompt,
@@ -151,7 +151,7 @@ Project Input:
 # ---------------------------
 # CASE STUDY
 # ---------------------------
-def generate_case_study(user_id: str, data: str, api_key: str = None) -> str:
+async def generate_case_study(user_id: str, data: str, api_key: str = None) -> str:
     # Use direct explicit prompt instead of generic case_study.txt
     system_prompt = "You are an expert technical product manager and AI architect."
 
@@ -174,7 +174,7 @@ Input Context:
 {data}
 """
 
-    return call_llm_with_context(
+    return await call_llm_with_context(
         user_id=user_id,
         prompt=prompt,
         system_prompt=system_prompt,
@@ -186,7 +186,7 @@ Input Context:
 # ---------------------------
 # COACHING
 # ---------------------------
-def coach_answer(user_id: str, answer: str, feedback: str, api_key: str = None) -> dict:
+async def coach_answer(user_id: str, answer: str, feedback: str, api_key: str = None) -> dict:
     system_prompt = load_prompt("coaching.txt")
 
     prompt = f"""
@@ -199,7 +199,7 @@ Feedback:
 Return JSON.
 """
 
-    res_str = call_llm_with_context(
+    res_str = await call_llm_with_context(
         user_id=user_id,
         prompt=prompt,
         system_prompt=system_prompt,

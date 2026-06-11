@@ -94,7 +94,7 @@ router = APIRouter(prefix="/api/project", tags=["project"])
 
 
 @router.post("/")
-def save_and_evaluate_project(data: ProjectContextData):
+async def save_and_evaluate_project(data: ProjectContextData):
     conn = None
     try:
         conn = get_db_connection()
@@ -170,7 +170,7 @@ Future Scope: {data.future_roadmap}
 """
 
         # 4. Evaluate
-        eval_result = evaluate_project(
+        eval_result = await evaluate_project(
             data.user_id,
             answers,
             api_key=api_key

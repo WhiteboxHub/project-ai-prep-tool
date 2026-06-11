@@ -84,12 +84,33 @@ async def validate_api_key(api_key: str, provider: str) -> dict:
     return result
 
 
-async def generate_text(prompt: str, api_key: str, provider: str, max_retries: int = 1) -> str:
+async def generate_text(
+    prompt: str,
+    api_key: str,
+    provider: str,
+    max_retries: int = 1,
+    system_prompt: str = "You are a highly structured expert career coach and technical interview evaluator.",
+    response_format: str = "text",
+) -> str:
     """Generate text string."""
-    result = await generate_text_with_usage(prompt, api_key, provider, max_retries)
+    result = await generate_text_with_usage(
+        prompt=prompt,
+        api_key=api_key,
+        provider=provider,
+        max_retries=max_retries,
+        system_prompt=system_prompt,
+        response_format=response_format,
+    )
     return result["content"]
 
-async def generate_text_with_usage(prompt: str, api_key: str, provider: str, max_retries: int = 1) -> dict:
+async def generate_text_with_usage(
+    prompt: str,
+    api_key: str,
+    provider: str,
+    max_retries: int = 1,
+    system_prompt: str = "You are a highly structured expert career coach and technical interview evaluator.",
+    response_format: str = "text",
+) -> dict:
     """
     Generate text using the appropriate LLM.
     Returns: {"content": "...", "usage": {"tokens": 100}}
@@ -101,18 +122,27 @@ async def generate_text_with_usage(prompt: str, api_key: str, provider: str, max
         try:
             if provider == "openai":
                 client = get_openai_client(api_key)
-                response = await client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
+                
+                kwargs = {
+                    "model": "gpt-4o",
+                    "messages": [
                         {
                             "role": "system",
-                            "content": "You are a highly structured expert career coach and technical interview evaluator.",
+                            "content": system_prompt,
                         },
                         {"role": "user", "content": prompt},
                     ],
-                    max_tokens=3000,
-                    temperature=0.7,
-                )
+                    "max_tokens": 3000,
+                    "temperature": 0.7,
+                }
+                
+                if response_format == "json_object":
+                    kwargs["response_format"] = {"type": "json_object"}
+                    # Ensure "json" is in the prompts for json_object mode
+                    if "json" not in system_prompt.lower() and "json" not in prompt.lower():
+                        kwargs["messages"][0]["content"] += "\nReturn response in STRICT JSON format."
+                
+                response = await client.chat.completions.create(**kwargs)
                 return {
                     "content": response.choices[0].message.content,
                     "usage": {
@@ -124,14 +154,22 @@ async def generate_text_with_usage(prompt: str, api_key: str, provider: str, max
                 from google.genai import types
                 loop = asyncio.get_running_loop()
                 client = get_gemini_client(api_key)
+                
+                # Ensure "json" is in instructions/prompt for json mode
+                gemini_system = system_prompt
+                if response_format == "json_object":
+                    if "json" not in system_prompt.lower() and "json" not in prompt.lower():
+                        gemini_system += "\nReturn response in STRICT JSON format."
+                        
                 response = await loop.run_in_executor(
                     None,
                     lambda: client.models.generate_content(
                         model="gemini-2.0-flash",
                         contents=prompt,
                         config=types.GenerateContentConfig(
-                            system_instruction="You are a highly structured expert career coach and technical interview evaluator.",
+                            system_instruction=gemini_system,
                             max_output_tokens=3000,
+                            response_mime_type="application/json" if response_format == "json_object" else None
                         ),
                     )
                 )

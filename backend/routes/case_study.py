@@ -196,7 +196,7 @@ PDF_MAPPING = {
 }
 
 @router.post("/generate-typed")
-def generate_typed_case_study(req: GenerateTypedRequest):
+async def generate_typed_case_study(req: GenerateTypedRequest):
     conn = None
     try:
         case_type = req.case_type.lower().strip()
@@ -283,7 +283,7 @@ Now, generate the complete {topic_name} for the candidate. Adapt the business ca
 
 Now generate the complete case study following the structure defined in your instructions. Be specific, technical, and use real numbers where provided. Output in rich, formatted Markdown."""
 
-        res_str = call_llm_with_context(
+        res_str = await call_llm_with_context(
             user_id=req.session_id,
             prompt=user_prompt,
             system_prompt=system_prompt,

@@ -279,29 +279,31 @@ def init_db():
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS candidate_resume (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id VARCHAR(255) UNIQUE NOT NULL,
+                    candidate_id INT UNIQUE NOT NULL,
                     resume_json JSON NOT NULL,
                     file_name VARCHAR(255),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    INDEX idx_resume_user_id (user_id)
+                    INDEX idx_resume_candidate_id (candidate_id)
                 )
             """)
 
             # ---------------------------
-            # 7. CANDIDATE API KEYS (from wbl-backend migration)
+            # 7. CANDIDATE LLM API KEYS (from wbl-backend migration)
             # ---------------------------
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS candidate_api_keys (
+                CREATE TABLE IF NOT EXISTS candidate_llm_api_keys (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id VARCHAR(255) NOT NULL,
+                    candidate_id INT NOT NULL,
                     provider_name VARCHAR(50) NOT NULL,
                     api_key TEXT NOT NULL,
                     model_name VARCHAR(100),
                     voice_enabled BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    INDEX idx_apikey_user_id (user_id)
+                    last_used_at TIMESTAMP NULL,
+                    is_default BOOLEAN DEFAULT FALSE,
+                    INDEX idx_apikey_candidate_id (candidate_id)
                 )
             """)
 
