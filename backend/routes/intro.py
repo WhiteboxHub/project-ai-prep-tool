@@ -246,7 +246,7 @@ async def evaluate_audio_intro(
         transcript = transcribe_audio(file_path, api_key=api_key)
         ideal_ctx = get_candidate_ideal_intro(session_id)
 
-        eval_result = evaluate_intro(
+        eval_result = await evaluate_intro(
             user_id=session_id,
             transcript=transcript,
             ideal_intro=ideal_ctx,
@@ -310,7 +310,7 @@ async def evaluate_audio_intro(
 # ✍️ TEXT INTRO EVALUATION
 # -----------------------------------
 @router.post("/evaluate-text")
-def evaluate_text_intro(
+async def evaluate_text_intro(
     session_id: str = Form(...),
     transcript: str = Form(...)
 ):
@@ -320,7 +320,7 @@ def evaluate_text_intro(
             raise Exception("User not initialized")
 
         ideal_ctx = get_candidate_ideal_intro(session_id)
-        eval_result = evaluate_intro(
+        eval_result = await evaluate_intro(
             user_id=session_id,
             transcript=transcript,
             ideal_intro=ideal_ctx,
@@ -424,7 +424,7 @@ def evaluate_text_intro(
 #         raise HTTPException(status_code=500, detail="Template generation failed")
 
 @router.get("/dynamic-template")
-def get_dynamic_intro_template(session_id: str):
+async def get_dynamic_intro_template(session_id: str):
     try:
         api_key = get_user_api_key(session_id)
         if not api_key:
@@ -495,7 +495,7 @@ INSTRUCTIONS:
 Generate the introduction.
 """
 
-        intro_text = call_llm_with_context(
+        intro_text = await call_llm_with_context(
             user_id=session_id,
             prompt=prompt,
             system_prompt=system_prompt,

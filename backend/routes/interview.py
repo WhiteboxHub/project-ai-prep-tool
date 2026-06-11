@@ -10,7 +10,7 @@ from services.user_context import get_user_api_key
 router = APIRouter(prefix="/api/interview", tags=["interview"])
 
 @router.get("/stage-questions")
-def get_stage_questions(session_id: str, stage_name: str = "General Mock", api_key: str = None, previous_context: str = ""):
+async def get_stage_questions(session_id: str, stage_name: str = "General Mock", api_key: str = None, previous_context: str = ""):
     """
     Adapter for frontend: start the interview loop for a specific stage and return the first question.
     """
@@ -22,7 +22,7 @@ def get_stage_questions(session_id: str, stage_name: str = "General Mock", api_k
         if previous_context:
             prompt_text += f"IMPORTANT: STRICT NON-REPETITION: You MUST NOT repeat any concept, topic, or question that were already asked in previous rounds. Ask about a completely different aspect. Here is the transcript of previous rounds:\n{previous_context}"
 
-        q = call_llm_with_context(
+        q = await call_llm_with_context(
             user_id=session_id,
             prompt=prompt_text,
             system_prompt=f"You are a strict and professional technical recruiter starting a mock interview for the {stage_name} round.",
@@ -42,7 +42,7 @@ class LiveEvalRequest(BaseModel):
     api_key: str = None
 
 @router.post("/evaluate-live")
-def evaluate_live(data: LiveEvalRequest):
+async def evaluate_live(data: LiveEvalRequest):
     """
     Adapter for frontend: send answer, get feedback and the next question combined conversationally.
     """
@@ -109,7 +109,7 @@ def evaluate_live(data: LiveEvalRequest):
         }}
         """
         
-        res_str = call_llm_with_context(
+        res_str = await call_llm_with_context(
             user_id=data.session_id,
             prompt=prompt,
             system_prompt="You are an expert technical interviewer and AI evaluator.",
@@ -169,7 +169,7 @@ class CompleteRequest(BaseModel):
     session_id: str
 
 @router.post("/complete")
-def complete_interview(data: CompleteRequest):
+async def complete_interview(data: CompleteRequest):
     """
     Marks the interview module as completed and generates a rigorous 11-dimension final executive report.
     """
@@ -237,7 +237,7 @@ def complete_interview(data: CompleteRequest):
     }}
     """
     
-    res_str = call_llm_with_context(
+    res_str = await call_llm_with_context(
         user_id=data.session_id,
         prompt=prompt,
         system_prompt="You are a Principal AI Architect and Executive Recruiter generating a final interview performance report.",

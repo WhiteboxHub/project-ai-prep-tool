@@ -149,7 +149,7 @@ def init_session(data: SetupInit):
         conn.close()
 
 
-def extract_latest_company_bg(user_id: str, resume_json: dict):
+async def extract_latest_company_bg(user_id: str, resume_json: dict):
     from services.user_context import get_user_api_key
     from services.llm_service import call_llm_with_context
     from db.connection import get_db_connection
@@ -198,7 +198,7 @@ def extract_latest_company_bg(user_id: str, resume_json: dict):
     """
 
     try:
-        res_str = call_llm_with_context(
+        res_str = await call_llm_with_context(
             user_id=user_id,
             prompt=prompt,
             system_prompt="You are an expert resume parser.",
@@ -413,7 +413,7 @@ def get_resume_summary(session_id: str):
         conn.close()
 
 @router.post("/sync-from-wbl")
-def sync_from_wbl(data: SyncFromWblRequest):
+async def sync_from_wbl(data: SyncFromWblRequest):
     """
     Called by AI Prep Dashboard when a user clicks 'Manage' in WBL.
     We just return the session_id and candidate name so they bypass the setup wizard.
@@ -447,7 +447,7 @@ def sync_from_wbl(data: SyncFromWblRequest):
 
     if needs_extraction:
         try:
-            extract_latest_company_bg(session_id, resume)
+            await extract_latest_company_bg(session_id, resume)
         except Exception as e:
             print(f"Extraction failed during sync: {e}")
 

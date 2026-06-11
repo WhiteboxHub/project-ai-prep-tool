@@ -12,7 +12,7 @@ class ExtractRequest(BaseModel):
     session_id: str
 
 @router.post("/extract-project")
-def extract_project(req: ExtractRequest):
+async def extract_project(req: ExtractRequest):
     """
     Extracts Domain, Background, Skills, and Core Project details from the uploaded resume.
     """
@@ -91,7 +91,7 @@ def extract_project(req: ExtractRequest):
         
         system_prompt = "You are an expert technical recruiter analyzing aiprep_tool_resumes."
         
-        res_str = call_llm_with_context(
+        res_str = await call_llm_with_context(
             user_id=req.session_id,
             prompt=prompt,
             system_prompt=system_prompt,
