@@ -19,6 +19,8 @@ import Settings from "./pages/Settings";
 import Setup from "./pages/Setup";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import CoderpadAssessment from "./pages/CoderpadAssessment";
+import AdminAnalytics from "./pages/AdminAnalytics";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +52,11 @@ const App = () => (
             <Route path="/documents" element={<RequireAuth><Documents /></RequireAuth>} />
             <Route path="/progress" element={<RequireAuth><Progress /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+            <Route path="/coderpad-assessment" element={<RequireAuth><CoderpadAssessment /></RequireAuth>} />
+            
+            {/* Admin routes */}
+            <Route path="/admin/analytics" element={<AdminAnalytics />} />
+            
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
@@ -57,5 +64,6 @@ const App = () => (
     </TooltipProvider>
   </QueryClientProvider>
 );
+
 
 createRoot(document.getElementById("root")!).render(<App />);
