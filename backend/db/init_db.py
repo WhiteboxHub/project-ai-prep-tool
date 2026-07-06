@@ -1,24 +1,111 @@
-"""
-backend/db/init_db.py
+# # backend\db\init_db.py
+# from db.connection import get_db_connection
+# import pymysql
 
-Initializes only the AI Prep Tool–specific tables in the shared WBL database (wbl_dump).
+# def init_db():
+#     print("Initializing Database structure...")
+    
+#     # We might need to create the database itself first if it does not exist, 
+#     # but get_db_connection expects db_name to connect. 
+#     # To be safe, we try to create the database using a generic connection over pymysql without selecting a db first.
+#     import os
+#     host = os.getenv("DB_HOST", "localhost")
+#     user = os.getenv("DB_USER", "root")
+#     password = os.getenv("DB_PASSWORD", "")
+#     db_name = os.getenv("DB_NAME", "ai_prep")
+#     port = int(os.getenv("DB_PORT", 3306))
+    
+#     try:
+#         setup_conn = pymysql.connect(host=host, user=user, password=password, port=port)
+#         with setup_conn.cursor() as cursor:
+#             cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{db_name}`")
+#         setup_conn.commit()
+#         setup_conn.close()
+#     except Exception as e:
+#         print(f"Error creating database {db_name}:", e)
+#         # Continue and let get_db_connection fail if the DB really doesn't exist
 
-The following tables ALREADY EXIST in wbl_dump (created by wbl-backend migrations)
-and must NOT be re-created here:
-  - candidate              (WBL core candidate table)
-  - candidate_marketing    (WBL marketing phase tracking)
-  - candidate_llm_api_keys (WBL candidate LLM API keys)
-  - candidate_resume       (WBL candidate resume store)
+#     try:
+#         conn = get_db_connection()
+#         with conn.cursor() as cursor:
+#             # 1. aiprep_tool_candidates
+#             cursor.execute("""
+#                 CREATE TABLE IF NOT EXISTS aiprep_tool_candidates (
+#                     id INT AUTO_INCREMENT PRIMARY KEY,
+#                     user_id VARCHAR(255) UNIQUE NOT NULL,
+#                     name VARCHAR(255),
+#                     email VARCHAR(255),
+#                     role VARCHAR(255),
+#                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+#                 )
+#             """)
+            
+#             # 2. aiprep_tool_resumes
+#             cursor.execute("""
+#                 CREATE TABLE IF NOT EXISTS aiprep_tool_resumes (
+#                     id INT AUTO_INCREMENT PRIMARY KEY,
+#                     user_id VARCHAR(255) UNIQUE NOT NULL,
+#                     resume_json JSON,
+#                     resume_pdf_url VARCHAR(1024),
+#                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+#                 )
+#             """)
 
-Tables created/managed by this script (AI Prep Tool–specific):
-  - aiprep_tool_candidates     — session tracking (user_id UUID / numeric, api_key, login state)
-  - aiprep_tool_resumes        — AI-extracted resume JSON per candidate
-  - aiprep_tool_project_context — candidate project context for interview coaching
-  - aiprep_tool_evaluations    — intro + interview evaluation records
-  - aiprep_tool_attempts       — attempt rate-limiting per candidate
-  - aiprep_tool_case_studies   — generated case studies per candidate
-  - prep_tokens                — one-time secure session sync tokens
-"""
+#             # 3. aiprep_tool_project_context
+#             cursor.execute("""
+#                 CREATE TABLE IF NOT EXISTS aiprep_tool_project_context (
+#                     id INT AUTO_INCREMENT PRIMARY KEY,
+#                     user_id VARCHAR(255) UNIQUE NOT NULL,
+#                     product TEXT,
+#                     architecture TEXT,
+#                     business_value TEXT,
+#                     role TEXT,
+#                     impact TEXT,
+#                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+#                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+#                 )
+#             """)
+
+#             # 4. aiprep_tool_evaluations
+#             cursor.execute("""
+#                 CREATE TABLE IF NOT EXISTS aiprep_tool_evaluations (
+#                     id INT AUTO_INCREMENT PRIMARY KEY,
+#                     user_id VARCHAR(255) NOT NULL,
+#                     type VARCHAR(50),
+#                     score INT,
+#                     passed BOOLEAN,
+#                     feedback JSON,
+#                     raw_response JSON,
+#                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+#                 )
+#             """)
+
+#             # 5. aiprep_tool_attempts
+#             cursor.execute("""
+#                 CREATE TABLE IF NOT EXISTS aiprep_tool_attempts (
+#                     id INT AUTO_INCREMENT PRIMARY KEY,
+#                     user_id VARCHAR(255) NOT NULL,
+#                     attempt_type VARCHAR(50),
+#                     attempt_count INT DEFAULT 0,
+#                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+#                     UNIQUE(user_id, attempt_type)
+#                 )
+#             """)
+            
+#         try:
+#             with conn.cursor() as cursor:
+#                 cursor.execute("ALTER TABLE aiprep_tool_project_context MODIFY COLUMN product TEXT")
+#                 cursor.execute("ALTER TABLE aiprep_tool_project_context MODIFY COLUMN role TEXT")
+#         except Exception:
+#             pass # Ignore if it fails or table doesn't exist etc.
+
+#         conn.commit()
+#         conn.close()
+#         print("Database tables initialized successfully.")
+#     except Exception as e:
+#         print("Error initializing tables:", e)
+
+
 
 from db.connection import get_db_connection
 import pymysql
@@ -36,7 +123,6 @@ def init_db():
 
     # ---------------------------
     # CREATE DATABASE IF NOT EXISTS
-    # (Only needed when NOT using shared wbl_dump; safe to run either way)
     # ---------------------------
     try:
         setup_conn = pymysql.connect(
@@ -53,67 +139,29 @@ def init_db():
         print(f"Error creating database {db_name}:", e)
 
     # ---------------------------
-    # CREATE AI PREP TOOL–SPECIFIC TABLES
+    # CREATE TABLES
     # ---------------------------
     try:
         conn = get_db_connection()
 
         with conn.cursor() as cursor:
-
-            # ------------------------------------------------------------------
-            # 1. AIPREP_TOOL_CANDIDATES
-            #    Tracks per-candidate AI Prep session state:
-            #      - user_id: either a UUID (legacy) or the WBL candidate.id as string
-            #      - wbl_email: links back to candidate_marketing / candidate tables
-            #      - api_key_encrypted: single fallback LLM key (legacy; new keys go in candidate_llm_api_keys)
-            #      - login_count, last_login, extraction_status: prep workflow state
-            #
-            #    NOTE: candidate / candidate_marketing / candidate_llm_api_keys already
-            #    exist in wbl_dump — do NOT re-create them here.
-            # ------------------------------------------------------------------
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS aiprep_tool_candidates (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id VARCHAR(255) UNIQUE NOT NULL,
-                    wbl_email VARCHAR(255) UNIQUE,
-                    name VARCHAR(255),
-                    email VARCHAR(255),
-                    role VARCHAR(255),
-
-                    api_key_encrypted TEXT,
-                    login_count INT DEFAULT 1,
-                    last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    extraction_status VARCHAR(50) DEFAULT 'pending',
-
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-                    INDEX idx_user_id (user_id)
-                )
-            """)
-
-            # ------------------------------------------------------------------
-            # 2. AIPREP_TOOL_RESUMES
-            #    Stores the AI-extracted structured resume JSON (separate from the
-            #    raw uploaded file tracked in WBL's candidate_resume table).
-            # ------------------------------------------------------------------
+            # ---------------------------
+            # 1. RESUMES
+            # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS aiprep_tool_resumes (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     user_id VARCHAR(255) UNIQUE NOT NULL,
                     resume_json JSON,
                     resume_pdf_url VARCHAR(1024),
-
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
                     INDEX idx_resume_user (user_id)
                 )
             """)
 
-            # ------------------------------------------------------------------
-            # 3. AIPREP_TOOL_PROJECT_CONTEXT
-            #    Stores the candidate's project / domain context used for
-            #    interview coaching and case study generation.
-            # ------------------------------------------------------------------
+            # ---------------------------
+            # 2. PROJECT CONTEXT
+            # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS aiprep_tool_project_context (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -140,22 +188,15 @@ def init_db():
                     key_problems TEXT,
                     agent_usage VARCHAR(50),
                     learnings TEXT,
-                    domain VARCHAR(255),
-                    background TEXT,
-                    skills JSON,
-
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
                     INDEX idx_project_user (user_id)
                 )
             """)
 
-            # ------------------------------------------------------------------
-            # 4. AIPREP_TOOL_EVALUATIONS
-            #    Stores intro video + interview answer evaluations.
-            #    type: 'intro' | 'interview_answer' | 'interview_complete'
-            # ------------------------------------------------------------------
+            # ---------------------------
+            # 3. EVALUATIONS
+            # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS aiprep_tool_evaluations (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -163,40 +204,32 @@ def init_db():
                     type VARCHAR(50),
                     score INT,
                     passed BOOLEAN,
-
                     feedback JSON,
                     raw_response JSON,
-                    video_url VARCHAR(1024),
-
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
                     INDEX idx_eval_user (user_id),
                     INDEX idx_eval_type (type)
                 )
             """)
 
-            # ------------------------------------------------------------------
-            # 5. AIPREP_TOOL_ATTEMPTS  (already exists in production — safe no-op)
-            #    Tracks attempt counts per candidate for rate-limiting.
-            # ------------------------------------------------------------------
+            # ---------------------------
+            # 4. ATTEMPTS
+            # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS aiprep_tool_attempts (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     user_id VARCHAR(255) NOT NULL,
                     attempt_type VARCHAR(50),
                     attempt_count INT DEFAULT 0,
-
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
                     UNIQUE(user_id, attempt_type),
                     INDEX idx_attempt_user (user_id)
                 )
             """)
 
-            # ------------------------------------------------------------------
-            # 6. AIPREP_TOOL_CASE_STUDIES
-            #    Stores AI-generated case studies per candidate.
-            # ------------------------------------------------------------------
+            # ---------------------------
+            # 5. CASE STUDIES
+            # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS aiprep_tool_case_studies (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -208,10 +241,9 @@ def init_db():
                 )
             """)
 
-            # ------------------------------------------------------------------
-            # 7. PREP_TOKENS
-            #    One-time secure tokens used to link WBL sessions to AI Prep sessions.
-            # ------------------------------------------------------------------
+            # ---------------------------
+            # 6. PREP TOKENS
+            # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS prep_tokens (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -222,50 +254,50 @@ def init_db():
                 )
             """)
 
-        # ------------------------------------------------------------------
-        # SAFE COLUMN ALTERS
-        # These are idempotent — they silently fail if the column already exists.
-        # Used to upgrade existing deployments without re-running full migrations.
-        # ------------------------------------------------------------------
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("ALTER TABLE aiprep_tool_project_context ADD COLUMN domain VARCHAR(255)")
+        except Exception:
+            pass
 
-        safe_alters = [
-            # aiprep_tool_candidates columns
-            "ALTER TABLE aiprep_tool_candidates ADD COLUMN wbl_email VARCHAR(255) UNIQUE",
-            "ALTER TABLE aiprep_tool_candidates ADD COLUMN api_key_encrypted TEXT",
-            "ALTER TABLE aiprep_tool_candidates ADD COLUMN extraction_status VARCHAR(50) DEFAULT 'pending'",
-            "ALTER TABLE aiprep_tool_candidates ADD COLUMN login_count INT DEFAULT 1",
-            "ALTER TABLE aiprep_tool_candidates ADD COLUMN last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
-            # aiprep_tool_project_context columns
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN domain VARCHAR(255)",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN background TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN skills JSON",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN business_problem TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN previous_system TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN key_objectives TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN users_scale TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN agents_components TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN key_workflows TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN tools_integrations TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN tech_stack TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN ai_techniques TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN evaluation_approach TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN challenges_learnings TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN safety_guardrails TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN future_roadmap TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN company_name TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN key_problems TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN learnings TEXT",
-            "ALTER TABLE aiprep_tool_project_context ADD COLUMN agent_usage VARCHAR(50)",
-            # aiprep_tool_evaluations columns
-            "ALTER TABLE aiprep_tool_evaluations ADD COLUMN video_url VARCHAR(1024)",
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("ALTER TABLE aiprep_tool_project_context ADD COLUMN background TEXT")
+        except Exception:
+            pass
+
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("ALTER TABLE aiprep_tool_project_context ADD COLUMN skills JSON")
+        except Exception:
+            pass
+
+        # Safe alters for 13 new project context fields
+        new_columns = [
+            "business_problem", "previous_system", "key_objectives", "users_scale",
+            "agents_components", "key_workflows", "tools_integrations", "tech_stack",
+            "ai_techniques", "evaluation_approach", "challenges_learnings", 
+            "safety_guardrails", "future_roadmap", "company_name", "key_problems",
+            "learnings"
         ]
-
-        for alter_sql in safe_alters:
+        for col in new_columns:
             try:
                 with conn.cursor() as cursor:
-                    cursor.execute(alter_sql)
+                    cursor.execute(f"ALTER TABLE aiprep_tool_project_context ADD COLUMN {col} TEXT")
             except Exception:
-                pass  # Column already exists — safe to ignore
+                pass
+
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(f"ALTER TABLE aiprep_tool_project_context ADD COLUMN agent_usage VARCHAR(50)")
+        except Exception:
+            pass
+
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("ALTER TABLE aiprep_tool_evaluations ADD COLUMN video_url VARCHAR(1024)")
+        except Exception:
+            pass
 
         conn.commit()
         conn.close()
