@@ -204,11 +204,12 @@ def get_candidate_ideal_intro(session_id: str) -> str:
     context_data = "Professional self-introduction covering background, core technical expertise, accomplishments, and role alignment."
     try:
         with conn.cursor() as cursor:
+            marketing_id = int(session_id)
             cursor.execute("""
                 SELECT product, architecture, role, company_name, domain
                 FROM aiprep_tool_project_context
-                WHERE user_id = %s
-            """, (session_id,))
+                WHERE candidate_id = %s
+            """, (marketing_id,))
             res = cursor.fetchone()
             if res:
                 context_data = f"Candidate worked at {res.get('company_name', 'Enterprise')} ({res.get('domain', 'Tech')}) as {res.get('role', 'AI Engineer')}. Built {res.get('product', '')} using {res.get('architecture', '')}."
@@ -237,8 +238,12 @@ async def evaluate_audio_intro(
         if not api_key:
             raise Exception("User not initialized")
 
-        os.makedirs("/tmp/uploads", exist_ok=True)
-        file_path = f"/tmp/uploads/{uuid.uuid4()}_{audio.filename}"
+        os.makedirs("uploads", exist_ok=True)
+        filename = f"{uuid.uuid4()}_{audio.filename}"
+        if not filename.endswith(".webm") and not filename.endswith(".mp4"):
+            filename += ".webm"
+        file_path = f"uploads/{filename}"
+        video_url = f"/uploads/{filename}"
 
         with open(file_path, "wb") as f:
             f.write(await audio.read())
@@ -276,15 +281,20 @@ async def evaluate_audio_intro(
         else:
             db_score = int(score)
 
+        marketing_id = int(session_id)
         with conn.cursor() as cursor:
             cursor.execute("""
-                INSERT INTO aiprep_tool_evaluations (user_id, type, score, feedback)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO aiprep_tool_evaluations (candidate_id, intro_score, intro_video, intro_status)
+                VALUES (%s, %s, %s, 'completed')
+                ON DUPLICATE KEY UPDATE
+                    intro_score = VALUES(intro_score),
+                    intro_video = VALUES(intro_video),
+                    intro_status = 'completed',
+                    updated_at  = NOW()
             """, (
-                session_id,
-                "intro",
+                marketing_id,
                 db_score,
-                json.dumps(eval_result)
+                video_url
             ))
 
         conn.commit()
@@ -292,7 +302,8 @@ async def evaluate_audio_intro(
         return {
             "transcript": transcript,
             "evaluation": eval_result,
-            "score": db_score
+            "score": db_score,
+            "video_url": video_url
         }
 
     except Exception as e:
@@ -302,8 +313,6 @@ async def evaluate_audio_intro(
     finally:
         if conn:
             conn.close()
-        if file_path and os.path.exists(file_path):
-            os.remove(file_path)
 
 
 # -----------------------------------
@@ -340,15 +349,18 @@ async def evaluate_text_intro(
 
         conn = get_db_connection()
         try:
+            marketing_id = int(session_id)
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    INSERT INTO aiprep_tool_evaluations (user_id, type, score, feedback)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO aiprep_tool_evaluations (candidate_id, intro_score, intro_status)
+                    VALUES (%s, %s, 'completed')
+                    ON DUPLICATE KEY UPDATE
+                        intro_score  = VALUES(intro_score),
+                        intro_status = 'completed',
+                        updated_at   = NOW()
                 """, (
-                    session_id,
-                    "intro",
-                    db_score,
-                    json.dumps(eval_result)
+                    marketing_id,
+                    db_score
                 ))
             conn.commit()
         finally:
@@ -435,11 +447,12 @@ async def get_dynamic_intro_template(session_id: str):
         context_data = ""
         try:
             with conn.cursor() as cursor:
+                marketing_id = int(session_id)
                 cursor.execute("""
                     SELECT product, architecture, business_value, role, impact
                     FROM aiprep_tool_project_context
-                    WHERE user_id = %s
-                """, (session_id,))
+                    WHERE candidate_id = %s
+                """, (marketing_id,))
                 res = cursor.fetchone()
 
                 if res:
@@ -520,19 +533,19 @@ def get_intro_history(session_id: str):
     try:
         conn = get_db_connection()
 
+        marketing_id = int(session_id)
         with conn.cursor() as cursor:
             cursor.execute("""
-                SELECT id, score, feedback, created_at
+                SELECT id, intro_score AS score, intro_video AS video_url,
+                       intro_status AS status, created_at, updated_at
                 FROM aiprep_tool_evaluations
-                WHERE user_id = %s AND type = 'intro'
-                ORDER BY created_at DESC
-                LIMIT 10
-            """, (session_id,))
+                WHERE candidate_id = %s
+            """, (marketing_id,))
 
             rows = cursor.fetchall()
 
-        best_score = max([r.get("score", 0) for r in rows]) if rows else 0
-        latest_score = rows[0].get("score", 0) if rows else 0
+        best_score = rows[0].get("score", 0) if rows and rows[0].get("score") else 0
+        latest_score = best_score
         passed = best_score >= 75
 
         return {

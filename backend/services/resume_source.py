@@ -1,6 +1,9 @@
 """
-Resume JSON resolution for WBL (candidate_marketing.candidate_json) vs legacy aiprep_tool_resumes.
-session_id is str(candidate_id) for WBL when candidate_id is all digits.
+Resume JSON resolution for AI Prep Tool.
+session_id is always str(candidate_marketing.id).
+
+Primary resume source: candidate_resume.resume_json (keyed by candidate.id)
+Fallback resume source: candidate_marketing.candidate_json
 """
 from __future__ import annotations
 
@@ -9,10 +12,6 @@ from datetime import date
 from typing import Any, List, Optional
 
 from db.connection import get_db_connection
-
-
-def is_wbl_candidate_session(session_id: str) -> bool:
-    return bool(session_id and session_id.isdigit())
 
 
 def _parse_json_field(raw: Any) -> Optional[dict]:
@@ -28,45 +27,58 @@ def _parse_json_field(raw: Any) -> Optional[dict]:
     return None
 
 
+def _get_candidate_id_from_marketing(cursor, marketing_id: int) -> Optional[int]:
+    """Resolve candidate_marketing.id -> candidate.id."""
+    cursor.execute(
+        "SELECT candidate_id FROM candidate_marketing WHERE id = %s",
+        (marketing_id,),
+    )
+    row = cursor.fetchone()
+    return row["candidate_id"] if row else None
+
+
 def fetch_resume_raw(session_id: str) -> Any:
-    """Returns raw JSON column value (dict/str) or None."""
+    """
+    Returns raw JSON column value (dict/str) or None.
+    session_id = str(candidate_marketing.id)
+    Priority: candidate_resume.resume_json > candidate_marketing.candidate_json
+    """
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            if is_wbl_candidate_session(session_id):
-                cid = int(session_id)
-                cursor.execute(
-                    """
-                    SELECT resume_json
-                    FROM candidate_resume
-                    WHERE candidate_id = %s AND resume_json IS NOT NULL
-                    ORDER BY id DESC
-                    LIMIT 1
-                    """,
-                    (cid,),
-                )
-                row = cursor.fetchone()
-                if row and row["resume_json"]:
-                    return row["resume_json"]
+            marketing_id = int(session_id)
+            cid = _get_candidate_id_from_marketing(cursor, marketing_id)
+            if not cid:
+                return None
 
-                cursor.execute(
-                    """
-                    SELECT candidate_json
-                    FROM candidate_marketing
-                    WHERE candidate_id = %s AND candidate_json IS NOT NULL
-                    ORDER BY id DESC
-                    LIMIT 1
-                    """,
-                    (cid,),
-                )
-                row = cursor.fetchone()
-                return row["candidate_json"] if row else None
+            # 1st priority: candidate_resume
             cursor.execute(
-                "SELECT resume_json FROM aiprep_tool_resumes WHERE user_id = %s",
-                (session_id,),
+                """
+                SELECT resume_json
+                FROM candidate_resume
+                WHERE candidate_id = %s AND resume_json IS NOT NULL
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (cid,),
             )
             row = cursor.fetchone()
-            return row["resume_json"] if row else None
+            if row and row["resume_json"]:
+                return row["resume_json"]
+
+            # 2nd priority: candidate_marketing.candidate_json
+            cursor.execute(
+                """
+                SELECT candidate_json
+                FROM candidate_marketing
+                WHERE candidate_id = %s AND candidate_json IS NOT NULL
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (cid,),
+            )
+            row = cursor.fetchone()
+            return row["candidate_json"] if row else None
     finally:
         conn.close()
 
@@ -77,68 +89,45 @@ def fetch_resume_dict(session_id: str) -> Optional[dict]:
 
 
 def save_resume_for_session(session_id: str, resume_data: dict) -> None:
+    """
+    Save resume JSON to candidate_resume (keyed by candidate.id).
+    session_id = str(candidate_marketing.id)
+    """
     resume_json_str = json.dumps(resume_data)
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            if is_wbl_candidate_session(session_id):
-                cid = int(session_id)
+            marketing_id = int(session_id)
+            cid = _get_candidate_id_from_marketing(cursor, marketing_id)
+            if not cid:
+                raise ValueError(f"No candidate found for marketing_id={marketing_id}")
+
+            cursor.execute(
+                "SELECT id FROM candidate_resume WHERE candidate_id = %s ORDER BY id DESC LIMIT 1",
+                (cid,),
+            )
+            row = cursor.fetchone()
+            if row:
                 cursor.execute(
                     """
-                    SELECT id FROM candidate_resume
-                    WHERE candidate_id = %s
-                    ORDER BY id DESC
-                    LIMIT 1
+                    UPDATE candidate_resume
+                    SET resume_json = %s, updated_at = NOW()
+                    WHERE id = %s
                     """,
-                    (cid,),
+                    (resume_json_str, row["id"]),
                 )
-                row = cursor.fetchone()
-                if row:
-                    cursor.execute(
-                        """
-                        UPDATE candidate_resume
-                        SET resume_json = %s, updated_at = NOW()
-                        WHERE id = %s
-                        """,
-                        (resume_json_str, row["id"]),
-                    )
-                else:
-                    file_name = resume_data.get("_meta_filename", f"candidate_{cid}_resume.json")
-                    cursor.execute(
-                        """
-                        INSERT INTO candidate_resume (candidate_id, resume_json, file_name, created_at, updated_at)
-                        VALUES (%s, %s, %s, NOW(), NOW())
-                        """,
-                        (cid, resume_json_str, file_name),
-                    )
             else:
+                file_name = resume_data.get("_meta_filename", f"candidate_{cid}_resume.json")
                 cursor.execute(
                     """
-                    INSERT INTO aiprep_tool_resumes (user_id, resume_json)
-                    VALUES (%s, %s)
-                    ON DUPLICATE KEY UPDATE resume_json = %s
+                    INSERT INTO candidate_resume (candidate_id, resume_json, file_name, created_at, updated_at)
+                    VALUES (%s, %s, %s, NOW(), NOW())
                     """,
-                    (session_id, resume_json_str, resume_json_str),
+                    (cid, resume_json_str, file_name),
                 )
         conn.commit()
     finally:
         conn.close()
-
-
-def _ensure_candidate_marketing_row(cursor, candidate_id: int) -> None:
-    cursor.execute(
-        "SELECT id FROM candidate_marketing WHERE candidate_id = %s LIMIT 1",
-        (candidate_id,),
-    )
-    if cursor.fetchone():
-        return
-    cursor.execute(
-        """
-        INSERT INTO candidate_marketing (candidate_id, start_date, status)
-        VALUES (%s, %s, 'active')
-        """,
-        (candidate_id, date.today()),
-    )
 
 
 def count_llm_keys_for_candidate(candidate_id: int) -> int:
@@ -146,10 +135,7 @@ def count_llm_keys_for_candidate(candidate_id: int) -> int:
     try:
         with conn.cursor() as cursor:
             cursor.execute(
-                """
-                SELECT COUNT(*) AS c FROM candidate_llm_api_keys
-                WHERE candidate_id = %s
-                """,
+                "SELECT COUNT(*) AS c FROM candidate_llm_api_keys WHERE candidate_id = %s",
                 (candidate_id,),
             )
             row = cursor.fetchone()

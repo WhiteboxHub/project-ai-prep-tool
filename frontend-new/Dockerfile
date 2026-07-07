@@ -3,31 +3,32 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json* pnpm-lock.yaml* ./
+RUN corepack enable
 
-# Install dependencies
-RUN npm install
+COPY package.json pnpm-lock.yaml ./
 
-# Copy source files
+RUN pnpm install --frozen-lockfile
+
 COPY . .
 
-# Build both client SPA and server bundle
-RUN npm run build
+ARG VITE_API_URL=http://127.0.0.1:8000
+ENV VITE_API_URL=$VITE_API_URL
 
-# Stage 2: Run environment
+RUN pnpm run build
+
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy built package and output from builder
+RUN corepack enable
+
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 
-# Default Cloud Run port environment
+ARG VITE_API_URL=http://127.0.0.1:8000
 ENV PORT=3000
+ENV VITE_API_URL=$VITE_API_URL
 EXPOSE 3000
 
-# Start production server
 CMD ["node", "dist/server/node-build.mjs"]
