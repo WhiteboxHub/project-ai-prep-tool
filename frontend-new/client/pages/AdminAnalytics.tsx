@@ -46,13 +46,6 @@ interface CandidateRow {
   interview_sessions: number;
   interview_completed: boolean;
   case_studies_generated: number;
-  coderpad_questions_solved: number;
-  coderpad_total_submissions: number;
-  coderpad_pass_rate: number;
-  coderpad_passed: number;
-  coderpad_failed: number;
-  coderpad_languages: string[];
-  coderpad_last_synced: string | null;
   prep_completion_pct: number;
   prep_status_label: string;
 }
@@ -62,11 +55,9 @@ interface Summary {
   active_this_week: number;
   intro_pass_rate: number;
   interview_completion_rate: number;
-  coderpad_adoption_rate: number;
   total_case_studies: number;
   intro_passed_count: number;
   interview_completed_count: number;
-  coderpad_active_count: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -264,27 +255,7 @@ const DetailDrawer = ({
                 </div>
               )}
 
-              {/* CoderPad */}
-              {detail.coderpad && (
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                    <Terminal className="w-4 h-4 text-emerald-500" />
-                    CoderPad Stats
-                  </h4>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      ["Questions Solved", detail.coderpad.questions_solved ?? "—"],
-                      ["Total Submissions", detail.coderpad.total_submissions ?? "—"],
-                      ["Pass Rate", detail.coderpad.pass_rate ? `${detail.coderpad.pass_rate}%` : "—"],
-                    ].map(([k, v]) => (
-                      <div key={k as string} className="bg-emerald-50/50 border border-emerald-200 rounded-lg p-2.5 text-center">
-                        <p className="text-slate-400 text-[10px] uppercase font-bold">{k}</p>
-                        <p className="text-emerald-600 font-extrabold text-lg mt-0.5">{v}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* CoderPad removed */}
 
               {/* Case Studies */}
               {detail.case_studies?.length > 0 && (
@@ -340,7 +311,6 @@ export default function AdminAnalytics() {
   const [search, setSearch] = useState("");
   const [filterIntroPassed, setFilterIntroPassed] = useState<boolean | null>(null);
   const [filterInterviewDone, setFilterInterviewDone] = useState<boolean | null>(null);
-  const [filterHasCoderpad, setFilterHasCoderpad] = useState<boolean | null>(null);
   const [filterActiveWeek, setFilterActiveWeek] = useState<boolean | null>(null);
 
   // Sort
@@ -366,7 +336,6 @@ export default function AdminAnalytics() {
           search: search || undefined,
           filter_intro_passed: filterIntroPassed ?? undefined,
           filter_interview_done: filterInterviewDone ?? undefined,
-          filter_has_coderpad: filterHasCoderpad ?? undefined,
           filter_active_week: filterActiveWeek ?? undefined,
         }),
       ]);
@@ -382,7 +351,7 @@ export default function AdminAnalytics() {
   useEffect(() => {
     if (isAuthorized) load();
     else setLoading(false);
-  }, [isAuthorized, filterIntroPassed, filterInterviewDone, filterHasCoderpad, filterActiveWeek]);
+  }, [isAuthorized, filterIntroPassed, filterInterviewDone, filterActiveWeek]);
 
   // Client-side search + sort
   const displayed = useMemo(() => {
@@ -432,14 +401,14 @@ export default function AdminAnalytics() {
       "Name","Email","WBL Email","Login Count","Last Active",
       "Resume","Project","Intro Attempts","Best Intro Score","Intro Cleared",
       "Questions Answered","Avg Interview Score","Interview Completed",
-      "CoderPad Solved","CoderPad Pass Rate","Case Studies","Prep Status"
+      "Case Studies","Prep Status"
     ];
     const rows = displayed.map(r => [
       r.name, r.email, r.wbl_email, r.login_count, fmtDate(r.last_login),
       r.has_resume ? "Yes" : "No", r.has_project ? "Yes" : "No",
       r.intro_attempts, r.best_intro_score, r.intro_passed ? "Yes" : "No",
       r.questions_answered, r.avg_interview_score, r.interview_completed ? "Yes" : "No",
-      r.coderpad_questions_solved, r.coderpad_pass_rate, r.case_studies_generated,
+      r.case_studies_generated,
       r.prep_status_label
     ]);
     const csv = [headers, ...rows].map(row => row.join(",")).join("\n");
@@ -548,7 +517,7 @@ export default function AdminAnalytics() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4"
+            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4"
           >
             <SummaryCard
               icon={<Users className="w-5 h-5 text-indigo-600" />}
@@ -558,7 +527,6 @@ export default function AdminAnalytics() {
               onClick={() => {
                 setFilterIntroPassed(null);
                 setFilterInterviewDone(null);
-                setFilterHasCoderpad(null);
                 setFilterActiveWeek(null);
               }}
             />
@@ -571,7 +539,6 @@ export default function AdminAnalytics() {
               onClick={() => {
                 setFilterIntroPassed(null);
                 setFilterInterviewDone(null);
-                setFilterHasCoderpad(null);
                 setFilterActiveWeek(true);
               }}
             />
@@ -584,12 +551,11 @@ export default function AdminAnalytics() {
               onClick={() => {
                 setFilterIntroPassed(true);
                 setFilterInterviewDone(null);
-                setFilterHasCoderpad(null);
                 setFilterActiveWeek(null);
               }}
             />
             <SummaryCard
-              icon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+              icon={<CheckCircle2 className="size-5 text-emerald-600" />}
               label="Interview Done"
               value={`${summary.interview_completion_rate}%`}
               sub={`${summary.interview_completed_count} completed`}
@@ -597,25 +563,11 @@ export default function AdminAnalytics() {
               onClick={() => {
                 setFilterIntroPassed(null);
                 setFilterInterviewDone(true);
-                setFilterHasCoderpad(null);
                 setFilterActiveWeek(null);
               }}
             />
             <SummaryCard
-              icon={<Terminal className="w-5 h-5 text-purple-600" />}
-              label="CoderPad Adoption"
-              value={`${summary.coderpad_adoption_rate}%`}
-              sub={`${summary.coderpad_active_count} users`}
-              color="bg-purple-50 border border-purple-100"
-              onClick={() => {
-                setFilterIntroPassed(null);
-                setFilterInterviewDone(null);
-                setFilterHasCoderpad(true);
-                setFilterActiveWeek(null);
-              }}
-            />
-            <SummaryCard
-              icon={<BookOpen className="w-5 h-5 text-rose-500" />}
+              icon={<BookOpen className="size-5 text-rose-500" />}
               label="Case Studies"
               value={summary.total_case_studies}
               sub="generated"
@@ -658,20 +610,14 @@ export default function AdminAnalytics() {
               onChange={setFilterInterviewDone}
             />
             <FilterToggle
-              label="Has CoderPad"
-              value={filterHasCoderpad}
-              onChange={setFilterHasCoderpad}
-              trueColor="bg-purple-50 border-purple-200 text-purple-600 font-semibold"
-            />
-            <FilterToggle
               label="Active 7d"
               value={filterActiveWeek}
               onChange={setFilterActiveWeek}
               trueColor="bg-cyan-50 border-cyan-200 text-cyan-600 font-semibold"
             />
-            {(filterIntroPassed !== null || filterInterviewDone !== null || filterHasCoderpad !== null || filterActiveWeek !== null) && (
+            {(filterIntroPassed !== null || filterInterviewDone !== null || filterActiveWeek !== null) && (
               <button
-                onClick={() => { setFilterIntroPassed(null); setFilterInterviewDone(null); setFilterHasCoderpad(null); setFilterActiveWeek(null); }}
+                onClick={() => { setFilterIntroPassed(null); setFilterInterviewDone(null); setFilterActiveWeek(null); }}
                 className="text-xs text-rose-500 hover:text-rose-600 hover:underline flex items-center gap-1 font-semibold transition-colors"
               >
                 <X className="w-3.5 h-3.5" /> Clear Filters
@@ -705,17 +651,12 @@ export default function AdminAnalytics() {
                     <Th label="Email" />
                     <Th label="Video" />
                     <Th label="Intro Score" k="best_intro_score" center />
-                    <Th label="Questions Solved" k="coderpad_questions_solved" center />
-                    <Th label="Total Attempts" k="coderpad_total_submissions" center />
-                    <Th label="Passed" k="coderpad_passed" center />
-                    <Th label="Failed" k="coderpad_failed" center />
-                    <Th label="Success Rate" k="coderpad_pass_rate" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {displayed.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-20 text-slate-400 text-sm font-semibold">
+                      <td colSpan={4} className="text-center py-20 text-slate-400 text-sm font-semibold">
                         No candidates found matching the active filters.
                       </td>
                     </tr>
@@ -764,59 +705,6 @@ export default function AdminAnalytics() {
                         {/* Intro Score */}
                         <td className="px-4 py-3.5 whitespace-nowrap text-center">
                           <ScoreBadge score={row.best_intro_score} passed={row.intro_passed} />
-                        </td>
-
-                        {/* Questions Solved */}
-                        <td className="px-4 py-3.5 whitespace-nowrap text-center">
-                          {row.coderpad_questions_solved > 0 ? (
-                            <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center font-bold text-xs mx-auto shadow-2xs">
-                              {row.coderpad_questions_solved}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-slate-300 font-medium">0</span>
-                          )}
-                        </td>
-
-                        {/* Total Attempts */}
-                        <td className="px-4 py-3.5 whitespace-nowrap text-center">
-                          <span className="text-xs text-slate-600 font-semibold">{row.coderpad_total_submissions}</span>
-                        </td>
-
-                        {/* Passed */}
-                        <td className="px-4 py-3.5 whitespace-nowrap text-center">
-                          {row.coderpad_passed > 0 ? (
-                            <span className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 font-bold text-[10px]">
-                              {row.coderpad_passed}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-slate-300 font-medium">0</span>
-                          )}
-                        </td>
-
-                        {/* Failed */}
-                        <td className="px-4 py-3.5 whitespace-nowrap text-center">
-                          {row.coderpad_failed > 0 ? (
-                            <span className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-bold text-[10px]">
-                              {row.coderpad_failed}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-slate-300 font-medium">0</span>
-                          )}
-                        </td>
-
-                        {/* Success Rate */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          <div className="flex items-center gap-2 justify-end max-w-[140px]">
-                            <div className="w-16 bg-slate-100 h-1.5 rounded-full overflow-hidden border border-slate-200/50">
-                              <div
-                                className="h-full rounded-full bg-indigo-500 transition-all duration-300"
-                                style={{ width: `${row.coderpad_pass_rate}%` }}
-                              />
-                            </div>
-                            <span className="text-xs font-bold text-slate-700 w-8 text-right">
-                              {Math.round(row.coderpad_pass_rate)}%
-                            </span>
-                          </div>
                         </td>
                       </motion.tr>
                     ))

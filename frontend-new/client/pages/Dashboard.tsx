@@ -414,7 +414,6 @@ export default function Dashboard() {
               { label: "View Progress Report", icon: <BarChart2 className="w-5 h-5" />, href: "/progress", color: "from-blue-500/20 to-blue-600/10", iconColor: "text-blue-400" },
               { label: "View Documents", icon: <BookOpen className="w-5 h-5" />, href: "/documents", color: "from-purple-500/20 to-purple-600/10", iconColor: "text-purple-400" },
               { label: "Start Mock Interview", icon: <Star className="w-5 h-5" />, href: "/interview-select", color: "from-amber-500/20 to-amber-600/10", iconColor: "text-amber-400" },
-              { label: "CoderPad Assessment", icon: <Terminal className="w-5 h-5" />, href: "/coderpad-assessment", color: "from-emerald-500/20 to-cyan-500/10", iconColor: "text-emerald-400" },
             ].map((action, i) => (
               <motion.button
                 key={i}

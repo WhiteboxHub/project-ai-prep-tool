@@ -141,36 +141,26 @@ def get_summary(admin_key: Optional[str] = Query(None), x_admin_key: Optional[st
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            # Total candidates
-            cursor.execute("SELECT COUNT(*) AS total FROM aiprep_tool_candidates")
+            # Total candidates registered with AI Prep Tool (have an evaluations row)
+            cursor.execute("SELECT COUNT(*) AS total FROM aiprep_tool_evaluations")
             total_candidates = cursor.fetchone()["total"]
 
-            # Active this week
+            # Active this week (last_login within 7 days)
             cursor.execute("""
                 SELECT COUNT(*) AS active
-                FROM aiprep_tool_candidates
+                FROM aiprep_tool_evaluations
                 WHERE last_login >= DATE_SUB(NOW(), INTERVAL 7 DAY)
             """)
             active_week = cursor.fetchone()["active"]
 
-            # Intro pass rate
+            # Intro pass rate (intro_score >= 75)
             cursor.execute("""
-                SELECT
-                    COUNT(DISTINCT user_id) AS passed_users
+                SELECT COUNT(*) AS passed_count
                 FROM aiprep_tool_evaluations
-                WHERE type = 'intro' AND passed = 1
+                WHERE intro_score >= 75
             """)
-            intro_passed_users = cursor.fetchone()["passed_users"]
+            intro_passed_users = cursor.fetchone()["passed_count"]
             intro_pass_rate = round(intro_passed_users / total_candidates * 100, 1) if total_candidates else 0
-
-            # Interview completion rate
-            cursor.execute("""
-                SELECT COUNT(DISTINCT user_id) AS completed
-                FROM aiprep_tool_evaluations
-                WHERE type = 'interview_complete'
-            """)
-            interview_completed = cursor.fetchone()["completed"]
-            interview_completion_rate = round(interview_completed / total_candidates * 100, 1) if total_candidates else 0
 
             # CoderPad adoption (candidates with cache entries)
             cursor.execute("SELECT COUNT(*) AS cp_users FROM aiprep_tool_coderpad_cache WHERE questions_solved > 0")
@@ -185,11 +175,9 @@ def get_summary(admin_key: Optional[str] = Query(None), x_admin_key: Optional[st
             "total_candidates": total_candidates,
             "active_this_week": active_week,
             "intro_pass_rate": intro_pass_rate,
-            "interview_completion_rate": interview_completion_rate,
             "coderpad_adoption_rate": cp_adoption_rate,
             "total_case_studies": case_studies,
             "intro_passed_count": intro_passed_users,
-            "interview_completed_count": interview_completed,
             "coderpad_active_count": cp_users,
         }
     except Exception as e:
@@ -207,7 +195,6 @@ def get_candidates(
     x_admin_key: Optional[str] = Header(None),
     search: Optional[str] = Query(None),
     filter_intro_passed: Optional[bool] = Query(None),
-    filter_interview_done: Optional[bool] = Query(None),
     filter_has_coderpad: Optional[bool] = Query(None),
     filter_active_week: Optional[bool] = Query(None),
 ):
@@ -218,68 +205,29 @@ def get_candidates(
         with conn.cursor() as cursor:
             cursor.execute("""
                 SELECT
-                    c.id,
-                    c.user_id,
-                    COALESCE(NULLIF(cand.full_name, ''), NULLIF(c.name, '')) AS name,
-                    COALESCE(NULLIF(cand.email, ''), NULLIF(c.email, '')) AS email,
-                    c.wbl_email,
-                    c.login_count,
-                    c.created_at,
-                    c.last_login,
-                    c.extraction_status,
+                    cm.id              AS marketing_id,
+                    cm.candidate_id,
+                    c.full_name        AS name,
+                    c.email,
+                    cm.email           AS wbl_email,
+                    ev.login_count,
+                    ev.last_login,
+                    ev.intro_score,
+                    ev.intro_video     AS latest_video_url,
+                    ev.intro_status,
+                    ev.created_at,
 
                     -- Resume
-                    (SELECT COUNT(*) FROM aiprep_tool_resumes r WHERE r.user_id = c.user_id) AS has_resume,
-                    (SELECT r.resume_json FROM aiprep_tool_resumes r WHERE r.user_id = c.user_id) AS resume_json,
+                    (SELECT COUNT(*) FROM candidate_resume cr WHERE cr.candidate_id = cm.candidate_id) AS has_resume,
+                    (SELECT cr.resume_json FROM candidate_resume cr WHERE cr.candidate_id = cm.candidate_id ORDER BY cr.id DESC LIMIT 1) AS resume_json,
 
-                    -- Project
-                    (SELECT COUNT(*) FROM aiprep_tool_project_context p WHERE p.user_id = c.user_id) AS has_project,
-
-                    -- Intro attempts
-                    (SELECT COUNT(*) FROM aiprep_tool_evaluations e
-                     WHERE e.user_id = c.user_id AND e.type = 'intro') AS intro_attempts,
-
-                    -- Best intro score
-                    (SELECT MAX(e.score) FROM aiprep_tool_evaluations e
-                     WHERE e.user_id = c.user_id AND e.type = 'intro') AS best_intro_score,
-
-                    -- Intro passed (any attempt)
-                    (SELECT MAX(CASE WHEN e.passed THEN 1 ELSE 0 END)
-                     FROM aiprep_tool_evaluations e
-                     WHERE e.user_id = c.user_id AND e.type = 'intro') AS intro_passed,
-
-                    -- Latest intro score
-                    (SELECT e.score FROM aiprep_tool_evaluations e
-                     WHERE e.user_id = c.user_id AND e.type = 'intro'
-                     ORDER BY e.created_at DESC LIMIT 1) AS latest_intro_score,
-
-                    -- Latest video URL
-                    (SELECT e.video_url FROM aiprep_tool_evaluations e
-                     WHERE e.user_id = c.user_id AND e.type = 'intro' AND e.video_url IS NOT NULL
-                     ORDER BY e.created_at DESC LIMIT 1) AS latest_video_url,
-
-                    -- Interview questions answered
-                    (SELECT COUNT(*) FROM aiprep_tool_evaluations e
-                     WHERE e.user_id = c.user_id AND e.type = 'interview_answer') AS questions_answered,
-
-                    -- Avg interview score (stored as 0-10, * 10 to make /100)
-                    (SELECT ROUND(AVG(e.score) * 10, 1) FROM aiprep_tool_evaluations e
-                     WHERE e.user_id = c.user_id AND e.type = 'interview_answer') AS avg_interview_score,
-
-                    -- Total interview attempts (sessions)
-                    (SELECT COUNT(*) FROM aiprep_tool_evaluations e
-                     WHERE e.user_id = c.user_id AND e.type = 'interview_complete') AS interview_sessions,
-
-                    -- Interview completed
-                    (SELECT MAX(CASE WHEN e.type = 'interview_complete' THEN 1 ELSE 0 END)
-                     FROM aiprep_tool_evaluations e
-                     WHERE e.user_id = c.user_id) AS interview_completed,
+                    -- Project context
+                    (SELECT COUNT(*) FROM aiprep_tool_project_context p WHERE p.candidate_id = cm.id) AS has_project,
 
                     -- Case studies
-                    (SELECT COUNT(*) FROM aiprep_tool_case_studies cs
-                     WHERE cs.user_id = c.user_id) AS case_studies_generated,
+                    (SELECT COUNT(*) FROM aiprep_tool_case_studies cs WHERE cs.candidate_id = cm.id) AS case_studies_generated,
 
-                    -- CoderPad cache
+                    -- CoderPad cache (by wbl_email = cm.email)
                     cp.questions_solved,
                     cp.total_submissions AS cp_total_submissions,
                     cp.pass_rate AS cp_pass_rate,
@@ -288,10 +236,12 @@ def get_candidates(
                     cp.languages_used AS cp_languages,
                     cp.last_synced AS cp_last_synced
 
-                FROM aiprep_tool_candidates c
-                LEFT JOIN candidate cand ON (c.user_id REGEXP '^[0-9]+$' AND CAST(c.user_id AS UNSIGNED) = cand.id) OR cand.email = c.wbl_email OR cand.email = c.email
-                LEFT JOIN aiprep_tool_coderpad_cache cp ON cp.wbl_email = c.wbl_email
-                ORDER BY c.last_login DESC
+                FROM candidate_marketing cm
+                JOIN candidate c ON c.id = cm.candidate_id
+                LEFT JOIN aiprep_tool_evaluations ev ON ev.candidate_id = cm.id
+                LEFT JOIN aiprep_tool_coderpad_cache cp ON cp.wbl_email = cm.email
+                WHERE cm.status = 'active'
+                ORDER BY ev.last_login DESC
             """)
             rows = cursor.fetchall()
 
@@ -306,18 +256,17 @@ def get_candidates(
                 except Exception:
                     langs = []
 
+            intro_passed = (row.get("intro_score") or 0) >= 75
             pct, label = _prep_status(
                 row.get("has_resume"),
                 row.get("has_project"),
-                row.get("intro_passed"),
-                row.get("interview_completed"),
+                intro_passed,
+                False,  # interview_completed removed from new schema
             )
 
-            # Serialize datetimes
             def dtstr(v):
                 return v.isoformat() if v else None
 
-            # Attempt to extract candidate name and email from resume_json if missing/generic
             resume_name, resume_email = _extract_from_resume(row.get("resume_json"))
 
             disp_name = row.get("name")
@@ -333,29 +282,22 @@ def get_candidates(
                 disp_email = row.get("wbl_email") or "—"
 
             entry = {
-                "id": row["id"],
-                "user_id": row["user_id"],
+                "id": row["marketing_id"],
+                "candidate_id": row["candidate_id"],
                 "name": disp_name,
                 "email": disp_email,
                 "wbl_email": row.get("wbl_email") or "—",
                 "login_count": row.get("login_count") or 0,
                 "created_at": dtstr(row.get("created_at")),
                 "last_login": dtstr(row.get("last_login")),
-                "extraction_status": row.get("extraction_status") or "pending",
                 # Resume / Project
                 "has_resume": bool(row.get("has_resume")),
                 "has_project": bool(row.get("has_project")),
                 # Intro
-                "intro_attempts": row.get("intro_attempts") or 0,
-                "best_intro_score": row.get("best_intro_score") or 0,
-                "latest_intro_score": row.get("latest_intro_score") or 0,
-                "intro_passed": bool(row.get("intro_passed")),
+                "intro_score": row.get("intro_score") or 0,
+                "intro_status": row.get("intro_status") or "not_started",
+                "intro_passed": intro_passed,
                 "latest_video_url": row.get("latest_video_url"),
-                # Interview
-                "questions_answered": row.get("questions_answered") or 0,
-                "avg_interview_score": row.get("avg_interview_score") or 0,
-                "interview_sessions": row.get("interview_sessions") or 0,
-                "interview_completed": bool(row.get("interview_completed")),
                 # Case studies
                 "case_studies_generated": row.get("case_studies_generated") or 0,
                 # CoderPad
@@ -385,11 +327,6 @@ def get_candidates(
         elif filter_intro_passed is False:
             results = [r for r in results if not r["intro_passed"]]
 
-        if filter_interview_done is True:
-            results = [r for r in results if r["interview_completed"]]
-        elif filter_interview_done is False:
-            results = [r for r in results if not r["interview_completed"]]
-
         if filter_has_coderpad is True:
             results = [r for r in results if r["coderpad_questions_solved"] > 0]
         elif filter_has_coderpad is False:
@@ -411,9 +348,9 @@ def get_candidates(
 
 # ─── GET /api/analytics/candidates/{user_id} ──────────────────────────────────
 
-@router.get("/candidates/{user_id}")
+@router.get("/candidates/{candidate_id}")
 def get_candidate_detail(
-    user_id: str,
+    candidate_id: int,
     admin_key: Optional[str] = Query(None),
     x_admin_key: Optional[str] = Header(None),
 ):
@@ -422,54 +359,47 @@ def get_candidate_detail(
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            # Candidate info
+            # Get candidate info via candidate_marketing
             cursor.execute("""
-                SELECT 
-                    c.*,
-                    COALESCE(NULLIF(cand.full_name, ''), NULLIF(c.name, '')) AS joined_name,
-                    COALESCE(NULLIF(cand.email, ''), NULLIF(c.email, ''), NULLIF(c.wbl_email, '')) AS joined_email
-                FROM aiprep_tool_candidates c
-                LEFT JOIN candidate cand ON 
-                    (c.user_id REGEXP '^[0-9]+$' AND CAST(c.user_id AS UNSIGNED) = cand.id) 
-                    OR cand.email = c.wbl_email 
-                    OR cand.email = c.email 
-                    OR cand.email = c.name
-                WHERE c.user_id = %s
-            """, (user_id,))
+                SELECT
+                    cm.id AS marketing_id,
+                    cm.candidate_id,
+                    c.full_name AS name,
+                    c.email,
+                    cm.email AS wbl_email,
+                    ev.login_count,
+                    ev.last_login,
+                    ev.intro_score,
+                    ev.intro_video,
+                    ev.intro_status,
+                    ev.created_at
+                FROM candidate_marketing cm
+                JOIN candidate c ON c.id = cm.candidate_id
+                LEFT JOIN aiprep_tool_evaluations ev ON ev.candidate_id = cm.id
+                WHERE cm.id = %s
+            """, (candidate_id,))
             candidate = cursor.fetchone()
             if not candidate:
                 raise HTTPException(status_code=404, detail="Candidate not found")
 
-            # Get resume JSON if any to extract details
-            cursor.execute("SELECT resume_json FROM aiprep_tool_resumes WHERE user_id = %s", (user_id,))
+            marketing_id = candidate["marketing_id"]
+            cid = candidate["candidate_id"]
+
+            # Resume JSON
+            cursor.execute(
+                "SELECT resume_json FROM candidate_resume WHERE candidate_id = %s ORDER BY id DESC LIMIT 1",
+                (cid,)
+            )
             res_row = cursor.fetchone()
             resume_json = res_row["resume_json"] if res_row else None
-
-            # All intro evaluations (timeline)
-            cursor.execute("""
-                SELECT score, passed, feedback, created_at
-                FROM aiprep_tool_evaluations
-                WHERE user_id = %s AND type = 'intro'
-                ORDER BY created_at ASC
-            """, (user_id,))
-            intro_history = cursor.fetchall()
-
-            # All interview answer evaluations
-            cursor.execute("""
-                SELECT score, feedback, raw_response, created_at
-                FROM aiprep_tool_evaluations
-                WHERE user_id = %s AND type = 'interview_answer'
-                ORDER BY created_at ASC
-            """, (user_id,))
-            interview_history = cursor.fetchall()
 
             # Case studies
             cursor.execute("""
                 SELECT topic, created_at
                 FROM aiprep_tool_case_studies
-                WHERE user_id = %s
+                WHERE candidate_id = %s
                 ORDER BY created_at DESC
-            """, (user_id,))
+            """, (marketing_id,))
             case_studies = cursor.fetchall()
 
             # CoderPad cache
@@ -495,25 +425,6 @@ def get_candidate_detail(
             except Exception:
                 return {}
 
-        # Parse intro history
-        intro_list = []
-        for e in intro_history:
-            intro_list.append({
-                "score": e.get("score") or 0,
-                "passed": bool(e.get("passed")),
-                "feedback": parse_json_field(e.get("feedback")),
-                "created_at": dtstr(e.get("created_at")),
-            })
-
-        # Parse interview history
-        interview_list = []
-        for e in interview_history:
-            interview_list.append({
-                "score": e.get("score") or 0,
-                "feedback": parse_json_field(e.get("feedback")),
-                "created_at": dtstr(e.get("created_at")),
-            })
-
         cp_out = {}
         if cp_data:
             cp_out = {
@@ -525,13 +436,13 @@ def get_candidate_detail(
             }
 
         resume_name, resume_email = _extract_from_resume(resume_json)
-        disp_name = candidate.get("joined_name")
+        disp_name = candidate.get("name")
         if (not disp_name or disp_name == "Candidate" or disp_name == "—") and resume_name:
             disp_name = resume_name
         if not disp_name:
             disp_name = "—"
 
-        disp_email = candidate.get("joined_email")
+        disp_email = candidate.get("email")
         if (not disp_email or disp_email == "—") and resume_email:
             disp_email = resume_email
         if not disp_email or disp_email == "—":
@@ -539,16 +450,18 @@ def get_candidate_detail(
 
         return {
             "candidate": {
-                "user_id": candidate.get("user_id"),
+                "marketing_id": candidate.get("marketing_id"),
+                "candidate_id": candidate.get("candidate_id"),
                 "name": disp_name,
                 "email": disp_email,
                 "wbl_email": candidate.get("wbl_email") or "—",
                 "login_count": candidate.get("login_count") or 0,
                 "created_at": dtstr(candidate.get("created_at")),
                 "last_login": dtstr(candidate.get("last_login")),
+                "intro_score": candidate.get("intro_score"),
+                "intro_video": candidate.get("intro_video"),
+                "intro_status": candidate.get("intro_status") or "not_started",
             },
-            "intro_history": intro_list,
-            "interview_history": interview_list,
             "case_studies": [{"topic": cs.get("topic"), "created_at": dtstr(cs.get("created_at"))} for cs in case_studies],
             "coderpad": cp_out,
         }
@@ -564,9 +477,9 @@ def get_candidate_detail(
 
 # ─── POST /api/analytics/sync-coderpad/{user_id} ──────────────────────────────
 
-@router.post("/sync-coderpad/{user_id}")
+@router.post("/sync-coderpad/{candidate_id}")
 def sync_coderpad(
-    user_id: str,
+    candidate_id: int,
     admin_key: Optional[str] = Query(None),
     x_admin_key: Optional[str] = Header(None),
 ):
@@ -576,12 +489,15 @@ def sync_coderpad(
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            cursor.execute("SELECT wbl_email FROM aiprep_tool_candidates WHERE user_id = %s", (user_id,))
+            cursor.execute(
+                "SELECT email FROM candidate_marketing WHERE id = %s",
+                (candidate_id,)
+            )
             row = cursor.fetchone()
-        if not row or not row.get("wbl_email"):
+        if not row or not row.get("email"):
             return {"synced": False, "reason": "No WBL email for this candidate"}
-        _sync_coderpad_for_email(conn, row["wbl_email"])
-        return {"synced": True, "wbl_email": row["wbl_email"]}
+        _sync_coderpad_for_email(conn, row["email"])
+        return {"synced": True, "wbl_email": row["email"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
