@@ -2,7 +2,8 @@
 import threading
 import os
 from time import sleep
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -28,32 +29,51 @@ def startup():
         for i in range(5):
             try:
                 init_db()
-                print("✅ DB Connection established and tables initialized.")
+                print("DB connection established and tables initialized.")
                 break
             except Exception as e:
-                print(f"❌ Database initialization failed on attempt {i+1}:", e)
+                print(f"Database initialization failed on attempt {i+1}:", e)
                 sleep(5)
     threading.Thread(target=init).start()
 
 # CORS configuration — includes WBL frontend origins so the setup wizard can call this backend
-origins = [
+default_origins = [
     "https://ai-prep.whitebox-learning.com",
     "https://whitebox-learning.com",
     "https://www.whitebox-learning.com",
     "https://wbl-frontend-560359652969.us-central1.run.app",
+    "http://localhost:8083",
+    "http://localhost:8082",
+    "http://localhost:8081",
+    "http://localhost:8080",
     "http://localhost:3001",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "*"
 ]
+env_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+origins = sorted(set(default_origins + env_origins))
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    print(f"Unhandled error for {request.method} {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc) or "Internal server error"},
+    )
 
 # Route Imports (The new partitioned MVC framework)
 app.include_router(setup.router)

@@ -42,18 +42,25 @@ def _build_connect_kwargs() -> dict:
 # ── pool (created lazily on first use) ──────────────────────────────────────
 
 _pool = None
+_pool_unavailable = False
 
 
 def _get_pool():
-    global _pool
+    global _pool, _pool_unavailable
     if _pool is not None:
         return _pool
+    if _pool_unavailable:
+        return None
 
     try:
         from dbutils.pooled_db import PooledDB  # type: ignore
     except ImportError:
-        # Fallback: DBUtils < 2.0 used a different import path
-        from DBUtils.PooledDB import PooledDB  # type: ignore
+        try:
+            # Fallback: DBUtils < 2.0 used a different import path
+            from DBUtils.PooledDB import PooledDB  # type: ignore
+        except ImportError:
+            _pool_unavailable = True
+            return None
 
     kwargs = _build_connect_kwargs()
     _pool = PooledDB(
@@ -70,6 +77,17 @@ def _get_pool():
 
 
 def get_db_connection():
-    """Return a pooled connection. Callers must still call .close() which
-    returns the connection to the pool rather than actually closing it."""
-    return _get_pool().connection()
+    """Return a DB connection.
+
+    Uses the DBUtils pool when available. In local development, fall back to a
+    direct PyMySQL connection if DBUtils has not been installed yet.
+    """
+    pool = _get_pool()
+    if pool is not None:
+        return pool.connection()
+
+    kwargs = _build_connect_kwargs()
+    return pymysql.connect(
+        cursorclass=pymysql.cursors.DictCursor,
+        **kwargs,
+    )

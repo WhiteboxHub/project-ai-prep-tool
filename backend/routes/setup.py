@@ -205,8 +205,9 @@ def init_session(data: SetupInit):
     session_id is always str(candidate_marketing.id).
     Tracks login in aiprep_tool_evaluations.
     """
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()
         with conn.cursor() as cursor:
             marketing_id = _resolve_or_create_session(cursor, data)
 
@@ -216,10 +217,14 @@ def init_session(data: SetupInit):
     except HTTPException:
         raise
     except Exception as e:
-        print("ERROR:", str(e))
-        raise HTTPException(500, "Failed to initialize session")
+        print("ERROR init_session:", str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to initialize session. Check database configuration: {e}",
+        )
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 
 async def extract_latest_company_bg(session_id: str, resume_json: dict):
@@ -355,9 +360,10 @@ async def upload_resume(
     session_id: str = Form(...),
     file: UploadFile = File(...),
 ):
-    conn = get_db_connection()
+    conn = None
 
     try:
+        conn = get_db_connection()
         content = await file.read()
         resume_data = json.loads(content)
         resume_data["_meta_filename"] = file.filename
@@ -373,13 +379,15 @@ async def upload_resume(
         raise HTTPException(500, "Resume upload failed")
 
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 
 @router.get("/summary")
 def get_resume_summary(session_id: str):
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()
         with conn.cursor() as cursor:
             # session_id = str(candidate_marketing.id)
             marketing_id = int(session_id)
@@ -453,7 +461,8 @@ def get_resume_summary(session_id: str):
         print("ERROR:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 
 @router.post("/sync-from-wbl")
@@ -508,8 +517,9 @@ async def sync_from_wbl(data: SyncFromWblRequest):
 @router.post("/init-and-summary")
 def init_and_summary(data: SetupInit):
     """Combined endpoint to initialize a session and fetch the summary."""
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()
         with conn.cursor() as cursor:
             marketing_id = _resolve_or_create_session(cursor, data)
 
@@ -578,19 +588,22 @@ def init_and_summary(data: SetupInit):
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        err_msg = traceback.format_exc()
-        from fastapi.responses import JSONResponse
-        return JSONResponse(status_code=500, content={"detail": err_msg})
+        print("ERROR init_and_summary:", str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to initialize session. Check database configuration: {e}",
+        )
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 
 @router.delete("/llm-key/{key_id}")
 def delete_llm_key(key_id: int, session_id: str):
     """Remove a row from candidate_llm_api_keys by key_id."""
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()
         marketing_id = int(session_id)
         with conn.cursor() as cursor:
             # Verify the key belongs to this candidate_marketing entry
@@ -617,7 +630,8 @@ def delete_llm_key(key_id: int, session_id: str):
         print("ERROR delete_llm_key:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 
 @router.get("/extraction-status")
@@ -629,8 +643,9 @@ def get_extraction_status(session_id: str):
         return {"status": in_memory}
 
     # 2. Fallback to DB check
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()
         with conn.cursor() as cursor:
             marketing_id = int(session_id)
             cursor.execute(
@@ -643,4 +658,5 @@ def get_extraction_status(session_id: str):
         print("ERROR GETTING STATUS:", str(e))
         return {"status": "completed"}
     finally:
-        conn.close()
+        if conn:
+            conn.close()

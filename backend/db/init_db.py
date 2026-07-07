@@ -36,6 +36,53 @@ def init_db():
         conn = get_db_connection()
 
         with conn.cursor() as cursor:
+            # ---------------------------
+            # 0. MINIMAL WBL BASE TABLES
+            # ---------------------------
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS batch (
+                    batchid INT NOT NULL AUTO_INCREMENT,
+                    PRIMARY KEY (batchid)
+                )
+            """)
+
+            cursor.execute("""
+                INSERT INTO batch (batchid)
+                SELECT 150
+                WHERE NOT EXISTS (SELECT 1 FROM batch WHERE batchid = 150)
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS candidate (
+                    id INT NOT NULL AUTO_INCREMENT,
+                    full_name VARCHAR(255),
+                    email VARCHAR(255) UNIQUE,
+                    batchid INT DEFAULT 150,
+                    status VARCHAR(50) DEFAULT 'active',
+                    created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+                    PRIMARY KEY (id),
+                    INDEX idx_candidate_email (email)
+                )
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS candidate_marketing (
+                    id INT NOT NULL AUTO_INCREMENT,
+                    candidate_id INT NOT NULL,
+                    email VARCHAR(255),
+                    status VARCHAR(50) DEFAULT 'active',
+                    start_date DATE NULL,
+                    candidate_json JSON NULL,
+                    created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+                    PRIMARY KEY (id),
+                    INDEX idx_candidate_marketing_candidate (candidate_id),
+                    INDEX idx_candidate_marketing_email (email)
+                )
+            """)
 
             # ---------------------------
             # 1. EVALUATIONS (per-candidate intro tracking)

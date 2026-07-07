@@ -2,6 +2,11 @@
 from cryptography.fernet import Fernet
 import os
 import base64
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 SECRET_KEY = os.getenv("ENCRYPTION_KEY")
 
