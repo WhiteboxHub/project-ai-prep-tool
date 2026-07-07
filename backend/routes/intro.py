@@ -237,8 +237,12 @@ async def evaluate_audio_intro(
         if not api_key:
             raise Exception("User not initialized")
 
-        os.makedirs("/tmp/uploads", exist_ok=True)
-        file_path = f"/tmp/uploads/{uuid.uuid4()}_{audio.filename}"
+        os.makedirs("uploads", exist_ok=True)
+        filename = f"{uuid.uuid4()}_{audio.filename}"
+        if not filename.endswith(".webm") and not filename.endswith(".mp4"):
+            filename += ".webm"
+        file_path = f"uploads/{filename}"
+        video_url = f"/uploads/{filename}"
 
         with open(file_path, "wb") as f:
             f.write(await audio.read())
@@ -278,13 +282,14 @@ async def evaluate_audio_intro(
 
         with conn.cursor() as cursor:
             cursor.execute("""
-                INSERT INTO aiprep_tool_evaluations (user_id, type, score, feedback)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO aiprep_tool_evaluations (user_id, type, score, feedback, video_url)
+                VALUES (%s, %s, %s, %s, %s)
             """, (
                 session_id,
                 "intro",
                 db_score,
-                json.dumps(eval_result)
+                json.dumps(eval_result),
+                video_url
             ))
 
         conn.commit()
@@ -292,7 +297,8 @@ async def evaluate_audio_intro(
         return {
             "transcript": transcript,
             "evaluation": eval_result,
-            "score": db_score
+            "score": db_score,
+            "video_url": video_url
         }
 
     except Exception as e:
@@ -302,8 +308,6 @@ async def evaluate_audio_intro(
     finally:
         if conn:
             conn.close()
-        if file_path and os.path.exists(file_path):
-            os.remove(file_path)
 
 
 # -----------------------------------
@@ -522,7 +526,7 @@ def get_intro_history(session_id: str):
 
         with conn.cursor() as cursor:
             cursor.execute("""
-                SELECT id, score, feedback, created_at
+                SELECT id, score, feedback, video_url, created_at
                 FROM aiprep_tool_evaluations
                 WHERE user_id = %s AND type = 'intro'
                 ORDER BY created_at DESC

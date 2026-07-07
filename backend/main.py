@@ -4,6 +4,7 @@ import os
 from time import sleep
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 # Load .env locally
@@ -11,7 +12,7 @@ if os.environ.get("K_SERVICE") is None:
     load_dotenv()
 
 from db.init_db import init_db
-from routes import setup, intro, project, interview, context, resume, case_study, candidate_setup, report
+from routes import setup, intro, project, interview, context, resume, case_study, candidate_setup, report, analytics
 
 app = FastAPI(
     title="AI Candidate Evaluation System",
@@ -66,6 +67,13 @@ app.include_router(case_study.router)
 
 # Candidate Setup — migrated from wbl-backend
 app.include_router(candidate_setup.router)
+
+# Admin Analytics — protected by ADMIN_KEY
+app.include_router(analytics.router)
+
+# Serve static uploads directory (recorded intro videos)
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 @app.get("/")
 def root():

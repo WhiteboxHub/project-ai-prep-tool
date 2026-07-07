@@ -237,3 +237,43 @@ export function getMockAnswers(sessionId: string) {
 export function getFinalReport(sessionId: string) {
   return get("/api/report", { session_id: sessionId });
 }
+
+// ─── Analytics ────────────────────────────────────────────────────────────────
+
+export function getAnalyticsSummary(adminKey: string) {
+  return get("/api/analytics/summary", { admin_key: adminKey });
+}
+
+export function getAnalyticsCandidates(
+  adminKey: string,
+  filters?: {
+    search?: string;
+    filter_intro_passed?: boolean;
+    filter_interview_done?: boolean;
+    filter_has_coderpad?: boolean;
+    filter_active_week?: boolean;
+  }
+) {
+  const params: Record<string, string> = { admin_key: adminKey };
+  if (filters) {
+    if (filters.search !== undefined) params.search = filters.search;
+    if (filters.filter_intro_passed !== undefined)
+      params.filter_intro_passed = String(filters.filter_intro_passed);
+    if (filters.filter_interview_done !== undefined)
+      params.filter_interview_done = String(filters.filter_interview_done);
+    if (filters.filter_has_coderpad !== undefined)
+      params.filter_has_coderpad = String(filters.filter_has_coderpad);
+    if (filters.filter_active_week !== undefined)
+      params.filter_active_week = String(filters.filter_active_week);
+  }
+  return get("/api/analytics/candidates", params);
+}
+
+export function getAnalyticsCandidateDetail(userId: string, adminKey: string) {
+  return get(`/api/analytics/candidates/${userId}`, { admin_key: adminKey });
+}
+
+export function syncCoderpad(userId: string, adminKey: string) {
+  return post(`/api/analytics/sync-coderpad/${userId}?admin_key=${adminKey}`, {});
+}
+

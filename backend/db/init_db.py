@@ -274,6 +274,22 @@ def init_db():
             """)
 
             # ---------------------------
+            # 9. CODERPAD CACHE (WBL sync)
+            # ---------------------------
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS aiprep_tool_coderpad_cache (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    wbl_email VARCHAR(255) UNIQUE NOT NULL,
+                    questions_solved INT DEFAULT 0,
+                    total_submissions INT DEFAULT 0,
+                    pass_rate DECIMAL(5,2) DEFAULT 0.00,
+                    languages_used JSON,
+                    last_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_coderpad_cache_email (wbl_email)
+                )
+            """)
+
+            # ---------------------------
             # 6. CANDIDATE RESUME (from wbl-backend migration)
             # ---------------------------
             cursor.execute("""
@@ -390,6 +406,12 @@ def init_db():
         try:
             with conn.cursor() as cursor:
                 cursor.execute(f"ALTER TABLE aiprep_tool_project_context ADD COLUMN agent_usage VARCHAR(50)")
+        except Exception:
+            pass
+
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("ALTER TABLE aiprep_tool_evaluations ADD COLUMN video_url VARCHAR(1024)")
         except Exception:
             pass
 
