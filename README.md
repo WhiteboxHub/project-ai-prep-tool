@@ -103,13 +103,15 @@ docker build --build-arg VITE_API_URL=http://127.0.0.1:8000 -t ai-prep-frontend 
 
 ## Backend CI/CD
 
-The repository has one GitHub Actions workflow for the backend:
+The repository has separate GitHub Actions workflows for backend CI and backend
+deployment:
 
 ```text
-.github/workflows/backend-ci-cd.yml
+.github/workflows/backend-ci.yml
+.github/workflows/backend-cd.yml
 ```
 
-The workflow is path-filtered. Frontend-only changes do not run CI/CD.
+Both workflows are path-filtered. Frontend-only changes do not run CI/CD.
 
 Backend workflow:
 
@@ -123,6 +125,10 @@ backend/** changed
 
 Pull requests into `dev` or `main` run checks and Docker build validation only.
 Pushes to `main` deploy the backend to Cloud Run.
+
+The CI and CD workflows are split so pull requests only show the CI check. The
+deploy workflow is not part of PR runs, so GitHub will not show a skipped deploy
+check on PRs.
 
 Expected branch flow:
 
