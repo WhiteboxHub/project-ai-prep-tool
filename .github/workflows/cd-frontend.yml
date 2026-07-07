@@ -2,9 +2,9 @@ name: CD - Frontend (Cloud Run)
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
-      - 'frontend-new/**'
+      - "frontend-new/**"
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
