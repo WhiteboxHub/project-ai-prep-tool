@@ -215,8 +215,8 @@ async def generate_typed_case_study(req: GenerateTypedRequest):
                 SELECT company_name, domain, product, business_problem, key_problems,
                        ai_techniques, agent_usage, role, challenges_learnings, impact,
                        future_roadmap, architecture, tech_stack
-                FROM aiprep_tool_project_context WHERE user_id = %s
-            """, (req.session_id,))
+                FROM aiprep_tool_project_context WHERE candidate_id = %s
+            """, (int(req.session_id),))
             ctx = cursor.fetchone()
 
         if not ctx:
@@ -294,9 +294,9 @@ Now generate the complete case study following the structure defined in your ins
         # Save to documents
         with conn.cursor() as cursor:
             cursor.execute("""
-                INSERT INTO aiprep_tool_case_studies (user_id, content, topic)
+                INSERT INTO aiprep_tool_case_studies (candidate_id, content, topic)
                 VALUES (%s, %s, %s)
-            """, (req.session_id, res_str, topic_name))
+            """, (int(req.session_id), res_str, topic_name))
         conn.commit()
 
         with conn.cursor() as cursor:
@@ -341,10 +341,10 @@ def get_case_study_history(session_id: str):
             cursor.execute(f"""
                 SELECT id, topic, content, created_at
                 FROM aiprep_tool_case_studies
-                WHERE user_id = %s
+                WHERE candidate_id = %s
                   AND topic IN ({placeholders})
                 ORDER BY created_at DESC
-            """, (session_id, *VALID_TYPED_TOPICS))
+            """, (int(session_id), *VALID_TYPED_TOPICS))
             rows = cursor.fetchall()
 
         docs = []

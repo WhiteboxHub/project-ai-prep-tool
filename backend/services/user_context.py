@@ -1,6 +1,5 @@
 from db.connection import get_db_connection
 from utils.security import decrypt
-from services.resume_source import is_wbl_candidate_session
 
 
 def get_user_api_context(user_id: str) -> dict:
@@ -8,15 +7,25 @@ def get_user_api_context(user_id: str) -> dict:
     Returns a dict with:
       "api_key": decrypted key or None
       "provider": detected provider string ("openai", "gemini", etc.) or None
+
+    user_id is always str(candidate_marketing.id).
+    API keys are stored in candidate_llm_api_keys via candidate.id.
     """
     conn = get_db_connection()
     try:
         api_key = None
         provider = None
-        
+
         with conn.cursor() as cursor:
-            if is_wbl_candidate_session(user_id):
-                cid = int(user_id)
+            marketing_id = int(user_id)
+            # Get the candidate.id from candidate_marketing
+            cursor.execute(
+                "SELECT candidate_id FROM candidate_marketing WHERE id = %s",
+                (marketing_id,),
+            )
+            cm = cursor.fetchone()
+            if cm and cm.get("candidate_id"):
+                cid = cm["candidate_id"]
                 cursor.execute(
                     """
                     SELECT api_key, provider_name FROM candidate_llm_api_keys
@@ -38,27 +47,14 @@ def get_user_api_context(user_id: str) -> dict:
                         provider = "claude"
                     else:
                         provider = p_name
-            else:
-                cursor.execute(
-                    "SELECT api_key_encrypted FROM aiprep_tool_candidates WHERE user_id = %s",
-                    (user_id,),
-                )
-                res = cursor.fetchone()
-                if res and res.get("api_key_encrypted"):
-                    api_key = decrypt(res["api_key_encrypted"])
-                    if api_key.startswith("sk-") or api_key.startswith("sk-proj-"):
-                        provider = "openai"
-                    elif api_key.startswith("AIzaSy"):
-                        provider = "gemini"
-                    elif api_key.startswith("sk-ant"):
-                        provider = "claude"
-                    else:
-                        provider = "openai" # fallback
 
         return {
             "api_key": api_key,
             "provider": provider
         }
+    except Exception as e:
+        print(f"[user_context] get_user_api_context error for user_id={user_id}: {e}")
+        return {"api_key": None, "provider": None}
     finally:
         conn.close()
 

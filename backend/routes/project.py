@@ -98,12 +98,13 @@ async def save_and_evaluate_project(data: ProjectContextData):
     conn = None
     try:
         conn = get_db_connection()
+        marketing_id = int(data.user_id)
 
         # 1. Atomic UPSERT Project Context
         with conn.cursor() as cursor:
             cursor.execute("""
                 INSERT INTO aiprep_tool_project_context (
-                    user_id, product, architecture, business_value, role, impact,
+                    candidate_id, product, architecture, business_value, role, impact,
                     business_problem, previous_system, key_objectives, users_scale,
                     agents_components, key_workflows, tools_integrations, tech_stack,
                     ai_techniques, evaluation_approach, challenges_learnings,
@@ -135,7 +136,7 @@ async def save_and_evaluate_project(data: ProjectContextData):
                     agent_usage = VALUES(agent_usage),
                     learnings = VALUES(learnings)
             """, (
-                data.user_id, data.product, data.architecture, data.business_value, data.role, data.impact,
+                marketing_id, data.product, data.architecture, data.business_value, data.role, data.impact,
                 data.business_problem, data.previous_system, data.key_objectives, data.users_scale,
                 data.agents_components, data.key_workflows, data.tools_integrations, data.tech_stack,
                 data.ai_techniques, data.evaluation_approach, data.challenges_learnings,
@@ -176,30 +177,13 @@ Future Scope: {data.future_roadmap}
             api_key=api_key
         )
 
-        # 5. Store evaluation
+        # 5. Store attempt in attempts table
         with conn.cursor() as cursor:
-            raw_score = eval_result.get("overall_score", 0)
-            try:
-                score = float(raw_score)
-            except (ValueError, TypeError):
-                score = 0.0
-
-            if score > 100:
-                db_score = 100
-            else:
-                db_score = int(score)
-
             cursor.execute("""
-                INSERT INTO aiprep_tool_evaluations (user_id, type, score, passed, feedback, raw_response)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (
-                data.user_id,
-                "project",
-                db_score,
-                db_score >= 75,
-                json.dumps(eval_result.get("feedback", [])),
-                json.dumps(eval_result)
-            ))
+                INSERT INTO aiprep_tool_attempts (candidate_id, attempt_type, attempt_count)
+                VALUES (%s, 'project', 1)
+                ON DUPLICATE KEY UPDATE attempt_count = attempt_count + 1
+            """, (marketing_id,))
 
         conn.commit()
 
@@ -230,38 +214,28 @@ def get_project_history(session_id: str):
     conn = None
     try:
         conn = get_db_connection()
+        marketing_id = int(session_id)
         with conn.cursor() as cursor:
-            # 1. Fetch evaluations for project
+            # 1. Fetch attempts for project
             cursor.execute("""
-                SELECT id, score, passed, created_at, raw_response 
-                FROM aiprep_tool_evaluations 
-                WHERE user_id = %s AND type = 'project' 
-                ORDER BY created_at DESC
-            """, (session_id,))
-            raw_evals = cursor.fetchall()
-            evaluations = []
-            for ev in raw_evals:
-                ev_dict = dict(ev)
-                if ev_dict.get("raw_response") and isinstance(ev_dict["raw_response"], str):
-                    try: ev_dict["raw_response"] = json.loads(ev_dict["raw_response"])
-                    except: pass
-                evaluations.append(ev_dict)
+                SELECT attempt_count FROM aiprep_tool_attempts 
+                WHERE candidate_id = %s AND attempt_type = 'project'
+            """, (marketing_id,))
+            row = cursor.fetchone()
+            is_completed = (row["attempt_count"] > 0) if row else False
 
-            # 2. Check if project context exists (e.g. from resume auto-population)
-            cursor.execute("SELECT id FROM aiprep_tool_project_context WHERE user_id = %s", (session_id,))
+            # 2. Check if project context exists
+            cursor.execute("SELECT id FROM aiprep_tool_project_context WHERE candidate_id = %s", (marketing_id,))
             has_project = cursor.fetchone() is not None
 
-            # 3. Check case studies for backward compatibility / dashboard
-            cursor.execute("SELECT id FROM aiprep_tool_case_studies WHERE user_id = %s", (session_id,))
+            # 3. Check case studies
+            cursor.execute("SELECT id FROM aiprep_tool_case_studies WHERE candidate_id = %s", (marketing_id,))
             case_studies = cursor.fetchall()
-
-            # Project is ONLY completed if the user actually clicked evaluate and generated an evaluation
-            is_completed = len(evaluations) > 0
 
             return {
                 "has_project": has_project,
                 "completed": is_completed,
-                "history": evaluations,
+                "history": [],
                 "aiprep_tool_case_studies": case_studies
             }
 

@@ -24,8 +24,14 @@ def encrypt(text: str) -> str:
     return cipher.encrypt(text.encode()).decode()
 
 def decrypt(token: str) -> str:
+    if not token:
+        return ""
     try:
         return cipher.decrypt(token.encode()).decode()
     except Exception:
-        # If the primary key fails, try the fallback key (useful for legacy WBL candidate keys)
-        return fallback_cipher.decrypt(token.encode()).decode()
+        try:
+            # If the primary key fails, try the fallback key (useful for legacy WBL candidate keys)
+            return fallback_cipher.decrypt(token.encode()).decode()
+        except Exception:
+            # Final fallback: if decryption fails (e.g. it is already a plain-text API key), return it directly
+            return token
