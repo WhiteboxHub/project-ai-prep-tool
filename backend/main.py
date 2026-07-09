@@ -11,7 +11,7 @@ if os.environ.get("K_SERVICE") is None:
     load_dotenv()
 
 from db.init_db import init_db
-from routes import setup, intro, project, interview, context, resume, case_study, candidate_setup, report
+from routes import setup, intro, project, interview, context, resume, case_study, candidate_setup, report, analytics
 
 app = FastAPI(
     title="AI Candidate Evaluation System",
@@ -66,6 +66,9 @@ app.include_router(case_study.router)
 
 # Candidate Setup — migrated from wbl-backend
 app.include_router(candidate_setup.router)
+
+# Admin Analytics — WBL dashboard integration
+app.include_router(analytics.router)
 
 @app.get("/")
 def root():
