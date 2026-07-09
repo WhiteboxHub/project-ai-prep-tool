@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Mic, MicOff, Loader2, CheckCircle2, AlertCircle, ArrowRight, Volume2, Lock, Camera, VideoOff, RotateCcw } from "lucide-react";
+import { Mic, MicOff, Loader2, CheckCircle2, AlertCircle, ArrowRight, Volume2, Lock, Camera, VideoOff, RotateCcw, X } from "lucide-react";
 import { VideoPanel } from "@/components/interview/VideoPanel";
 import { ControlBar } from "@/components/interview/ControlBar";
 import { evaluateIntroText, getDynamicTemplate, getIntroHistory } from "@/lib/api";
@@ -19,12 +19,30 @@ export default function IntroPracticeRoom() {
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isAISpeaking, setIsAISpeaking] = useState(false);
   const [focusedPanel, setFocusedPanel] = useState<"candidate" | "ai" | null>(null);
+  const [showMediaWarning, setShowMediaWarning] = useState(true);
 
   // Media permissions & streams
   const {
     stream, audioError, videoError, audioState, videoState,
     requestAudio, requestVideo, toggleVideo, toggleAudio, isSpeaking: isCandidateSpeaking
   } = useMediaStream(true);
+
+
+
+
+  useEffect(() => {
+    const shouldShow =
+      audioState === "denied" ||
+      videoState === "denied" ||
+      !isMicOn ||
+      !isCameraOn;
+
+    if (shouldShow) {
+      setShowMediaWarning(true);
+    }
+  }, [audioState, videoState, isMicOn, isCameraOn]);
+
+
 
   const [transcript, setTranscript] = useState("");
   const [recording, setRecording] = useState(false);
@@ -66,8 +84,8 @@ export default function IntroPracticeRoom() {
     if (!sessionId) return;
     getDynamicTemplate(sessionId).then((d) => {
       setTemplate(d.template || d.script || "");
-    }).catch(() => {});
-    
+    }).catch(() => { });
+
     // Initial welcome
     setTimeout(() => {
       speak("Welcome to your introduction practice. Whenever you're ready, tell me about yourself and your background.");
@@ -97,7 +115,7 @@ export default function IntroPracticeRoom() {
       // Reset silence detection timer (6.0 seconds) whenever speech is detected
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      
+
       setSilenceRemaining(6);
       countdownIntervalRef.current = setInterval(() => {
         setSilenceRemaining((r) => (r !== null && r > 1 ? r - 1 : null));
@@ -213,18 +231,18 @@ export default function IntroPracticeRoom() {
 
   return (
     <div className="w-screen h-screen bg-gradient-to-br from-background via-card/30 to-background overflow-hidden flex">
-      
+
 
       {/* Left side: Video Panels */}
       <div className="flex-1 p-6 flex flex-col items-center justify-center relative transition-all mr-80">
         <div className="hidden md:flex gap-4 w-full max-w-5xl h-full max-h-[calc(100vh-180px)]">
           <div className={`transition-all duration-500 ease-in-out ${focusedPanel === "candidate" ? "flex-1" : focusedPanel === "ai" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>
-            <VideoPanel 
-              title={candidateName} 
-              isMuted={!isMicOn} 
-              isCameraOff={!isCameraOn} 
-              initials={initials} 
-              isCandidate={true} 
+            <VideoPanel
+              title={candidateName}
+              isMuted={!isMicOn}
+              isCameraOff={!isCameraOn}
+              initials={initials}
+              isCandidate={true}
               isSpeaking={isCandidateSpeaking && recording}
               isExpanded={focusedPanel === "candidate"}
               onExpand={() => setFocusedPanel(p => p === "candidate" ? null : "candidate")}
@@ -232,11 +250,11 @@ export default function IntroPracticeRoom() {
             />
           </div>
           <div className={`transition-all duration-500 ease-in-out ${focusedPanel === "ai" ? "flex-1" : focusedPanel === "candidate" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>
-            <VideoPanel 
-              title="AI Coach" 
-              isSpeaking={isAISpeaking} 
-              isCameraOff={false} 
-              initials="AI" 
+            <VideoPanel
+              title="AI Coach"
+              isSpeaking={isAISpeaking}
+              isCameraOff={false}
+              initials="AI"
               isExpanded={focusedPanel === "ai"}
               onExpand={() => setFocusedPanel(p => p === "ai" ? null : "ai")}
             />
@@ -257,7 +275,7 @@ export default function IntroPracticeRoom() {
           {/* Floating Live Transcript Indicator */}
           <AnimatePresence>
             {transcript && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
                 className="glass-card px-6 py-4 rounded-2xl border border-primary/30 max-w-2xl w-full text-center shadow-2xl backdrop-blur-xl"
               >
@@ -274,7 +292,7 @@ export default function IntroPracticeRoom() {
               </motion.div>
             )}
             {loading && !transcript && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
                 className="glass-card px-6 py-4 rounded-2xl border border-primary/30 flex items-center justify-center gap-3 shadow-2xl backdrop-blur-xl"
               >
@@ -282,39 +300,66 @@ export default function IntroPracticeRoom() {
                 <span className="text-sm text-foreground">Evaluating introduction delivery...</span>
               </motion.div>
             )}
+
+            {/* Device status warning popup — above ControlBar */}
+            {(audioState === "denied" || videoState === "denied" || !isMicOn ||
+              !isCameraOn) && showMediaWarning && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="relative px-5 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 backdrop-blur-md shadow-2xl flex items-center gap-4 max-w-md w-full mb-2"
+                >
+                  <div className="p-2 rounded-full bg-red-500/20 text-red-400">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <div className="flex-grow-4">
+
+                    <p className="text-xs text-red-300/80 leading-relaxed">
+                      {audioState === "denied" && videoState === "denied"
+                        ? "Camera and microphone permissions are denied."
+                        : audioState === "denied"
+                          ? "Microphone permission is denied."
+                          : videoState === "denied"
+                            ? "Camera permission is denied."
+                            : !isMicOn && !isCameraOn
+                              ? "Camera and microphone are turned off."
+                              : !isMicOn
+                                ? "Microphone is turned off."
+                                : "Camera is turned off."}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        if (audioState === "denied") {
+                          requestAudio();
+                        } else if (!isMicOn) {
+                          setIsMicOn(true);
+                          toggleAudio(true);
+                        } if (videoState === "denied") {
+                          requestVideo();
+                        } else if (!isCameraOn) {
+                          setIsCameraOn(true); toggleVideo(true);
+                        }
+                      }}
+                      className="text-xs font-bold px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-red-950 transition-colors shadow-lg shadow-amber-500/20"
+                    >
+                      Retry
+                    </button>
+                    <button
+                      onClick={() => setShowMediaWarning(false)}
+                      className="p-1.5 rounded-lg hover:bg-white/10 text-red-400/70 hover:text-red-400 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
           </AnimatePresence>
 
-          {/* Device status chips — above ControlBar */}
-          {(audioState === "denied" || videoState === "denied") && (
-            <div className="flex items-center justify-center gap-2 flex-wrap">
-              {audioState === "denied" && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card/80 border border-amber-500/25 backdrop-blur-sm">
-                  <MicOff className="w-3 h-3 text-amber-400" />
-                  <span className="text-[11px] text-amber-300/90 font-medium">Mic unavailable</span>
-                  <button
-                    onClick={requestAudio}
-                    className="ml-0.5 text-[10px] text-amber-400/80 hover:text-amber-300 underline underline-offset-2 transition-colors"
-                  >
-                    retry
-                  </button>
-                </div>
-              )}
-              {videoState === "denied" && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card/80 border border-amber-500/25 backdrop-blur-sm">
-                  <VideoOff className="w-3 h-3 text-amber-400" />
-                  <span className="text-[11px] text-amber-300/90 font-medium">Camera unavailable</span>
-                  <button
-                    onClick={requestVideo}
-                    className="ml-0.5 text-[10px] text-amber-400/80 hover:text-amber-300 underline underline-offset-2 transition-colors"
-                  >
-                    retry
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
           <ControlBar
+            isMicOn={isMicOn}
             onToggleMic={(enabled) => {
               setIsMicOn(enabled);
               toggleAudio(enabled);
@@ -323,7 +368,8 @@ export default function IntroPracticeRoom() {
               setIsCameraOn(enabled);
               toggleVideo(enabled);
             }}
-            onRecordToggle={() => recording ? stopRecognition() : startRecognition()}
+            onRecordStart={startRecognition}
+            onRecordStop={stopRecognition}
             isRecording={recording}
             isAudioDenied={audioState === "denied"}
             isVideoDenied={videoState === "denied"}
@@ -349,24 +395,23 @@ export default function IntroPracticeRoom() {
         )}
         {/* Result card: scrollable, takes all space when template hidden */}
         {result && (() => {
-            const scoreNum = result?.score !== undefined ? result.score : result?.total_score !== undefined ? result.total_score : result?.evaluation?.overall_score || 0;
-            const hasPassed = scoreNum >= 75;
-            const evalData = result?.evaluation || {};
-            const strengths = evalData.strengths || [];
-            const weaknesses = evalData.weaknesses || [];
-            const suggestions = evalData.ai_suggestions || [];
-            const improvement = evalData.improvement_areas || [];
+          const scoreNum = result?.score !== undefined ? result.score : result?.total_score !== undefined ? result.total_score : result?.evaluation?.overall_score || 0;
+          const hasPassed = scoreNum >= 75;
+          const evalData = result?.evaluation || {};
+          const strengths = evalData.strengths || [];
+          const weaknesses = evalData.weaknesses || [];
+          const suggestions = evalData.ai_suggestions || [];
+          const improvement = evalData.improvement_areas || [];
 
           return (
             <div className="flex-1 overflow-y-auto min-h-0 mb-4">
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
                 <div className={`glass-card p-4 rounded-xl border ${hasPassed ? "border-green-500/30 bg-green-500/5 shadow-[0_0_15px_rgba(34,197,94,0.1)]" : "border-amber-500/30 bg-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.1)]"}`}>
-                  
+
                   {/* Status Badge */}
                   <div className="mb-4 flex items-center justify-between">
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 border ${
-                      hasPassed ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                    }`}>
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 border ${hasPassed ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                      }`}>
                       {hasPassed ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />}
                       {hasPassed ? "COMPLETED & UNLOCKED" : "NEEDS IMPROVEMENT (<75)"}
                     </span>

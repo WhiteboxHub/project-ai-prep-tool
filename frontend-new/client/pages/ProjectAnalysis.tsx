@@ -136,7 +136,7 @@ function LoadingStep() {
           <div key={i} className={`flex items-center gap-3 text-sm transition-all ${i < current ? "text-green-400" : i === current ? "text-primary" : "text-muted-foreground/30"}`}>
             {i < current ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
               : i === current ? <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin" />
-              : <div className="w-4 h-4 rounded-full border border-current flex-shrink-0" />}
+                : <div className="w-4 h-4 rounded-full border border-current flex-shrink-0" />}
             {step}
           </div>
         ))}
@@ -255,74 +255,74 @@ export default function ProjectAnalysis() {
           setStep("results");
         }
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     // Load generated documents to restore card states
     getCaseStudyHistory(sessionId).then((d) => {
       const topics = new Set<string>((d.case_studies || []).map((c: any) => c.topic));
       setGeneratedTopics(topics);
-    }).catch(() => {});
+    }).catch(() => { });
 
-        // Prefill form
-        const loadProjectData = async () => {
-            try {
-                let d = await getLatestProject(sessionId);
-                const invalidDomains = ["genai", "rag", "llm", "ai ", "machine learning", "langchain", "platform", "system", "enterprise"];
-                const hasInvalidDomain = d?.domain ? invalidDomains.some(term => d.domain.toLowerCase().includes(term)) : false;
+    // Prefill form
+    const loadProjectData = async () => {
+      try {
+        let d = await getLatestProject(sessionId);
+        const invalidDomains = ["genai", "rag", "llm", "ai ", "machine learning", "langchain", "platform", "system", "enterprise"];
+        const hasInvalidDomain = d?.domain ? invalidDomains.some(term => d.domain.toLowerCase().includes(term)) : false;
 
-                // Auto-extract from resume if the project is empty, missing core fields, or has an invalid technical domain
-                if (!d || Object.keys(d).length === 0 || !d.product || !d.company_name || !d.domain || hasInvalidDomain) {
-                    setIsExtracting(true);
-                    try {
-                        const ep = await extractProject(sessionId);
-                        if (ep && ep.core_project) {
-                            d = {
-                                ...d,
-                                company_name: ep.company_name || d?.company_name || "",
-                                domain: ep.domain || d?.domain || "",
-                                product: ep.core_project.product || d?.product || "",
-                                business_problem: ep.core_project.business_problem || d?.business_problem || "",
-                                key_problems: ep.core_project.key_problems || d?.key_problems || "",
-                                tech_stack: ep.core_project.tech_stack || d?.tech_stack || "",
-                                role: ep.core_project.role || d?.role || "",
-                                challenges_learnings: ep.core_project.challenges_learnings || d?.challenges_learnings || "",
-                                impact: ep.core_project.impact || d?.impact || "",
-                                architecture: ep.core_project.architecture || d?.architecture || ep.core_project.tech_stack || d?.tech_stack || "",
-                                agent_usage: ep.core_project.agent_usage || d?.agent_usage || "Agent",
-                                future_roadmap: ep.core_project.deployment || d?.future_roadmap || "",
-                            };
-                        }
-                        // Ensure the loader takes 3.5 seconds as requested by the user
-                        await new Promise((resolve) => setTimeout(resolve, 3500));
-                    } catch(e) {
-                        console.error("Failed to extract project from resume:", e);
-                    } finally {
-                        setIsExtracting(false);
-                    }
-                }
-
-                if (d && Object.keys(d).length > 0) {
-                    setForm((p) => ({
-                        ...p,
-                        companyName: d.company_name || p.companyName,
-                        domain: d.domain || p.domain,
-                        product: d.product || p.product,
-                        businessProblem: d.business_problem || p.businessProblem,
-                        businessMetrics: d.key_problems || d.impact || p.businessMetrics,
-                        techStack: d.tech_stack || d.ai_techniques || p.techStack,
-                        agentUsage: d.agent_usage || p.agentUsage,
-                        role: d.role || p.role,
-                        challenges: d.challenges_learnings || p.challenges,
-                        results: d.impact || p.results,
-                        deployment: d.future_roadmap || p.deployment,
-                        architecture: d.architecture || d.tech_stack || p.architecture,
-                    }));
-                }
-            } catch (err) {
-                console.error(err);
-                setIsExtracting(false);
+        // Auto-extract from resume if the project is empty, missing core fields, or has an invalid technical domain
+        if (!d || Object.keys(d).length === 0 || !d.product || !d.company_name || !d.domain || hasInvalidDomain) {
+          setIsExtracting(true);
+          try {
+            const ep = await extractProject(sessionId);
+            if (ep && ep.core_project) {
+              d = {
+                ...d,
+                company_name: ep.company_name || d?.company_name || "",
+                domain: ep.domain || d?.domain || "",
+                product: ep.core_project.product || d?.product || "",
+                business_problem: ep.core_project.business_problem || d?.business_problem || "",
+                key_problems: ep.core_project.key_problems || d?.key_problems || "",
+                tech_stack: ep.core_project.tech_stack || d?.tech_stack || "",
+                role: ep.core_project.role || d?.role || "",
+                challenges_learnings: ep.core_project.challenges_learnings || d?.challenges_learnings || "",
+                impact: ep.core_project.impact || d?.impact || "",
+                architecture: ep.core_project.architecture || d?.architecture || ep.core_project.tech_stack || d?.tech_stack || "",
+                agent_usage: ep.core_project.agent_usage || d?.agent_usage || "Agent",
+                future_roadmap: ep.core_project.deployment || d?.future_roadmap || "",
+              };
             }
-        };
+            // Ensure the loader takes 3.5 seconds as requested by the user
+            await new Promise((resolve) => setTimeout(resolve, 3500));
+          } catch (e) {
+            console.error("Failed to extract project from resume:", e);
+          } finally {
+            setIsExtracting(false);
+          }
+        }
+
+        if (d && Object.keys(d).length > 0) {
+          setForm((p) => ({
+            ...p,
+            companyName: d.company_name || p.companyName,
+            domain: d.domain || p.domain,
+            product: d.product || p.product,
+            businessProblem: d.business_problem || p.businessProblem,
+            businessMetrics: d.key_problems || d.impact || p.businessMetrics,
+            techStack: d.tech_stack || d.ai_techniques || p.techStack,
+            agentUsage: d.agent_usage || p.agentUsage,
+            role: d.role || p.role,
+            challenges: d.challenges_learnings || p.challenges,
+            results: d.impact || p.results,
+            deployment: d.future_roadmap || p.deployment,
+            architecture: d.architecture || d.tech_stack || p.architecture,
+          }));
+        }
+      } catch (err) {
+        console.error(err);
+        setIsExtracting(false);
+      }
+    };
     loadProjectData();
   }, [sessionId]);
 
@@ -357,7 +357,7 @@ export default function ProjectAnalysis() {
         getCaseStudyHistory(sessionId).then((d) => {
           const topics = new Set<string>((d.case_studies || []).map((c: any) => c.topic));
           setGeneratedTopics(topics);
-        }).catch(() => {});
+        }).catch(() => { });
       }
       setStep("results");
     } catch (e: any) {
@@ -447,57 +447,57 @@ export default function ProjectAnalysis() {
                   )}
 
                   <div className="glass-card p-6 rounded-2xl border border-border/50 space-y-5">
-                <div>
-                  <h3 className="text-lg font-semibold text-foreground">Project Details</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Fields marked <span className="text-primary">*</span> are required. Resume data may pre-fill fields — review before evaluating.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4">
-                  {FIELDS.map(({ key, label, placeholder, rows, required }) => (
-                    <div key={key} className="space-y-1.5">
-                      <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
-                        {label}{required && <span className="text-primary ml-1">*</span>}
-                      </label>
-                      {rows && rows > 1 ? (
-                        <textarea value={form[key]} onChange={setField(key)} placeholder={placeholder} rows={rows}
-                          className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-border text-foreground text-sm placeholder-muted-foreground focus:border-primary outline-none transition-colors resize-none" />
-                      ) : (
-                        <input value={form[key]} onChange={setField(key)} placeholder={placeholder}
-                          className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-border text-foreground text-sm placeholder-muted-foreground focus:border-primary outline-none transition-colors" />
-                      )}
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">Project Details</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Fields marked <span className="text-primary">*</span> are required. Resume data may pre-fill fields — review before evaluating.
+                      </p>
                     </div>
-                  ))}
 
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-foreground uppercase tracking-wide">Agent Usage</label>
-                    <div className="flex gap-4">
-                      {["Agent", "Hybrid", "None"].map((opt) => (
-                        <label key={opt} className="flex items-center gap-2 cursor-pointer text-sm text-foreground">
-                          <input type="radio" name="agentUsage" value={opt} checked={form.agentUsage === opt}
-                            onChange={() => setForm((p) => ({ ...p, agentUsage: opt }))} className="accent-primary" />
-                          {opt}
-                        </label>
+                    <div className="grid grid-cols-1 gap-4">
+                      {FIELDS.map(({ key, label, placeholder, rows, required }) => (
+                        <div key={key} className="space-y-1.5">
+                          <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
+                            {label}{required && <span className="text-primary ml-1">*</span>}
+                          </label>
+                          {rows && rows > 1 ? (
+                            <textarea value={form[key]} onChange={setField(key)} placeholder={placeholder} rows={rows}
+                              className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-border text-foreground text-sm placeholder-muted-foreground focus:border-primary outline-none transition-colors resize-none" />
+                          ) : (
+                            <input value={form[key]} onChange={setField(key)} placeholder={placeholder}
+                              className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-border text-foreground text-sm placeholder-muted-foreground focus:border-primary outline-none transition-colors" />
+                          )}
+                        </div>
                       ))}
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-foreground uppercase tracking-wide">Agent Usage</label>
+                        <div className="flex gap-4">
+                          {["Agent", "Hybrid", "None"].map((opt) => (
+                            <label key={opt} className="flex items-center gap-2 cursor-pointer text-sm text-foreground">
+                              <input type="radio" name="agentUsage" value={opt} checked={form.agentUsage === opt}
+                                onChange={() => setForm((p) => ({ ...p, agentUsage: opt }))} className="accent-primary" />
+                              {opt}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                {error && (
-                  <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
-                  </div>
-                )}
+                    {error && (
+                      <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                        <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
+                      </div>
+                    )}
 
-                <motion.button
-                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSubmit}
-                  className="w-full py-4 rounded-xl bg-gradient-to-r from-primary to-secondary text-white font-bold text-base flex items-center justify-center gap-2"
-                >
-                  <TrendingUp className="w-5 h-5" /> Analyze &amp; Evaluate Project <ArrowRight className="w-5 h-5" />
-                </motion.button>
-              </div>
-            </>)}</motion.div>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSubmit}
+                      className="w-full py-4 rounded-xl bg-gradient-to-r from-primary to-secondary text-white font-bold text-base flex items-center justify-center gap-2"
+                    >
+                      <TrendingUp className="w-5 h-5" /> Analyze &amp; Evaluate Project <ArrowRight className="w-5 h-5" />
+                    </motion.button>
+                  </div>
+                </>)}</motion.div>
           )}
 
           {/* ── STEP 2 — LOADING ──────────────────────────────────────────── */}
@@ -522,7 +522,7 @@ export default function ProjectAnalysis() {
                 </div>
                 <motion.button
                   whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                  onClick={() => navigate("/intro-practice")}
+                  onClick={() => navigate("/instructions")}
                   className="flex-shrink-0 flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-primary to-secondary text-white font-bold text-sm"
                 >
                   <Users className="w-4 h-4" /> Practice Introduction <ArrowRight className="w-4 h-4" />
@@ -536,13 +536,13 @@ export default function ProjectAnalysis() {
                     <TrendingUp className="w-5 h-5 text-primary" /> AI Evaluation
                   </h3>
                   <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border font-bold text-lg ${score >= 7 ? "text-green-400 border-green-500/30 bg-green-500/10" : score >= 5 ? "text-amber-400 border-amber-500/30 bg-amber-500/10" : "text-red-400 border-red-500/30 bg-red-500/10"}`}>
-                    <Star className="w-5 h-5" /> {score}/10
+                    <Star className="w-5 h-5" /> {score}/100
                   </div>
                 </div>
 
                 {score < 7 && (
                   <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
-                    Score below 7/10. Add specific metrics and architecture detail to strengthen your project narrative before interviews.
+                    Score below 7/100. Add specific metrics and architecture detail to strengthen your project narrative before interviews.
                   </div>
                 )}
 

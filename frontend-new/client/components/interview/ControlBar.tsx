@@ -3,28 +3,32 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Mic, MicOff, Video, VideoOff,
-  X, Volume2,
+  LogOut, Volume2, Play,
+  Square
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 interface ControlBarProps {
+  isMicOn?: boolean;
   onToggleMic: (enabled: boolean) => void;
   onToggleCamera: (enabled: boolean) => void;
-  /** When provided, mic button drives speech recording instead of just mute */
-  onRecordToggle?: () => void;
+  onRecordStart?: () => void;
+  onRecordStop?: () => void;
   isRecording?: boolean;
-  /** If set, overrides the outer wrapper className (use "relative" to render inline) */
   wrapperClassName?: string;
   isAudioDenied?: boolean;
   isVideoDenied?: boolean;
   onRetryAudio?: () => void;
   onRetryVideo?: () => void;
+  
 }
 
 export function ControlBar({
+  isMicOn = true,
   onToggleMic,
   onToggleCamera,
-  onRecordToggle,
+  onRecordStart,
+  onRecordStop,
   isRecording = false,
   wrapperClassName,
   isAudioDenied,
@@ -48,68 +52,89 @@ export function ControlBar({
       onRetryAudio();
       return;
     }
-    if (onRecordToggle) {
-      // Drives speech recognition
-      onRecordToggle();
-    } else {
-      // Plain mute toggle fallback
-      onToggleMic(true);
-    }
+    onToggleMic(!isMicOn);
   };
 
   return (
-    <div className={wrapperClassName ?? "relative"}>
+    <div className={wrapperClassName ?? "relative mt-5"}>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-card px-3 py-2.5 rounded-2xl border border-border/50 flex items-center gap-1.5 shadow-2xl shadow-primary/10"
+        className="glass-card px-5 py-2.5 rounded-3 border border-white flex items-end gap-3 shadow-2xl bg-black/70 backdrop-blur-2xl"
       >
-        {/* Mic — doubles as recording trigger */}
+        {/* Start / Stop Recording Options */}
+        {isMicOn && onRecordStart && onRecordStop && (
+          <>
+            <motion.button
+              whileHover={!isRecording ? { scale: 1.05 } : {}}
+              whileTap={!isRecording ? { scale: 0.95 } : {}}
+              onClick={!isRecording ? onRecordStart : undefined}
+              disabled={isRecording}
+              title={isRecording ? "Recording..." : "Start Recording"}
+              className={`flex flex-col items-center justify-center gap-1.5 min-w-[60px] ${isRecording ? "cursor-default" : ""
+                }`}
+            >
+              <div
+                className={`flex items-center justify-center w-9 h-9 rounded-full transition-all ${isRecording
+                  ? "bg-red-500 border border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)]"
+                  : "bg-white border border-white/20 hover:bg-gray-100"
+                  }`}
+              >
+                {isRecording ? (
+                  <Square className="w-4 h-4 text-white animate-pulse" />
+                ) : (
+                  <Play className="w-4 h-4 text-black fill-black ml-0.5" />
+                )}
+              </div>
+
+            </motion.button>
+
+            <div className="w-px h-10 bg-white/10 self-center mx-1" />
+          </>
+        )}
+
+        {/* Mic Toggle */}
         <motion.button
-          whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+          whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
           onClick={handleMicClick}
-          title={isAudioDenied ? "Microphone Unavailable - Click to Retry" : isRecording ? "Stop Recording" : "Start Recording"}
-          className={`p-2.5 rounded-xl transition-all ${
-            isAudioDenied
-              ? "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
-              : isRecording
-                ? "bg-primary/20 text-primary hover:bg-primary/30"
-                : "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
-          }`}
+          title={isAudioDenied ? "Microphone Unavailable" : isMicOn ? "Mute Microphone" : "Unmute Microphone"}
+          className="flex flex-col items-center justify-center gap-1.5 min-w-[60px]"
         >
-          {isAudioDenied || !isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          <div className={`flex items-center justify-center w-9 h-9 rounded-full transition-all ${isAudioDenied || !isMicOn
+            ? "bg-red-500/90 text-white shadow-lg shadow-red-500/20"
+            : "bg-white/10 text-white hover:bg-white/20 border border-white/5"
+            }`}>
+            {isAudioDenied || !isMicOn ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+          </div>
         </motion.button>
 
-        {/* Camera */}
+        {/* Camera Toggle */}
         <motion.button
-          whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+          whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
           onClick={handleCameraToggle}
-          title={isVideoDenied ? "Camera Unavailable - Click to Retry" : isCameraOn ? "Stop Camera" : "Start Camera"}
-          className={`p-2.5 rounded-xl transition-all ${
-            isVideoDenied
-              ? "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
-              : isCameraOn 
-                ? "bg-primary/20 text-primary hover:bg-primary/30" 
-                : "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
-          }`}
+          title={isVideoDenied ? "Camera Unavailable" : isCameraOn ? "Stop Camera" : "Start Camera"}
+          className="flex flex-col items-center justify-center gap-1.5 min-w-[60px]"
         >
-          {isVideoDenied ? <VideoOff className="w-4 h-4" /> : !isCameraOn ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+          <div className={`flex items-center justify-center w-9 h-9 rounded-full transition-all ${isVideoDenied || !isCameraOn
+            ? "bg-red-500/90 text-white shadow-lg shadow-red-500/20"
+            : "bg-white/10 text-white hover:bg-white/20 border border-white/5"
+            }`}>
+            {isVideoDenied || !isCameraOn ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+          </div>
         </motion.button>
 
+        <div className="w-px h-10 bg-white/10 self-center mx-1" />
 
-
-        {/* Divider */}
-        <div className="w-px h-6 bg-border/50 mx-0.5" />
-
-        {/* End */}
-        <Link to="/">
+        {/* End Call */}
+        <Link to="/" className="flex flex-col items-center justify-center gap-1.5 min-w-[60px]">
           <motion.button
-            whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            title="Exit"
-            className="p-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-all"
+            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+            title="Leave"
+            className="flex items-center justify-center w-9 h-9 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-all"
           >
-            <X className="w-4 h-4" />
+            <LogOut className="w-5 h-5" />
           </motion.button>
+
         </Link>
       </motion.div>
     </div>

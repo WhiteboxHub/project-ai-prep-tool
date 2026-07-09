@@ -19,7 +19,7 @@ import Settings from "./pages/Settings";
 import Setup from "./pages/Setup";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
-
+import Instructions from "./pages/instructions"
 const queryClient = new QueryClient();
 
 // Guard: redirect to /setup if not authenticated
@@ -50,6 +50,7 @@ const App = () => (
             <Route path="/documents" element={<RequireAuth><Documents /></RequireAuth>} />
             <Route path="/progress" element={<RequireAuth><Progress /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+            <Route path="/instructions" element={<RequireAuth><Instructions /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

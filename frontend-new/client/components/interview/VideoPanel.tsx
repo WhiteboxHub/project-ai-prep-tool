@@ -119,11 +119,11 @@ export function VideoPanel({
           animate={{ opacity: [0.6, 1] }}
           transition={{ duration: 0.8, repeat: Infinity }}
         >
-          <div className="flex gap-1">
+          <div className="flex gap-1 items-end h-6">
             {[0, 1, 2].map((idx) => (
               <motion.div
                 key={idx}
-                className="w-1 h-6 rounded-full bg-gradient-to-t from-primary to-secondary"
+                className="w-1  rounded-full bg-gradient-to-t from-primary to-secondary"
                 animate={{ height: ["8px", "20px", "8px"] }}
                 transition={{
                   duration: 0.6,
