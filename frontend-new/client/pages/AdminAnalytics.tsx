@@ -689,7 +689,7 @@ export default function AdminAnalytics() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation(); // Stop row click trigger drawer
-                                const backendUrl = (import.meta as any).env?.VITE_API_URL || "http://127.0.0.1:8001";
+                                const backendUrl = (import.meta as any).env?.VITE_API_URL || "http://127.0.0.1:8000";
                                 setActiveVideoUrl(`${backendUrl}${row.latest_video_url}`);
                               }}
                               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-slate-200 text-[11px] font-bold text-slate-600 bg-white hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200 transition-all shadow-2xs"

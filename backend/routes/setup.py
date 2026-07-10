@@ -5,8 +5,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Background
 from pydantic import BaseModel
 from db.connection import get_db_connection
 from utils.security import encrypt
-import os
-from openai import OpenAI
+from services.ai_client import validate_api_key
 
 from services.resume_source import (
     fetch_resume_raw,
@@ -63,32 +62,33 @@ def _upsert_eval_login(conn, marketing_id: int):
 # ─────────────────────────────────────────────────────────────────────
 
 @router.post("/validate")
-def validate_key(req: ValidationRequest):
-    try:
-        if req.api_provider.lower() == "openai":
-            client = OpenAI(api_key=req.api_key)
-            client.models.list()
+async def validate_key(req: ValidationRequest):
+    provider = req.api_provider.lower().strip()
 
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            marketing_id = int(req.session_id)
+            cursor.execute(
+                "SELECT candidate_id FROM candidate_marketing WHERE id = %s",
+                (marketing_id,),
+            )
+            cm = cursor.fetchone()
+            if not cm:
+                raise HTTPException(404, "Session/Candidate not found")
+            candidate_id = cm["candidate_id"]
+    except ValueError:
+        raise HTTPException(400, "Invalid session id")
+    finally:
+        conn.close()
+
+    try:
+        await validate_api_key(req.api_key, provider)
         encrypted_key = encrypt(req.api_key)
-        
-        conn = get_db_connection()
-        try:
-            with conn.cursor() as cursor:
-                marketing_id = int(req.session_id)
-                cursor.execute(
-                    "SELECT candidate_id FROM candidate_marketing WHERE id = %s",
-                    (marketing_id,),
-                )
-                cm = cursor.fetchone()
-                if not cm:
-                    raise HTTPException(404, "Session/Candidate not found")
-                candidate_id = cm["candidate_id"]
-        finally:
-            conn.close()
 
         upsert_llm_api_key_row(
             candidate_id,
-            req.api_provider,
+            provider,
             encrypted_key,
             req.model_name,
             req.voice_enabled,
@@ -98,9 +98,11 @@ def validate_key(req: ValidationRequest):
 
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     except Exception as e:
-        print("ERROR:", str(e))
-        raise HTTPException(400, "Invalid API Key")
+        print("API key validation error:", str(e))
+        raise HTTPException(500, "Could not validate API key")
 
 
 class SetupInit(BaseModel):
@@ -200,6 +202,7 @@ def init_session(data: SetupInit):
             marketing_id = _resolve_or_create_session(cursor, data)
 
         _upsert_eval_login(conn, marketing_id)
+        conn.commit()
 
         return {"session_id": str(marketing_id)}
     except HTTPException:
@@ -396,6 +399,8 @@ def get_resume_summary(session_id: str):
                 (marketing_id,),
             )
             cm_row = cursor.fetchone()
+            if not cm_row:
+                raise HTTPException(status_code=404, detail="Session/Candidate not found")
             cid = cm_row["candidate_id"] if cm_row else None
 
             llm_keys = []
@@ -503,6 +508,7 @@ def init_and_summary(data: SetupInit):
             marketing_id = _resolve_or_create_session(cursor, data)
 
         _upsert_eval_login(conn, marketing_id)
+        conn.commit()
         session_id = str(marketing_id)
 
         with conn.cursor() as cursor:

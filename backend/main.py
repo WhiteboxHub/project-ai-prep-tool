@@ -28,10 +28,10 @@ def startup():
         for i in range(5):
             try:
                 init_db()
-                print("✅ DB Connection established and tables initialized.")
+                print("DB Connection established and tables initialized.")
                 break
             except Exception as e:
-                print(f"❌ Database initialization failed on attempt {i+1}:", e)
+                print(f"Database initialization failed on attempt {i+1}:", e)
                 sleep(5)
     threading.Thread(target=init).start()
 
