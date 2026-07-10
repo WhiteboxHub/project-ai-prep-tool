@@ -24,7 +24,7 @@ const navItems = [
   { label: "Documents", icon: FileText, href: "/documents" },
   { label: "My History", icon: History, href: "/history" },
   { label: "Progress", icon: TrendingUp, href: "/progress" },
-  { label: "Settings", icon: Settings, href: "/settings" },
+  // { label: "Settings", icon: Settings, href: "/settings" },
 ];
 
 export function Sidebar() {
@@ -110,18 +110,6 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="p-3 border-t border-border/50 space-y-2">
-        {/* Logout button */}
-        <button
-          onClick={handleLogout}
-          className={cn(
-            "w-full px-3 py-2 rounded-lg flex items-center gap-3 text-muted-foreground hover:bg-red-500/10 hover:text-red-400 smooth-transition",
-            isCollapsed ? "justify-center" : ""
-          )}
-        >
-          <LogOut className="w-4 h-4 flex-shrink-0" />
-          {!isCollapsed && <span className="text-sm font-medium">Sign Out</span>}
-        </button>
-
         {/* User info */}
         <div className="glass-card p-3 rounded-lg text-center">
           {isCollapsed ? (

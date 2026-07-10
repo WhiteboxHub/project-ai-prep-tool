@@ -21,7 +21,7 @@ import Setup from "./pages/Setup";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import AdminAnalytics from "./pages/AdminAnalytics";
-
+import Instructions from "./pages/instructions";
 const queryClient = new QueryClient();
 
 // Guard: redirect to /setup if not authenticated
@@ -53,6 +53,7 @@ const App = () => (
             <Route path="/history" element={<RequireAuth><MyHistory /></RequireAuth>} />
             <Route path="/progress" element={<RequireAuth><Progress /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+            <Route path="/instructions" element={<RequireAuth><Instructions /></RequireAuth>} />
             
             {/* Admin routes */}
             <Route path="/admin/analytics" element={<AdminAnalytics />} />

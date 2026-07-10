@@ -12,18 +12,18 @@ export default function Settings() {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<"profile" | "security" | "notifications">("security");
-  
+
   // State
   const [keys, setKeys] = useState<any[]>([]);
   const [resumeText, setResumeText] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  
+
   // Add key state
   const [addingKey, setAddingKey] = useState(false);
   const [newKey, setNewKey] = useState("");
   const [provider, setProvider] = useState("openai");
-  
+
   // Resume upload state
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [uploadingResume, setUploadingResume] = useState(false);
@@ -87,7 +87,7 @@ export default function Settings() {
     try {
       await uploadResume(sessionId, resumeFile);
       setExtractionStatus("pending");
-      
+
       const interval = setInterval(async () => {
         try {
           const { status } = await getExtractionStatus(sessionId);
@@ -144,11 +144,7 @@ export default function Settings() {
                 </button>
               );
             })}
-            <div className="pt-4 mt-4 border-t border-border/50">
-              <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-red-400 hover:bg-red-500/10 transition-colors">
-                <LogOut className="w-4 h-4" /> Sign Out
-              </button>
-            </div>
+
           </div>
 
           <div className="flex-1">
@@ -156,7 +152,7 @@ export default function Settings() {
               <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>
             ) : (
               <motion.div key={activeTab} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }} className="space-y-6">
-                
+
                 {activeTab === "profile" && (
                   <div className="space-y-6">
                     <div className="glass-card p-6 rounded-2xl border border-border/50 space-y-4">
@@ -172,7 +168,7 @@ export default function Settings() {
 
                     <div className="glass-card p-6 rounded-2xl border border-border/50 space-y-4">
                       <h3 className="text-lg font-semibold text-foreground flex items-center gap-2"><Sparkles className="w-5 h-5 text-primary" /> Connected Resume</h3>
-                      
+
                       {resumeText ? (
                         <div className="p-4 rounded-xl bg-green-500/5 border border-green-500/20 flex items-start gap-3">
                           <CheckCircle2 className="w-5 h-5 text-green-400 mt-0.5" />
@@ -213,7 +209,7 @@ export default function Settings() {
                       <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold text-foreground">Your API Keys</h3>
                       </div>
-                      
+
                       {keys.length === 0 ? (
                         <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 flex items-start gap-3">
                           <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5" />
@@ -222,17 +218,17 @@ export default function Settings() {
                       ) : (
                         <div className="space-y-3">
                           {keys.map((k) => (
-                                <div key={k.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
-                                              <div className="flex items-center gap-3">
-                                                <div className="p-2 rounded-lg bg-primary/20 text-primary"><Key className="w-4 h-4" /></div>
-                                                <div>
-                                                  <p className="text-sm font-semibold text-foreground uppercase">{k.provider_name || k.provider || "Unknown"}</p>
-                                                  <p className="text-xs text-muted-foreground">
-                                                    {k.model_name ? `Model: ${k.model_name}` : ""}
-                                                    {k.created_at ? ` · Added on ${new Date(k.created_at).toLocaleDateString()}` : " · Active"}
-                                                  </p>
-                                                </div>
-                                              </div>
+                            <div key={k.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-lg bg-primary/20 text-primary"><Key className="w-4 h-4" /></div>
+                                <div>
+                                  <p className="text-sm font-semibold text-foreground uppercase">{k.provider_name || k.provider || "Unknown"}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {k.model_name ? `Model: ${k.model_name}` : ""}
+                                    {k.created_at ? ` · Added on ${new Date(k.created_at).toLocaleDateString()}` : " · Active"}
+                                  </p>
+                                </div>
+                              </div>
                               <button onClick={() => handleDeleteKey(k.id)} className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors">
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -263,8 +259,8 @@ export default function Settings() {
 
                 {activeTab === "notifications" && (
                   <div className="glass-card p-6 rounded-2xl border border-border/50">
-                     <h3 className="text-lg font-semibold text-foreground mb-4">Notification Preferences</h3>
-                     <p className="text-sm text-muted-foreground">Notification settings are managed via your main WBL profile.</p>
+                    <h3 className="text-lg font-semibold text-foreground mb-4">Notification Preferences</h3>
+                    <p className="text-sm text-muted-foreground">Notification settings are managed via your main WBL profile.</p>
                   </div>
                 )}
 

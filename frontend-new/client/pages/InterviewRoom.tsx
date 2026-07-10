@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Loader2,
-  CheckCircle2, AlertCircle, ArrowRight, Volume2, Camera, Lock
+  CheckCircle2, AlertCircle, ArrowRight, Volume2, Camera, Lock,
 } from "lucide-react";
 import { VideoPanel } from "@/components/interview/VideoPanel";
 import { ControlBar } from "@/components/interview/ControlBar";
@@ -29,7 +29,7 @@ export default function InterviewRoom() {
 
   const type = sessionStorage.getItem("interviewType") || "technical";
   const diff = sessionStorage.getItem("interviewDifficulty") || "senior";
-  
+
   // Computed stage name for backend LLM
   const getStageName = (s: number) => `${type} interview (${diff} level) - Stage ${s}`;
 
@@ -39,6 +39,7 @@ export default function InterviewRoom() {
   const [isCopilotOpen, setIsCopilotOpen] = useState(true);
   const [isAISpeaking, setIsAISpeaking] = useState(false);
   const [focusedPanel, setFocusedPanel] = useState<"candidate" | "ai" | null>(null);
+
 
   // Media permissions & streams
   const {
@@ -72,8 +73,8 @@ export default function InterviewRoom() {
   // ── Global Cleanup & Timer ────────────────────────────────────────────────
   useEffect(() => {
     timerRef.current = setInterval(() => setTimeElapsed((t) => t + 1), 1000);
-    return () => { 
-      if (timerRef.current) clearInterval(timerRef.current); 
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       if (recognitionRef.current) recognitionRef.current.stop();
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
@@ -142,7 +143,7 @@ export default function InterviewRoom() {
       // Reset silence detection timer (6.0 seconds) whenever speech is detected
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      
+
       setSilenceRemaining(6);
       countdownIntervalRef.current = setInterval(() => {
         setSilenceRemaining((r) => (r !== null && r > 1 ? r - 1 : null));
@@ -212,7 +213,7 @@ export default function InterviewRoom() {
     // Optimistic UI
     const newMsgs: ChatMessage[] = [...messages, { role: "user", text: userText }];
     setMessages(newMsgs);
-    
+
     // Format context for backend
     const prevCtx = newMsgs.map(m => `${m.role === "ai" ? "Interviewer" : "Candidate"}: ${m.text}`).join("\n");
     const currentStageName = getStageName(stage);
@@ -248,7 +249,7 @@ export default function InterviewRoom() {
             setCurrentQuestion(nq);
             setMessages((m) => [...m, { role: "ai", text: nq }]);
             speak(nq);
-          } catch {}
+          } catch { }
         }, 3000);
       } else if (newAnswered >= QUESTIONS_PER_STAGE && stage >= TOTAL_STAGES) {
         // All stages done
@@ -365,12 +366,12 @@ export default function InterviewRoom() {
         className={`w-full h-full flex items-center justify-center p-4 sm:p-6 transition-all ${isCopilotOpen ? "mr-80" : ""}`}>
         <div className="hidden md:flex gap-4 w-full h-full max-h-[calc(100vh-180px)]">
           <div className={`transition-all duration-500 ease-in-out ${focusedPanel === "candidate" ? "flex-1" : focusedPanel === "ai" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>
-            <VideoPanel 
-              title={candidateName} 
-              isMuted={!isMicOn} 
-              isCameraOff={!isCameraOn} 
-              initials={initials} 
-              isCandidate={true} 
+            <VideoPanel
+              title={candidateName}
+              isMuted={!isMicOn}
+              isCameraOff={!isCameraOn}
+              initials={initials}
+              isCandidate={true}
               isSpeaking={isCandidateSpeaking && recording}
               isExpanded={focusedPanel === "candidate"}
               onExpand={() => setFocusedPanel(p => p === "candidate" ? null : "candidate")}
@@ -378,11 +379,11 @@ export default function InterviewRoom() {
             />
           </div>
           <div className={`transition-all duration-500 ease-in-out ${focusedPanel === "ai" ? "flex-1" : focusedPanel === "candidate" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>
-            <VideoPanel 
-              title="AI Interviewer" 
-              isSpeaking={isAISpeaking} 
-              isCameraOff={false} 
-              initials="AI" 
+            <VideoPanel
+              title="AI Interviewer"
+              isSpeaking={isAISpeaking}
+              isCameraOff={false}
+              initials="AI"
               isExpanded={focusedPanel === "ai"}
               onExpand={() => setFocusedPanel(p => p === "ai" ? null : "ai")}
             />
@@ -413,7 +414,7 @@ export default function InterviewRoom() {
         {/* Floating Live Transcript Indicator */}
         <AnimatePresence>
           {transcript && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
               className="glass-card px-6 py-4 rounded-2xl border border-primary/30 max-w-2xl w-full text-center shadow-2xl backdrop-blur-xl"
             >
@@ -430,7 +431,7 @@ export default function InterviewRoom() {
             </motion.div>
           )}
           {loading && !transcript && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
               className="glass-card px-6 py-4 rounded-2xl border border-primary/30 flex items-center justify-center gap-3 shadow-2xl backdrop-blur-xl"
             >
@@ -440,7 +441,10 @@ export default function InterviewRoom() {
           )}
         </AnimatePresence>
 
+
+
         <ControlBar
+          isMicOn={isMicOn}
           onToggleMic={(enabled) => {
             setIsMicOn(enabled);
             toggleAudio(enabled);
@@ -449,7 +453,8 @@ export default function InterviewRoom() {
             setIsCameraOn(enabled);
             toggleVideo(enabled);
           }}
-          onRecordToggle={() => recording ? stopRecognition() : startRecognition()}
+          onRecordStart={startRecognition}
+          onRecordStop={stopRecognition}
           isRecording={recording}
           isAudioDenied={audioState === "denied"}
           isVideoDenied={videoState === "denied"}

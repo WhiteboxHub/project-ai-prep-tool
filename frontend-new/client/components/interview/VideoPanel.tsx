@@ -123,7 +123,7 @@ export function VideoPanel({
             {[0, 1, 2].map((idx) => (
               <motion.div
                 key={idx}
-                className="w-1 rounded-full bg-gradient-to-t from-primary to-secondary"
+                className="w-1 h-6 rounded-full bg-gradient-to-t from-primary to-secondary"
                 animate={{ height: ["8px", "20px", "8px"] }}
                 transition={{
                   duration: 0.6,
