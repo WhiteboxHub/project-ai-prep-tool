@@ -1,7 +1,9 @@
-# routes/analytics.py
-# Admin-facing analytics endpoint for the WBL analytics dashboard.
-# Returns per-user AI-Prep usage data: login counts, intro scores, LLM evaluation breakdown.
-
+"""
+backend/routes/analytics.py
+Admin analytics API — candidate prep usage, scores, and CoderPad stats.
+Protected by a simple ADMIN_KEY header / query param.
+"""
+import os
 import json
 import httpx
 import logging
@@ -11,21 +13,65 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
+router = APIRouter(prefix="/api/analytics", tags=["analytics"])
+
+ADMIN_KEY = os.getenv("ADMIN_KEY", "admin-secret-2024")
+WBL_API_URL = os.getenv("WBL_API_URL", "")           # e.g. https://wbl-backend-xxx.run.app
+WBL_SERVICE_TOKEN = os.getenv("WBL_SERVICE_TOKEN", "") # JWT or service token
 
 
-# ─────────────────────────────────────────────
-# Helper: safely parse a JSON field from DB
-# ─────────────────────────────────────────────
-def _parse_json_field(value):
-    if value is None:
-        return None
-    if isinstance(value, (dict, list)):
-        return value
+# ─── Auth guard ───────────────────────────────────────────────────────────────
+
+def require_admin(admin_key: Optional[str] = Query(None), x_admin_key: Optional[str] = Header(None)):
+    key = admin_key or x_admin_key
+    if not key or key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing admin key")
+
+
+# ─── CoderPad cache sync (called internally) ──────────────────────────────────
+
+def _sync_coderpad_for_email(conn, wbl_email: str):
+    """
+    Fetch CoderPad stats from WBL backend and store in cache table.
+    Silently skips if WBL_API_URL is not configured or call fails.
+    """
+    if not WBL_API_URL or not wbl_email:
+        return
+
     try:
-        return json.loads(value)
+        headers = {}
+        if WBL_SERVICE_TOKEN:
+            headers["Authorization"] = f"Bearer {WBL_SERVICE_TOKEN}"
+
+        resp = httpx.get(
+            f"{WBL_API_URL}/api/analytics/coderpad-stats",
+            params={"email": wbl_email},
+            headers=headers,
+            timeout=5.0,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO aiprep_tool_coderpad_cache
+                        (wbl_email, questions_solved, total_submissions, pass_rate, languages_used)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        questions_solved = VALUES(questions_solved),
+                        total_submissions = VALUES(total_submissions),
+                        pass_rate = VALUES(pass_rate),
+                        languages_used = VALUES(languages_used),
+                        last_synced = CURRENT_TIMESTAMP
+                """, (
+                    wbl_email,
+                    data.get("questions_solved", 0),
+                    data.get("total_submissions", 0),
+                    data.get("pass_rate", 0.0),
+                    json.dumps(data.get("languages_used", [])),
+                ))
+            conn.commit()
     except Exception:
-        return None
+        pass  # Non-blocking — cache is best-effort
 
 
 # ─── Helper: compute prep_status label ───────────────────────────────────────
@@ -419,7 +465,6 @@ def get_summary(admin_key: Optional[str] = Query(None), x_admin_key: Optional[st
     conn = None
     try:
         conn = get_db_connection()
-
         with conn.cursor() as cursor:
             # Total active candidates in the prep population.
             cursor.execute("SELECT COUNT(*) AS total FROM candidate_marketing WHERE status = 'active'")
@@ -815,8 +860,39 @@ def get_candidate_detail(
             "coderpad": cp_out,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("AI-Prep analytics error: %s", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+
+# ─── POST /api/analytics/sync-coderpad/{user_id} ──────────────────────────────
+
+@router.post("/sync-coderpad/{candidate_id}")
+def sync_coderpad(
+    candidate_id: int,
+    admin_key: Optional[str] = Query(None),
+    x_admin_key: Optional[str] = Header(None),
+):
+    """Trigger a fresh CoderPad sync from WBL for a specific candidate."""
+    require_admin(admin_key, x_admin_key)
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT email FROM candidate_marketing WHERE id = %s",
+                (candidate_id,)
+            )
+            row = cursor.fetchone()
+        if not row or not row.get("email"):
+            return {"synced": False, "reason": "No WBL email for this candidate"}
+        _sync_coderpad_for_email(conn, row["email"])
+        return {"synced": True, "wbl_email": row["email"]}
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
