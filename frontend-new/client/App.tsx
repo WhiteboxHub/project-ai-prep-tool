@@ -16,10 +16,12 @@ import IntroPracticeRoom from "./pages/IntroPracticeRoom";
 import Documents from "./pages/Documents";
 import Progress from "./pages/Progress";
 import Settings from "./pages/Settings";
+import MyHistory from "./pages/MyHistory";
 import Setup from "./pages/Setup";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
-import Instructions from "./pages/instructions"
+import AdminAnalytics from "./pages/AdminAnalytics";
+import Instructions from "./pages/instructions";
 const queryClient = new QueryClient();
 
 // Guard: redirect to /setup if not authenticated
@@ -48,9 +50,14 @@ const App = () => (
             <Route path="/interview-room" element={<RequireAuth><InterviewRoom /></RequireAuth>} />
             <Route path="/intro-practice" element={<RequireAuth><IntroPracticeRoom /></RequireAuth>} />
             <Route path="/documents" element={<RequireAuth><Documents /></RequireAuth>} />
+            <Route path="/history" element={<RequireAuth><MyHistory /></RequireAuth>} />
             <Route path="/progress" element={<RequireAuth><Progress /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
             <Route path="/instructions" element={<RequireAuth><Instructions /></RequireAuth>} />
+            
+            {/* Admin routes */}
+            <Route path="/admin/analytics" element={<AdminAnalytics />} />
+            
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
@@ -58,5 +65,6 @@ const App = () => (
     </TooltipProvider>
   </QueryClientProvider>
 );
+
 
 createRoot(document.getElementById("root")!).render(<App />);

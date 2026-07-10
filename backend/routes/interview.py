@@ -55,7 +55,7 @@ async def evaluate_live(data: LiveEvalRequest):
         proj = {}
         try:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT product, architecture, role, company_name, domain, impact FROM aiprep_tool_project_context WHERE user_id = %s", (data.session_id,))
+                cursor.execute("SELECT product, architecture, role, company_name, domain, impact FROM aiprep_tool_project_context WHERE candidate_id = %s", (int(data.session_id),))
                 res = cursor.fetchone()
                 if res:
                     proj = res
@@ -136,22 +136,11 @@ async def evaluate_live(data: LiveEvalRequest):
             conn = get_db_connection()
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    INSERT INTO aiprep_tool_evaluations (user_id, type, score, passed, feedback, raw_response)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """, (
-                    data.session_id,
-                    "interview_answer",
-                    score,
-                    score >= 7,
-                    json.dumps(eval_data["evaluation"].get("gap_analysis", [])),
-                    json.dumps({
-                        "question": data.current_question,
-                        "answer": data.user_answer,
-                        "improved": eval_data["evaluation"].get("improved_answer", ""),
-                        "follow_up_type": eval_data.get("follow_up_type", "next_topic"),
-                        "stage_name": data.stage_name
-                    })
-                ))
+                    INSERT INTO aiprep_tool_attempts (candidate_id, attempt_type, attempt_count)
+                    VALUES (%s, 'interview_answer', 1)
+                    ON DUPLICATE KEY UPDATE attempt_count = attempt_count + 1
+                """, (int(data.session_id),))
+
             conn.commit()
             conn.close()
         except Exception as e:
@@ -179,10 +168,10 @@ async def complete_interview(data: CompleteRequest):
     proj = {}
     try:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT score, feedback, raw_response FROM aiprep_tool_evaluations WHERE user_id = %s AND type = 'interview_answer' ORDER BY created_at ASC", (data.session_id,))
-            answers = cursor.fetchall()
+            # Return empty list as interview answers are not persisted in evaluations under new schema
+            answers = []
             
-            cursor.execute("SELECT product, architecture, role, company_name, domain FROM aiprep_tool_project_context WHERE user_id = %s", (data.session_id,))
+            cursor.execute("SELECT product, architecture, role, company_name, domain FROM aiprep_tool_project_context WHERE candidate_id = %s", (int(data.session_id),))
             res = cursor.fetchone()
             if res:
                 proj = res
@@ -266,16 +255,10 @@ async def complete_interview(data: CompleteRequest):
         conn = get_db_connection()
         with conn.cursor() as cursor:
             cursor.execute("""
-                INSERT INTO aiprep_tool_evaluations (user_id, type, score, passed, feedback, raw_response)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (
-                data.session_id,
-                "interview_complete",
-                final_report.get("overall_score", avg_score),
-                final_report.get("overall_score", avg_score) >= 70,
-                json.dumps(final_report.get("improvement_areas", [])),
-                json.dumps(final_report)
-            ))
+                INSERT INTO aiprep_tool_attempts (candidate_id, attempt_type, attempt_count)
+                VALUES (%s, 'interview_complete', 1)
+                ON DUPLICATE KEY UPDATE attempt_count = attempt_count + 1
+            """, (int(data.session_id),))
         conn.commit()
         conn.close()
     except Exception as e:

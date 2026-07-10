@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Mic, MicOff, Loader2, CheckCircle2, AlertCircle, ArrowRight, Volume2, Lock, Camera, VideoOff, RotateCcw, X } from "lucide-react";
 import { VideoPanel } from "@/components/interview/VideoPanel";
 import { ControlBar } from "@/components/interview/ControlBar";
-import { evaluateIntroText, getDynamicTemplate, getIntroHistory } from "@/lib/api";
+import { evaluateIntro, evaluateIntroText, getDynamicTemplate, getIntroHistory } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { usePipeline } from "@/hooks/use-pipeline";
 import { useMediaStream } from "@/hooks/useMediaStream";
@@ -57,6 +57,8 @@ export default function IntroPracticeRoom() {
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   // ── Global Cleanup ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -126,7 +128,6 @@ export default function IntroPracticeRoom() {
         setSilenceRemaining(null);
         if (transcriptRef.current.trim()) {
           stopRecognition();
-          submitAnswer();
         }
       }, 6000);
     };
@@ -135,7 +136,7 @@ export default function IntroPracticeRoom() {
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
       setSilenceRemaining(null);
       setRecording(false);
-      if (transcriptRef.current.trim()) submitAnswer(transcriptRef.current.trim());
+      stopRecognition();
     };
     rec.onend = () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
@@ -143,6 +144,36 @@ export default function IntroPracticeRoom() {
       setSilenceRemaining(null);
       setRecording(false);
     };
+
+    // Start video recording if camera stream is active
+    if (stream) {
+      chunksRef.current = [];
+      try {
+        const options = { mimeType: "video/webm" };
+        if (!MediaRecorder.isTypeSupported("video/webm")) {
+          options.mimeType = "video/mp4";
+        }
+        const recorder = new MediaRecorder(stream, options);
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            chunksRef.current.push(e.data);
+          }
+        };
+        recorder.onstop = async () => {
+          if (chunksRef.current.length > 0) {
+            const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "video/webm" });
+            await submitVideoAnswer(blob);
+          } else {
+            await submitAnswer();
+          }
+        };
+        recorder.start(1000);
+        mediaRecorderRef.current = recorder;
+      } catch (err) {
+        console.warn("MediaRecorder start failed:", err);
+      }
+    }
+
     recognitionRef.current = rec;
     rec.start();
     setRecording(true);
@@ -157,13 +188,19 @@ export default function IntroPracticeRoom() {
       setSilenceRemaining(null);
       if (transcriptRef.current.trim()) {
         stopRecognition();
-        submitAnswer();
       }
     }, 6000);
   };
 
   const stopRecognition = () => {
     recognitionRef.current?.stop();
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    } else {
+      if (!stream) {
+        submitAnswer();
+      }
+    }
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     setSilenceRemaining(null);
@@ -194,6 +231,40 @@ export default function IntroPracticeRoom() {
       let errorMsg = "Evaluation failed. Please try again.";
       if (e?.message && typeof e.message === "string") {
         if (e.message.includes("[object Object]")) errorMsg = "Server evaluation error. Please check your transcript and try again.";
+        else errorMsg = e.message;
+      } else if (typeof e === "string") {
+        errorMsg = e;
+      }
+      setError(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submitVideoAnswer = async (videoBlob: Blob) => {
+    if (!sessionId) return;
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await evaluateIntro(sessionId, videoBlob);
+      setResult(res);
+      if (res.transcript) {
+        setTranscript(res.transcript);
+        transcriptRef.current = res.transcript;
+      }
+      const score = res.score || res.total_score || res.evaluation?.overall_score || 0;
+      let msg = "";
+      if (score >= 75) {
+        msg = `Excellent work! You scored ${score} out of 100. Your introduction practice is complete, and technical interviews are now unlocked!`;
+      } else {
+        msg = `You scored ${score} out of 100. You need a score of at least 75 to complete this module and unlock technical interviews. Let's review the feedback and practice again.`;
+      }
+      speak(msg);
+    } catch (e: any) {
+      let errorMsg = "Evaluation failed. Please try again.";
+      if (e?.message && typeof e.message === "string") {
+        if (e.message.includes("[object Object]")) errorMsg = "Server evaluation error. Please check your recording and try again.";
         else errorMsg = e.message;
       } else if (typeof e === "string") {
         errorMsg = e;
