@@ -4,7 +4,6 @@ import os
 from time import sleep
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 # Load .env locally
@@ -68,12 +67,8 @@ app.include_router(case_study.router)
 # Candidate Setup — migrated from wbl-backend
 app.include_router(candidate_setup.router)
 
-# Admin Analytics — protected by ADMIN_KEY
+# Admin Analytics — WBL dashboard integration
 app.include_router(analytics.router)
-
-# Serve static uploads directory (recorded intro videos)
-os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 @app.get("/")
 def root():
