@@ -17,27 +17,28 @@ def get_final_report(session_id: str):
             resume = {"resume_json": resume_raw} if resume_raw else None
 
             # Aggregate project
-            cursor.execute("SELECT domain, background, skills, product, architecture, role, impact FROM aiprep_tool_project_context WHERE user_id = %s", (session_id,))
+            cursor.execute("SELECT domain, background, skills, product, architecture, role, impact FROM aiprep_tool_project_context WHERE candidate_id = %s", (int(session_id),))
             project = cursor.fetchone()
 
-            # Aggregate intro aiprep_tool_evaluations
-            cursor.execute("SELECT score, feedback, raw_response FROM aiprep_tool_evaluations WHERE user_id = %s AND type = %s ORDER BY created_at DESC", (session_id, "intro"))
-            intro_evals = cursor.fetchall()
+            # Aggregate latest intro evaluation for this candidate/session.
+            cursor.execute("""
+                SELECT score, passed, feedback, raw_response, video_url, created_at
+                FROM aiprep_tool_evaluations
+                WHERE user_id = %s AND type = 'intro'
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (session_id,))
+            intro_row = cursor.fetchone()
+            intro_evals = [intro_row] if (intro_row and intro_row["score"] is not None) else []
 
             # Aggregate interview answers/evals
-            cursor.execute("SELECT score, feedback, raw_response FROM aiprep_tool_evaluations WHERE user_id = %s AND type = %s ORDER BY created_at DESC", (session_id, "interview_answer"))
-            interview_evals = cursor.fetchall()
+            interview_evals = []
             
-            # Check if all completed and fetch final analysis
-            cursor.execute("SELECT raw_response FROM aiprep_tool_evaluations WHERE user_id = %s AND type = %s ORDER BY created_at DESC", (session_id, "interview_complete"))
+            # Check if all completed
+            cursor.execute("SELECT attempt_count FROM aiprep_tool_attempts WHERE candidate_id = %s AND attempt_type = 'interview_complete'", (int(session_id),))
             comp_row = cursor.fetchone()
             interview_complete = comp_row is not None
             final_analysis = None
-            if comp_row and comp_row.get("raw_response"):
-                try:
-                    final_analysis = json.loads(comp_row["raw_response"]) if isinstance(comp_row["raw_response"], str) else comp_row["raw_response"]
-                except:
-                    pass
 
             # Parse JSON fields where needed
             for e in intro_evals:
