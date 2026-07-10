@@ -106,10 +106,17 @@ export function evaluateIntro(sessionId: string, audioBlob: Blob, mimeType = "au
   return postForm("/api/intro/evaluate", form);
 }
 
-export function evaluateIntroText(sessionId: string, transcript: string) {
+export function evaluateIntroText(sessionId: string, transcript: string, introType: string = "general", jdText: string = "", videoUrl: string | null = null) {
   const form = new FormData();
   form.append("session_id", sessionId);
   form.append("transcript", transcript);
+  form.append("intro_type", introType);
+  if (jdText) {
+    form.append("job_description", jdText);
+  }
+  if (videoUrl) {
+    form.append("video_url", videoUrl);
+  }
   return postForm("/api/intro/evaluate-text", form);
 }
 

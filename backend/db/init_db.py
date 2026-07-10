@@ -76,6 +76,7 @@
 #                     passed BOOLEAN,
 #                     feedback JSON,
 #                     raw_response JSON,
+#                     video_url VARCHAR(255) DEFAULT NULL,
 #                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 #                 )
 #             """)
@@ -235,6 +236,7 @@ def init_db():
 
                     feedback JSON,
                     raw_response JSON,
+                    video_url VARCHAR(255) DEFAULT NULL,
 
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 

@@ -1,0 +1,46 @@
+name: CI - Frontend (Dev)
+
+on:
+  pull_request:
+    branches: [ dev ]
+    paths:
+      - 'frontend-new/**'
+  push:
+    branches: [ dev ]
+    paths:
+      - 'frontend-new/**'
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend-new
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10 # Aligned with package.json "packageManager"
+
+      - name: Setup Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20 # Aligned with Dockerfile base image
+          cache: 'pnpm'
+          cache-dependency-path: frontend-new/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Run tests
+        run: pnpm run test
+
+      - name: Build check
+        run: pnpm run build

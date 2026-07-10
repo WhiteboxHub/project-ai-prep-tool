@@ -339,8 +339,10 @@ async def upload_resume(
         return {"message": "Resume uploaded"}
 
     except Exception as e:
-        print("ERROR:", str(e))
-        raise HTTPException(500, "Resume upload failed")
+        import traceback
+        err_msg = traceback.format_exc()
+        print("ERROR:", err_msg)
+        raise HTTPException(500, f"Resume upload failed: {str(e)}")
 
     finally:
         conn.close()

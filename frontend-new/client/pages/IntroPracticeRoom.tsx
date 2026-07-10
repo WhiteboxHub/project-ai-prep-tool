@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Bot, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Mic, MicOff, Loader2, CheckCircle2, AlertCircle, ArrowRight, Volume2, Lock, Camera, VideoOff, RotateCcw } from "lucide-react";
 import { VideoPanel } from "@/components/interview/VideoPanel";
@@ -9,6 +10,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { usePipeline } from "@/hooks/use-pipeline";
 import { useMediaStream } from "@/hooks/useMediaStream";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { saveRecording } from "@/lib/indexedDB";
 
 export default function IntroPracticeRoom() {
   const navigate = useNavigate();
@@ -27,18 +29,30 @@ export default function IntroPracticeRoom() {
   } = useMediaStream(true);
 
   const [transcript, setTranscript] = useState("");
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const [messages, setMessages] = useState<{id: string, role: "ai"|"user", text: string}[]>([]);
   const [recording, setRecording] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [template, setTemplate] = useState("");
   const [result, setResult] = useState<any>(null);
-  const [silenceRemaining, setSilenceRemaining] = useState<number | null>(null);
+  const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    const chatContainers = document.querySelectorAll('.chat-scroll-container');
+    chatContainers.forEach(container => {
+      container.scrollTop = container.scrollHeight;
+    });
+  }, [messages, transcript, interimTranscript]);
 
   const transcriptRef = useRef("");
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<BlobPart[]>([]);
 
   // ── Global Cleanup ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -46,11 +60,14 @@ export default function IntroPracticeRoom() {
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       if (recognitionRef.current) recognitionRef.current.stop();
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
     };
   }, []);
 
   const speak = useCallback((text: string) => {
+    setMessages(prev => [...prev, { id: Date.now().toString() + Math.random(), role: "ai", text }]);
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(text);
@@ -77,14 +94,27 @@ export default function IntroPracticeRoom() {
   const startRecognition = () => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) { setError("Speech recognition not supported. Use Chrome."); return; }
+
+    // If starting after a previous result, reset everything
+    if (result) {
+      setResult(null);
+      setTranscript("");
+      setInterimTranscript("");
+      transcriptRef.current = "";
+      setRecordedVideoUrl(null);
+      setMessages([{ role: "ai", id: "welcome", text: "Welcome back! Ready for another try?" }]);
+    }
+
     const rec = new SR();
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = "en-US";
     rec.onresult = (e: any) => {
       let final = "";
+      let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         if (e.results[i].isFinal) final += e.results[i][0].transcript + " ";
+        else interim += e.results[i][0].transcript;
       }
       if (final) {
         setTranscript((p) => {
@@ -93,63 +123,87 @@ export default function IntroPracticeRoom() {
           return newText;
         });
       }
+      setInterimTranscript(interim);
 
-      // Reset silence detection timer (6.0 seconds) whenever speech is detected
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      
-      setSilenceRemaining(6);
-      countdownIntervalRef.current = setInterval(() => {
-        setSilenceRemaining((r) => (r !== null && r > 1 ? r - 1 : null));
-      }, 1000);
-
       silenceTimerRef.current = setTimeout(() => {
-        if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-        setSilenceRemaining(null);
-        if (transcriptRef.current.trim()) {
-          stopRecognition();
-          submitAnswer();
-        }
-      }, 6000);
+        stopRecognition();
+      }, 8000);
     };
-    rec.onerror = () => {
+    rec.onerror = (e: any) => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      setSilenceRemaining(null);
       setRecording(false);
-      if (transcriptRef.current.trim()) submitAnswer(transcriptRef.current.trim());
+      
+      if (e.error === "no-speech") {
+        // Just ignore no-speech, they can stay silent
+      } else if (e.error === "audio-capture") {
+        setError("No microphone was found. Please ensure your microphone is plugged in and recognized by Windows.");
+      } else if (e.error === "not-allowed") {
+        setError("Microphone access was denied. Please allow it in the browser address bar.");
+      } else if (e.error === "network") {
+        setError("Network error: Speech recognition requires an internet connection.");
+      } else {
+        setError(`Speech recognition error: ${e.error}`);
+      }
     };
     rec.onend = () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      setSilenceRemaining(null);
       setRecording(false);
+      stopMediaRecording();
     };
     recognitionRef.current = rec;
     rec.start();
     setRecording(true);
-    setTranscript("");
-    transcriptRef.current = "";
-    setSilenceRemaining(6);
-    countdownIntervalRef.current = setInterval(() => {
-      setSilenceRemaining((r) => (r !== null && r > 1 ? r - 1 : null));
-    }, 1000);
-    silenceTimerRef.current = setTimeout(() => {
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      setSilenceRemaining(null);
-      if (transcriptRef.current.trim()) {
-        stopRecognition();
-        submitAnswer();
+    
+    // Start MediaRecorder if stream is available
+    if (stream && (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive")) {
+      recordedChunksRef.current = [];
+      try {
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            recordedChunksRef.current.push(e.data);
+          }
+        };
+        recorder.start(1000);
+        mediaRecorderRef.current = recorder;
+      } catch (err) {
+        console.error("MediaRecorder start failed", err);
       }
-    }, 6000);
+    }
+    
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    silenceTimerRef.current = setTimeout(() => {
+      stopRecognition();
+    }, 8000);
+  };
+
+  const stopMediaRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      const id = crypto.randomUUID();
+      mediaRecorderRef.current.onstop = async () => {
+        const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+        try {
+          await saveRecording(id, blob);
+          setRecordedVideoUrl(`local:${id}`);
+          
+          // Trigger the Service Worker to begin the background upload immediately
+          if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({ type: 'NEW_RECORDING_READY' });
+          }
+        } catch (err) {
+          console.error("Failed to save recording", err);
+        }
+      };
+      mediaRecorderRef.current.stop();
+    }
   };
 
   const stopRecognition = () => {
     recognitionRef.current?.stop();
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    setSilenceRemaining(null);
     setRecording(false);
+    stopMediaRecording();
   };
 
   const submitAnswer = async (textToSubmit?: string) => {
@@ -157,21 +211,30 @@ export default function IntroPracticeRoom() {
     if (!finalTranscript.trim()) { setError("Please record your answer using the microphone."); return; }
     if (!sessionId) return;
 
+    // Save user's transcript to chat history
+    setMessages(prev => [...prev, { id: Date.now().toString(), role: "user", text: finalTranscript.trim() }]);
+    setTranscript("");
+    setInterimTranscript("");
+    transcriptRef.current = "";
+
     setLoading(true);
     setError("");
     const userText = finalTranscript.trim();
 
     try {
-      const res = await evaluateIntroText(sessionId, userText);
+      const introType = sessionStorage.getItem("introType") || "general";
+      const jdText = sessionStorage.getItem("jobDescription") || "";
+      const res = await evaluateIntroText(sessionId, userText, introType, jdText, recordedVideoUrl);
       setResult(res);
-      const score = res.score || res.total_score || res.evaluation?.overall_score || 0;
+      const score = res.score !== undefined ? res.score : res.evaluation?.overall_score || 0;
       let msg = "";
       if (score >= 75) {
         msg = `Excellent work! You scored ${score} out of 100. Your introduction practice is complete, and technical interviews are now unlocked!`;
       } else {
-        msg = `You scored ${score} out of 100. You need a score of at least 75 to complete this module and unlock technical interviews. Let's review the feedback and practice again.`;
+        msg = `You scored ${score} out of 100. Check the feedback panel for tips on how to improve your delivery and content.`;
       }
-      speak(msg);
+      
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: "ai", text: msg }]);
     } catch (e: any) {
       let errorMsg = "Evaluation failed. Please try again.";
       if (e?.message && typeof e.message === "string") {
@@ -211,6 +274,112 @@ export default function IntroPracticeRoom() {
     );
   }
 
+  const renderChatOverlay = () => (
+    <div className="absolute inset-x-2 bottom-4 top-2 flex flex-col justify-end z-30">
+      <div 
+        className="chat-scroll-container overflow-y-auto p-2 space-y-4 scrollbar-hide flex flex-col pointer-events-auto max-h-full pb-2"
+      >
+        {messages.map((msg) => (
+          <motion.div
+            key={msg.id}
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            className={`flex gap-3 max-w-[90%] ${msg.role === "user" ? "ml-auto flex-row-reverse" : "mr-auto"}`}
+          >
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg ${msg.role === "ai" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>
+              {msg.role === "ai" ? <span className="text-[10px] font-bold">AI</span> : <User className="w-4 h-4" />}
+            </div>
+            <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed shadow-lg ${msg.role === "ai" ? "bg-card/95 border border-border/50 rounded-tl-none" : "bg-primary text-primary-foreground rounded-tr-none"}`}>
+              {msg.text}
+            </div>
+          </motion.div>
+        ))}
+
+        <AnimatePresence>
+          {(transcript || interimTranscript || recording) && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="flex gap-3 max-w-[90%] ml-auto flex-row-reverse"
+            >
+              <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-secondary text-secondary-foreground shadow-lg">
+                <User className="w-4 h-4" />
+              </div>
+              <div className="px-4 py-2.5 rounded-2xl text-sm leading-relaxed bg-primary/90 text-primary-foreground shadow-lg rounded-tr-none min-w-[60px] relative">
+                {transcript}
+                <span className="opacity-70 italic ml-1">{interimTranscript}</span>
+                {recording && !transcript && !interimTranscript && (
+                  <span className="flex items-center gap-1 h-5">
+                    <span className="w-1.5 h-1.5 bg-primary-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 bg-primary-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 bg-primary-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </span>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {loading && !transcript && !interimTranscript && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="flex gap-3 max-w-[90%] mr-auto"
+            >
+              <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-primary text-primary-foreground shadow-lg">
+                <Loader2 className="w-4 h-4 animate-spin" />
+              </div>
+              <div className="px-4 py-2.5 rounded-2xl text-sm leading-relaxed bg-card/95 shadow-lg border border-border/50 rounded-tl-none text-muted-foreground flex items-center gap-2">
+                Evaluating introduction delivery...
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+
+  const renderAICoachPane = () => (
+    <>
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-card to-secondary/5" />
+      <div className="relative z-20 flex items-center justify-between px-4 py-3 border-b border-border/30 bg-background/50 backdrop-blur-md">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-foreground">AI Coach</span>
+          {isAISpeaking && (
+            <div className="flex gap-1 ml-2">
+              {[0, 1, 2].map((idx) => (
+                <motion.div
+                  key={idx}
+                  className="w-1 h-3 rounded-full bg-primary"
+                  animate={{ height: ["4px", "12px", "4px"] }}
+                  transition={{ duration: 0.6, repeat: Infinity, delay: idx * 0.1 }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setFocusedPanel(p => p === "ai" ? null : "ai")}
+            className="p-1.5 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-foreground transition-all"
+          >
+            {focusedPanel === "ai" ? (
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+            )}
+          </motion.button>
+        </div>
+      </div>
+      <div className="relative z-10 flex-1 overflow-hidden">
+        {renderChatOverlay()}
+      </div>
+    </>
+  );
+
   return (
     <div className="w-screen h-screen bg-gradient-to-br from-background via-card/30 to-background overflow-hidden flex">
       
@@ -231,19 +400,12 @@ export default function IntroPracticeRoom() {
               mediaStream={stream}
             />
           </div>
-          <div className={`transition-all duration-500 ease-in-out ${focusedPanel === "ai" ? "flex-1" : focusedPanel === "candidate" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>
-            <VideoPanel 
-              title="AI Coach" 
-              isSpeaking={isAISpeaking} 
-              isCameraOff={false} 
-              initials="AI" 
-              isExpanded={focusedPanel === "ai"}
-              onExpand={() => setFocusedPanel(p => p === "ai" ? null : "ai")}
-            />
+          <div className={`transition-all duration-500 ease-in-out flex flex-col relative overflow-hidden rounded-2xl border-2 ${isAISpeaking ? "border-primary/50 shadow-2xl shadow-primary/30" : "border-border/30"} bg-card ${focusedPanel === "ai" ? "flex-1" : focusedPanel === "candidate" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>
+            {renderAICoachPane()}
           </div>
         </div>
-        <div className="md:hidden h-full w-full">
-          <VideoPanel title="AI Coach" isSpeaking={isAISpeaking} isCameraOff={false} initials="AI" />
+        <div className={`md:hidden h-full w-full flex flex-col relative overflow-hidden rounded-2xl border-2 ${isAISpeaking ? "border-primary/50 shadow-2xl shadow-primary/30" : "border-border/30"} bg-card`}>
+          {renderAICoachPane()}
         </div>
 
         {/* ── ControlBar ONLY (Center Bottom) ── */}
@@ -254,35 +416,7 @@ export default function IntroPracticeRoom() {
             </div>
           )}
 
-          {/* Floating Live Transcript Indicator */}
-          <AnimatePresence>
-            {transcript && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-                className="glass-card px-6 py-4 rounded-2xl border border-primary/30 max-w-2xl w-full text-center shadow-2xl backdrop-blur-xl"
-              >
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <span className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Live Transcript</span>
-                  {silenceRemaining !== null && (
-                    <span className="ml-2 px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold uppercase animate-pulse">
-                      Auto-evaluating in ({silenceRemaining}s)
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-foreground leading-relaxed">{transcript}</p>
-              </motion.div>
-            )}
-            {loading && !transcript && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-                className="glass-card px-6 py-4 rounded-2xl border border-primary/30 flex items-center justify-center gap-3 shadow-2xl backdrop-blur-xl"
-              >
-                <Loader2 className="w-5 h-5 text-primary animate-spin" />
-                <span className="text-sm text-foreground">Evaluating introduction delivery...</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Chat Interface removed from here - now inside AI Coach Panel */}
 
           {/* Device status chips — above ControlBar */}
           {(audioState === "denied" || videoState === "denied") && (
@@ -312,6 +446,18 @@ export default function IntroPracticeRoom() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* Send for Eval Button */}
+          {transcript && !recording && !loading && !result && (
+            <motion.button
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              onClick={() => submitAnswer()}
+              className="mb-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-primary to-secondary text-white font-bold shadow-[0_0_20px_rgba(124,58,237,0.3)] hover:shadow-[0_0_30px_rgba(124,58,237,0.5)] flex items-center gap-2 hover:-translate-y-0.5 transition-all"
+            >
+              <CheckCircle2 className="w-5 h-5" /> Send for Eval
+            </motion.button>
           )}
 
           <ControlBar

@@ -21,7 +21,7 @@ def get_final_report(session_id: str):
             project = cursor.fetchone()
 
             # Aggregate intro aiprep_tool_evaluations
-            cursor.execute("SELECT score, feedback, raw_response FROM aiprep_tool_evaluations WHERE user_id = %s AND type = %s ORDER BY created_at DESC", (session_id, "intro"))
+            cursor.execute("SELECT score, feedback, raw_response FROM aiprep_tool_evaluations WHERE user_id = %s AND type IN ('intro', 'intro_jd', 'intro_eval', 'intro_eval_jd') ORDER BY created_at DESC", (session_id,))
             intro_evals = cursor.fetchall()
 
             # Aggregate interview answers/evals

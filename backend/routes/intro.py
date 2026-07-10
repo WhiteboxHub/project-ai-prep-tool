@@ -189,9 +189,10 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 
 from db.connection import get_db_connection
 from services.speech_service import transcribe_audio
-from services.evaluator import evaluate_intro
+from services.evaluator import evaluate_intro, evaluate_intro_jd
 from services.user_context import get_user_api_key
 from services.llm_service import call_llm_with_context
+from services.resume_source import fetch_resume_dict
 
 router = APIRouter(prefix="/api/intro", tags=["intro"])
 
@@ -227,7 +228,9 @@ def get_candidate_ideal_intro(session_id: str) -> str:
 async def evaluate_audio_intro(
     session_id: str = Form(...),
     audio: UploadFile = File(...),
-    vision_metrics: str = Form(None)
+    vision_metrics: str = Form(None),
+    intro_type: str = Form("general"),
+    job_description: str = Form("")
 ):
     conn = None
     file_path = None
@@ -244,14 +247,23 @@ async def evaluate_audio_intro(
             f.write(await audio.read())
 
         transcript = transcribe_audio(file_path, api_key=api_key)
-        ideal_ctx = get_candidate_ideal_intro(session_id)
+        resume_data = fetch_resume_dict(session_id)
 
-        eval_result = await evaluate_intro(
-            user_id=session_id,
-            transcript=transcript,
-            ideal_intro=ideal_ctx,
-            api_key=api_key
-        )
+        if intro_type == "jd-specific":
+            eval_result = await evaluate_intro_jd(
+                user_id=session_id,
+                transcript=transcript,
+                resume_data=resume_data,
+                job_description=job_description,
+                api_key=api_key
+            )
+        else:
+            eval_result = await evaluate_intro(
+                user_id=session_id,
+                transcript=transcript,
+                resume_data=resume_data,
+                api_key=api_key
+            )
 
         if vision_metrics:
             try:
@@ -265,26 +277,44 @@ async def evaluate_audio_intro(
 
         conn = get_db_connection()
 
-        raw_score = eval_result.get("overall_score", 0)
+        # Handle different response formats based on the prompt
+        if intro_type == "jd-specific":
+            raw_score = eval_result.get("score", 0)
+            passed = eval_result.get("passed", False)
+            feedback = eval_result.get("feedback", {})
+            raw_response = eval_result.get("raw_response", eval_result)
+            db_type = "intro_jd"
+        else:
+            raw_score = eval_result.get("overall_score", 0)
+            passed = eval_result.get("passed", False)
+            feedback = {
+                "strengths": eval_result.get("strengths", []),
+                "weaknesses": eval_result.get("weaknesses", []),
+                "ai_suggestions": eval_result.get("ai_suggestions", []),
+                "improvement_areas": eval_result.get("improvement_areas", [])
+            }
+            raw_response = eval_result
+            db_type = "intro"
+
         try:
             score = float(raw_score)
         except (ValueError, TypeError):
             score = 0.0
 
-        if score > 100:
-            db_score = 100
-        else:
-            db_score = int(score)
+        db_score = min(int(score), 100)
 
         with conn.cursor() as cursor:
             cursor.execute("""
-                INSERT INTO aiprep_tool_evaluations (user_id, type, score, feedback)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO aiprep_tool_evaluations (user_id, type, score, passed, feedback, raw_response, video_url)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (
                 session_id,
-                "intro",
+                db_type,
                 db_score,
-                json.dumps(eval_result)
+                passed,
+                json.dumps(feedback),
+                json.dumps(raw_response),
+                video_url
             ))
 
         conn.commit()
@@ -312,52 +342,81 @@ async def evaluate_audio_intro(
 @router.post("/evaluate-text")
 async def evaluate_text_intro(
     session_id: str = Form(...),
-    transcript: str = Form(...)
+    transcript: str = Form(...),
+    intro_type: str = Form("general"),
+    job_description: str = Form(""),
+    video_url: str = Form(None)
 ):
     try:
         api_key = get_user_api_key(session_id)
         if not api_key:
             raise Exception("User not initialized")
 
-        ideal_ctx = get_candidate_ideal_intro(session_id)
-        eval_result = await evaluate_intro(
-            user_id=session_id,
-            transcript=transcript,
-            ideal_intro=ideal_ctx,
-            api_key=api_key
-        )
+        resume_data = fetch_resume_dict(session_id)
 
-        raw_score = eval_result.get("overall_score", 0)
+        if intro_type == "jd-specific":
+            eval_result = await evaluate_intro_jd(
+                user_id=session_id,
+                transcript=transcript,
+                resume_data=resume_data,
+                job_description=job_description,
+                api_key=api_key
+            )
+            
+            raw_score = eval_result.get("score", 0)
+            passed = eval_result.get("passed", False)
+            feedback = eval_result.get("feedback", {})
+            raw_response = eval_result.get("raw_response", eval_result)
+            db_type = "intro_jd"
+        else:
+            eval_result = await evaluate_intro(
+                user_id=session_id,
+                transcript=transcript,
+                resume_data=resume_data,
+                api_key=api_key
+            )
+            
+            raw_score = eval_result.get("overall_score", 0)
+            passed = eval_result.get("passed", False)
+            feedback = {
+                "strengths": eval_result.get("strengths", []),
+                "weaknesses": eval_result.get("weaknesses", []),
+                "ai_suggestions": eval_result.get("ai_suggestions", []),
+                "improvement_areas": eval_result.get("improvement_areas", [])
+            }
+            raw_response = eval_result
+            db_type = "intro"
+
         try:
             score = float(raw_score)
         except (ValueError, TypeError):
             score = 0.0
 
-        if score > 100:
-            db_score = 100
-        else:
-            db_score = int(score)
+        db_score = min(int(score), 100)
 
         conn = get_db_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    INSERT INTO aiprep_tool_evaluations (user_id, type, score, feedback)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO aiprep_tool_evaluations (user_id, type, score, passed, feedback, raw_response, video_url)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """, (
                     session_id,
-                    "intro",
+                    db_type,
                     db_score,
-                    json.dumps(eval_result)
+                    passed,
+                    json.dumps(feedback),
+                    json.dumps(raw_response),
+                    video_url
                 ))
             conn.commit()
         finally:
             conn.close()
 
         return {
-            "evaluation": eval_result,
+            "evaluation": raw_response,
             "score": db_score,
-            "feedback": eval_result.get("feedback", [])
+            "feedback": feedback
         }
 
     except Exception as e:
@@ -522,11 +581,11 @@ def get_intro_history(session_id: str):
 
         with conn.cursor() as cursor:
             cursor.execute("""
-                SELECT id, score, feedback, created_at
+                SELECT id, score, feedback, raw_response, type, created_at, video_url
                 FROM aiprep_tool_evaluations
-                WHERE user_id = %s AND type = 'intro'
+                WHERE user_id = %s AND type IN ('intro', 'intro_jd', 'intro_eval', 'intro_eval_jd')
                 ORDER BY created_at DESC
-                LIMIT 10
+                LIMIT 20
             """, (session_id,))
 
             rows = cursor.fetchall()

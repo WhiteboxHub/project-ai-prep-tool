@@ -165,9 +165,9 @@ export default function Dashboard() {
     },
     {
       id: "intro",
-      title: "Introduction Practice",
+      title: "Intro Practice",
       description: "Record and evaluate your professional intro",
-      href: "/intro-practice",
+      href: "/intro-select",
       status: pipeline.intro,
       icon: <Users className="w-5 h-5" />,
     },
@@ -375,7 +375,7 @@ export default function Dashboard() {
                     whileHover={{ x: 4 }}
                     onClick={() => {
                       if (pipeline.interview === "ready") navigate("/interview-select");
-                      else if (pipeline.intro === "ready") navigate("/intro-practice");
+                      else if (pipeline.intro === "ready") navigate("/intro-select");
                       else if (pipeline.project === "ready") navigate("/preparation");
                       else navigate("/settings");
                     }}

@@ -19,6 +19,7 @@ import { clearSession } from "@/lib/auth";
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/" },
   { label: "Project Analysis", icon: Lightbulb, href: "/preparation" },
+  { label: "Intro Practice", icon: FileText, href: "/intro-select" },
   { label: "Interview Practice", icon: Video, href: "/interview-select" },
   { label: "Documents", icon: FileText, href: "/documents" },
   { label: "Progress", icon: TrendingUp, href: "/progress" },
