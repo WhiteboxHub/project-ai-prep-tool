@@ -88,7 +88,11 @@ def fetch_resume_dict(session_id: str) -> Optional[dict]:
     return _parse_json_field(raw)
 
 
-def save_resume_for_session(session_id: str, resume_data: dict) -> None:
+def save_resume_for_session(
+    session_id: str,
+    resume_data: dict,
+    save_to_candidate_marketing_my_resume: bool = False,
+) -> None:
     """
     Save resume JSON to candidate_resume (keyed by candidate.id).
     session_id = str(candidate_marketing.id)
@@ -101,6 +105,16 @@ def save_resume_for_session(session_id: str, resume_data: dict) -> None:
             cid = _get_candidate_id_from_marketing(cursor, marketing_id)
             if not cid:
                 raise ValueError(f"No candidate found for marketing_id={marketing_id}")
+
+            if save_to_candidate_marketing_my_resume:
+                cursor.execute(
+                    """
+                    UPDATE candidate_marketing
+                    SET my_resume = %s
+                    WHERE id = %s
+                    """,
+                    (resume_json_str, marketing_id),
+                )
 
             cursor.execute(
                 "SELECT id FROM candidate_resume WHERE candidate_id = %s ORDER BY id DESC LIMIT 1",

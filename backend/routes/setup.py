@@ -1,4 +1,7 @@
 import json
+import re
+import tempfile
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
@@ -7,6 +10,7 @@ from db.connection import get_db_connection
 from utils.security import encrypt
 import os
 from openai import OpenAI
+from services.resume_parser import parse_resume
 
 from services.resume_source import (
     fetch_resume_raw,
@@ -20,6 +24,7 @@ from services.resume_source import (
 router = APIRouter(prefix="/api/setup", tags=["setup"])
 
 EXTRACTION_STATUSES = {}
+ALLOWED_RESUME_EXTENSIONS = {".json", ".pdf", ".doc", ".docx"}
 
 
 class ValidationRequest(BaseModel):
@@ -53,9 +58,67 @@ def _get_candidate_marketing_id(cursor, candidate_id: int) -> int:
     return row["id"]
 
 
+def _resolve_resume_upload_session(cursor, candidate_id: Optional[int], wbl_email: Optional[str]) -> int:
+    """Resolve or create the candidate_marketing row used as setup session id."""
+    if candidate_id:
+        cursor.execute(
+            "SELECT id FROM candidate_marketing WHERE candidate_id = %s AND status = 'active' LIMIT 1",
+            (candidate_id,),
+        )
+        row = cursor.fetchone()
+        if row:
+            return row["id"]
+
+        cursor.execute("SELECT id FROM candidate WHERE id = %s", (candidate_id,))
+        if cursor.fetchone():
+            return _resolve_or_create_session(cursor, SetupInit(candidate_id=candidate_id, wbl_email=wbl_email))
+
+    if wbl_email:
+        return _resolve_or_create_session(cursor, SetupInit(wbl_email=wbl_email, name=wbl_email))
+
+    raise HTTPException(404, "No active candidate_marketing record found for this candidate")
+
+
 def _upsert_eval_login(conn, marketing_id: int):
-    """Login tracking is intentionally not stored in aiprep_tool_evaluations."""
-    return None
+    """Upsert aiprep_tool_evaluations row to track login count and last_login."""
+    with conn.cursor() as cursor:
+        cursor.execute("SHOW COLUMNS FROM aiprep_tool_evaluations")
+        columns = {row["Field"] for row in cursor.fetchall()}
+
+        if {"candidate_id", "login_count", "last_login"}.issubset(columns):
+            cursor.execute(
+                """
+                INSERT INTO aiprep_tool_evaluations (candidate_id, login_count, last_login)
+                VALUES (%s, 1, NOW())
+                ON DUPLICATE KEY UPDATE
+                    login_count = login_count + 1,
+                    last_login  = NOW()
+                """,
+                (marketing_id,),
+            )
+        elif {"user_id", "type"}.issubset(columns):
+            return
+    conn.commit()
+
+
+def _resume_text_to_json(resume_text: str, filename: str) -> dict:
+    lines = [line.strip() for line in resume_text.splitlines() if line.strip()]
+    email_match = re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", resume_text)
+    phone_match = re.search(r"(?:\+?\d[\d\s().-]{7,}\d)", resume_text)
+
+    return {
+        "basics": {
+            "name": lines[0] if lines else "",
+            "email": email_match.group(0) if email_match else "",
+            "phone": phone_match.group(0).strip() if phone_match else "",
+        },
+        "summary": resume_text,
+        "work": [],
+        "education": [],
+        "skills": [],
+        "_meta_filename": filename,
+        "_raw_text": resume_text,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -342,27 +405,85 @@ async def extract_latest_company_bg(session_id: str, resume_json: dict):
 async def upload_resume(
     background_tasks: BackgroundTasks,
     session_id: str = Form(...),
+    candidate_id: Optional[int] = Form(None),
+    wbl_email: Optional[str] = Form(None),
+    resume_source: Optional[str] = Form(None),
     file: UploadFile = File(...),
 ):
-    conn = get_db_connection()
+    filename = file.filename or "resume"
+    ext = Path(filename).suffix.lower()
+    if ext not in ALLOWED_RESUME_EXTENSIONS:
+        raise HTTPException(400, "Only PDF, DOC, DOCX, or JSON files can be uploaded")
 
     try:
         content = await file.read()
-        resume_data = json.loads(content)
-        resume_data["_meta_filename"] = file.filename
+        if not content:
+            raise HTTPException(400, "Uploaded resume is empty")
 
-        save_resume_for_session(session_id, resume_data)
+        if ext == ".json":
+            resume_data = json.loads(content.decode("utf-8"))
+            if not isinstance(resume_data, dict):
+                raise HTTPException(400, "Resume JSON must be an object")
+            resume_data["_meta_filename"] = filename
+        else:
+            tmp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                    tmp.write(content)
+                    tmp_path = tmp.name
+                try:
+                    resume_text = parse_resume(tmp_path)
+                except Exception as parse_err:
+                    if ext == ".doc":
+                        raise HTTPException(
+                            400,
+                            "Legacy .doc files could not be parsed. Please upload a PDF or DOCX version of the resume.",
+                        )
+                    raise HTTPException(400, f"Could not parse uploaded resume: {parse_err}")
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+
+            if not resume_text:
+                raise HTTPException(400, "Could not extract text from the uploaded resume")
+            resume_data = _resume_text_to_json(resume_text, filename)
+
+        save_to_my_resume = resume_source == "my_resume"
+
+        try:
+            save_resume_for_session(
+                session_id,
+                resume_data,
+                save_to_candidate_marketing_my_resume=save_to_my_resume,
+            )
+        except ValueError as save_err:
+            if not candidate_id and not wbl_email:
+                raise HTTPException(404, str(save_err))
+
+            conn = get_db_connection()
+            try:
+                with conn.cursor() as cursor:
+                    session_id = str(_resolve_resume_upload_session(cursor, candidate_id, wbl_email))
+                conn.commit()
+            finally:
+                conn.close()
+
+            save_resume_for_session(
+                session_id,
+                resume_data,
+                save_to_candidate_marketing_my_resume=save_to_my_resume,
+            )
+
         EXTRACTION_STATUSES[session_id] = "pending"
         background_tasks.add_task(extract_latest_company_bg, session_id, resume_data)
 
         return {"message": "Resume uploaded"}
 
+    except HTTPException:
+        raise
     except Exception as e:
         print("ERROR:", str(e))
-        raise HTTPException(500, "Resume upload failed")
-
-    finally:
-        conn.close()
+        raise HTTPException(500, f"Resume upload failed: {e}")
 
 
 @router.get("/summary")
