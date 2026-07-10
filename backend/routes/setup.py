@@ -407,6 +407,7 @@ async def upload_resume(
     session_id: str = Form(...),
     candidate_id: Optional[int] = Form(None),
     wbl_email: Optional[str] = Form(None),
+    resume_source: Optional[str] = Form(None),
     file: UploadFile = File(...),
 ):
     filename = file.filename or "resume"
@@ -447,8 +448,14 @@ async def upload_resume(
                 raise HTTPException(400, "Could not extract text from the uploaded resume")
             resume_data = _resume_text_to_json(resume_text, filename)
 
+        save_to_my_resume = resume_source == "my_resume"
+
         try:
-            save_resume_for_session(session_id, resume_data)
+            save_resume_for_session(
+                session_id,
+                resume_data,
+                save_to_candidate_marketing_my_resume=save_to_my_resume,
+            )
         except ValueError as save_err:
             if not candidate_id and not wbl_email:
                 raise HTTPException(404, str(save_err))
@@ -461,7 +468,11 @@ async def upload_resume(
             finally:
                 conn.close()
 
-            save_resume_for_session(session_id, resume_data)
+            save_resume_for_session(
+                session_id,
+                resume_data,
+                save_to_candidate_marketing_my_resume=save_to_my_resume,
+            )
 
         EXTRACTION_STATUSES[session_id] = "pending"
         background_tasks.add_task(extract_latest_company_bg, session_id, resume_data)
