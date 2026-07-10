@@ -117,6 +117,10 @@ export function getIntroHistory(sessionId: string) {
   return get("/api/intro/history", { session_id: sessionId });
 }
 
+export function getIntroAttempt(sessionId: string, attemptId: number) {
+  return get(`/api/intro/history/${attemptId}`, { session_id: sessionId });
+}
+
 export function getDynamicTemplate(sessionId: string) {
   return get("/api/intro/dynamic-template", { session_id: sessionId });
 }

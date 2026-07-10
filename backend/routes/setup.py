@@ -54,19 +54,8 @@ def _get_candidate_marketing_id(cursor, candidate_id: int) -> int:
 
 
 def _upsert_eval_login(conn, marketing_id: int):
-    """Upsert aiprep_tool_evaluations row to track login count and last_login."""
-    with conn.cursor() as cursor:
-        cursor.execute(
-            """
-            INSERT INTO aiprep_tool_evaluations (candidate_id, login_count, last_login)
-            VALUES (%s, 1, NOW())
-            ON DUPLICATE KEY UPDATE
-                login_count = login_count + 1,
-                last_login  = NOW()
-            """,
-            (marketing_id,),
-        )
-    conn.commit()
+    """Login tracking is intentionally not stored in aiprep_tool_evaluations."""
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────

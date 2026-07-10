@@ -141,23 +141,18 @@ def get_summary(admin_key: Optional[str] = Query(None), x_admin_key: Optional[st
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            # Total candidates registered with AI Prep Tool (have an evaluations row)
-            cursor.execute("SELECT COUNT(*) AS total FROM aiprep_tool_evaluations")
+            # Total active candidates in the prep population.
+            cursor.execute("SELECT COUNT(*) AS total FROM candidate_marketing WHERE status = 'active'")
             total_candidates = cursor.fetchone()["total"]
 
-            # Active this week (last_login within 7 days)
-            cursor.execute("""
-                SELECT COUNT(*) AS active
-                FROM aiprep_tool_evaluations
-                WHERE last_login >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-            """)
-            active_week = cursor.fetchone()["active"]
+            # Login tracking is no longer stored in aiprep_tool_evaluations.
+            active_week = 0
 
-            # Intro pass rate (intro_score >= 75)
+            # Intro pass rate by candidate, based on any passed intro attempt.
             cursor.execute("""
-                SELECT COUNT(*) AS passed_count
+                SELECT COUNT(DISTINCT user_id) AS passed_count
                 FROM aiprep_tool_evaluations
-                WHERE intro_score >= 75
+                WHERE type = 'intro' AND passed = 1
             """)
             intro_passed_users = cursor.fetchone()["passed_count"]
             intro_pass_rate = round(intro_passed_users / total_candidates * 100, 1) if total_candidates else 0
@@ -179,6 +174,8 @@ def get_summary(admin_key: Optional[str] = Query(None), x_admin_key: Optional[st
             "total_case_studies": case_studies,
             "intro_passed_count": intro_passed_users,
             "coderpad_active_count": cp_users,
+            "interview_completion_rate": 0,
+            "interview_completed_count": 0,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -210,12 +207,42 @@ def get_candidates(
                     c.full_name        AS name,
                     c.email,
                     cm.email           AS wbl_email,
-                    ev.login_count,
-                    ev.last_login,
-                    ev.intro_score,
-                    ev.intro_video     AS latest_video_url,
-                    ev.intro_status,
-                    ev.created_at,
+                    0 AS login_count,
+                    NULL AS last_login,
+                    (
+                        SELECT COUNT(*)
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                    ) AS intro_attempts,
+                    (
+                        SELECT MAX(ev.score)
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                    ) AS best_intro_score,
+                    (
+                        SELECT ev.score
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                        ORDER BY ev.created_at DESC
+                        LIMIT 1
+                    ) AS latest_intro_score,
+                    (
+                        SELECT ev.video_url
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                        ORDER BY ev.created_at DESC
+                        LIMIT 1
+                    ) AS latest_video_url,
+                    (
+                        SELECT MAX(ev.passed)
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                    ) AS intro_passed_flag,
+                    (
+                        SELECT MAX(ev.created_at)
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                    ) AS created_at,
 
                     -- Resume
                     (SELECT COUNT(*) FROM candidate_resume cr WHERE cr.candidate_id = cm.candidate_id) AS has_resume,
@@ -238,10 +265,9 @@ def get_candidates(
 
                 FROM candidate_marketing cm
                 JOIN candidate c ON c.id = cm.candidate_id
-                LEFT JOIN aiprep_tool_evaluations ev ON ev.candidate_id = cm.id
                 LEFT JOIN aiprep_tool_coderpad_cache cp ON cp.wbl_email = cm.email
                 WHERE cm.status = 'active'
-                ORDER BY ev.last_login DESC
+                ORDER BY created_at DESC
             """)
             rows = cursor.fetchall()
 
@@ -256,7 +282,9 @@ def get_candidates(
                 except Exception:
                     langs = []
 
-            intro_passed = (row.get("intro_score") or 0) >= 75
+            best_intro_score = row.get("best_intro_score") or 0
+            latest_intro_score = row.get("latest_intro_score") or 0
+            intro_passed = bool(row.get("intro_passed_flag"))
             pct, label = _prep_status(
                 row.get("has_resume"),
                 row.get("has_project"),
@@ -290,14 +318,22 @@ def get_candidates(
                 "login_count": row.get("login_count") or 0,
                 "created_at": dtstr(row.get("created_at")),
                 "last_login": dtstr(row.get("last_login")),
+                "extraction_status": "completed",
                 # Resume / Project
                 "has_resume": bool(row.get("has_resume")),
                 "has_project": bool(row.get("has_project")),
                 # Intro
-                "intro_score": row.get("intro_score") or 0,
-                "intro_status": row.get("intro_status") or "not_started",
+                "intro_attempts": row.get("intro_attempts") or 0,
+                "best_intro_score": best_intro_score,
+                "latest_intro_score": latest_intro_score,
+                "intro_score": best_intro_score,
+                "intro_status": "completed" if row.get("intro_attempts") else "not_started",
                 "intro_passed": intro_passed,
                 "latest_video_url": row.get("latest_video_url"),
+                "questions_answered": 0,
+                "avg_interview_score": 0,
+                "interview_sessions": 0,
+                "interview_completed": False,
                 # Case studies
                 "case_studies_generated": row.get("case_studies_generated") or 0,
                 # CoderPad
@@ -367,15 +403,27 @@ def get_candidate_detail(
                     c.full_name AS name,
                     c.email,
                     cm.email AS wbl_email,
-                    ev.login_count,
-                    ev.last_login,
-                    ev.intro_score,
-                    ev.intro_video,
-                    ev.intro_status,
-                    ev.created_at
+                    0 AS login_count,
+                    NULL AS last_login,
+                    (
+                        SELECT MAX(ev.score)
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                    ) AS intro_score,
+                    (
+                        SELECT ev.video_url
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                        ORDER BY ev.created_at DESC
+                        LIMIT 1
+                    ) AS intro_video,
+                    (
+                        SELECT MAX(ev.created_at)
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                    ) AS created_at
                 FROM candidate_marketing cm
                 JOIN candidate c ON c.id = cm.candidate_id
-                LEFT JOIN aiprep_tool_evaluations ev ON ev.candidate_id = cm.id
                 WHERE cm.id = %s
             """, (candidate_id,))
             candidate = cursor.fetchone()
@@ -401,6 +449,14 @@ def get_candidate_detail(
                 ORDER BY created_at DESC
             """, (marketing_id,))
             case_studies = cursor.fetchall()
+
+            cursor.execute("""
+                SELECT id, score, passed, video_url, created_at, feedback, raw_response
+                FROM aiprep_tool_evaluations
+                WHERE user_id = %s AND type = 'intro'
+                ORDER BY created_at DESC
+            """, (str(marketing_id),))
+            intro_history = cursor.fetchall()
 
             # CoderPad cache
             wbl_email = candidate.get("wbl_email")
@@ -460,8 +516,21 @@ def get_candidate_detail(
                 "last_login": dtstr(candidate.get("last_login")),
                 "intro_score": candidate.get("intro_score"),
                 "intro_video": candidate.get("intro_video"),
-                "intro_status": candidate.get("intro_status") or "not_started",
+                "intro_status": "completed" if candidate.get("intro_score") is not None else "not_started",
             },
+            "intro_history": [
+                {
+                    "id": row.get("id"),
+                    "score": row.get("score"),
+                    "passed": bool(row.get("passed")),
+                    "video_url": row.get("video_url"),
+                    "created_at": dtstr(row.get("created_at")),
+                    "feedback": parse_json_field(row.get("feedback")),
+                    "raw_response": parse_json_field(row.get("raw_response")),
+                }
+                for row in intro_history
+            ],
+            "interview_history": [],
             "case_studies": [{"topic": cs.get("topic"), "created_at": dtstr(cs.get("created_at"))} for cs in case_studies],
             "coderpad": cp_out,
         }

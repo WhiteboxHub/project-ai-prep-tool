@@ -38,24 +38,22 @@ def init_db():
         with conn.cursor() as cursor:
 
             # ---------------------------
-            # 1. EVALUATIONS (per-candidate intro tracking)
-            #    Uses candidate_marketing.id as FK
+            # 1. EVALUATIONS (append-only evaluation attempts)
             # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS aiprep_tool_evaluations (
-                    id           INT NOT NULL AUTO_INCREMENT,
-                    candidate_id INT NOT NULL,
-                    intro_score  INT DEFAULT NULL COMMENT 'AI-evaluated score for candidate intro video',
-                    intro_video  VARCHAR(500) DEFAULT NULL COMMENT 'URL/path to candidate intro video',
-                    intro_status ENUM('not_started','in_progress','completed','reviewed') DEFAULT 'not_started',
-                    login_count  INT NOT NULL DEFAULT 0,
-                    last_login   TIMESTAMP NULL DEFAULT NULL,
-                    created_at   TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at   TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
+                    id INT NOT NULL AUTO_INCREMENT,
+                    user_id VARCHAR(255) NOT NULL,
+                    type VARCHAR(50) DEFAULT NULL,
+                    score INT DEFAULT NULL,
+                    passed TINYINT(1) DEFAULT NULL,
+                    feedback JSON DEFAULT NULL,
+                    raw_response JSON DEFAULT NULL,
+                    created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                    video_url VARCHAR(300) DEFAULT NULL,
                     PRIMARY KEY (id),
-                    UNIQUE KEY uq_eval_candidate (candidate_id),
-                    INDEX idx_eval_candidate (candidate_id)
+                    KEY idx_eval_user (user_id),
+                    KEY idx_eval_type (type)
                 )
             """)
 
