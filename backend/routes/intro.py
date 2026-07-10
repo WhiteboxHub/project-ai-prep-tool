@@ -194,6 +194,51 @@ from services.user_context import get_user_api_key
 from services.llm_service import call_llm_with_context
 
 router = APIRouter(prefix="/api/intro", tags=["intro"])
+INTRO_PASS_SCORE = 75
+
+
+def _json_or_empty(value):
+    if not value:
+        return {}
+    if isinstance(value, (dict, list)):
+        return value
+    try:
+        return json.loads(value)
+    except Exception:
+        return {}
+
+
+def _normalize_score(eval_result: dict) -> int:
+    raw_score = eval_result.get("overall_score", 0)
+    try:
+        score = float(raw_score)
+    except (ValueError, TypeError):
+        score = 0.0
+    return max(0, min(100, int(score)))
+
+
+def _feedback_payload(eval_result: dict) -> dict:
+    return {
+        "feedback": eval_result.get("feedback", []),
+        "strengths": eval_result.get("strengths", []),
+        "weaknesses": eval_result.get("weaknesses", []),
+        "improvement_areas": eval_result.get("improvement_areas", []),
+        "ai_suggestions": eval_result.get("ai_suggestions", []),
+    }
+
+
+def _serialize_intro_row(row: dict) -> dict:
+    return {
+        "id": row.get("id"),
+        "user_id": row.get("user_id"),
+        "type": row.get("type"),
+        "score": row.get("score"),
+        "passed": bool(row.get("passed")),
+        "feedback": _json_or_empty(row.get("feedback")),
+        "raw_response": _json_or_empty(row.get("raw_response")),
+        "created_at": row.get("created_at"),
+        "video_url": row.get("video_url"),
+    }
 
 
 # -----------------------------------
@@ -270,31 +315,27 @@ async def evaluate_audio_intro(
 
         conn = get_db_connection()
 
-        raw_score = eval_result.get("overall_score", 0)
-        try:
-            score = float(raw_score)
-        except (ValueError, TypeError):
-            score = 0.0
-
-        if score > 100:
-            db_score = 100
-        else:
-            db_score = int(score)
-
-        marketing_id = int(session_id)
+        db_score = _normalize_score(eval_result)
+        passed = db_score >= INTRO_PASS_SCORE
+        vision_payload = _json_or_empty(vision_metrics)
+        raw_response = {
+            "source": "video",
+            "transcript": transcript,
+            "evaluation": eval_result,
+            "vision_metrics": vision_payload,
+        }
         with conn.cursor() as cursor:
             cursor.execute("""
-                INSERT INTO aiprep_tool_evaluations (candidate_id, intro_score, intro_video, intro_status)
-                VALUES (%s, %s, %s, 'completed')
-                ON DUPLICATE KEY UPDATE
-                    intro_score = VALUES(intro_score),
-                    intro_video = VALUES(intro_video),
-                    intro_status = 'completed',
-                    updated_at  = NOW()
+                INSERT INTO aiprep_tool_evaluations
+                    (user_id, type, video_url, score, passed, feedback, raw_response)
+                VALUES (%s, 'intro', %s, %s, %s, %s, %s)
             """, (
-                marketing_id,
+                session_id,
+                video_url,
                 db_score,
-                video_url
+                passed,
+                json.dumps(_feedback_payload(eval_result)),
+                json.dumps(raw_response),
             ))
 
         conn.commit()
@@ -303,6 +344,7 @@ async def evaluate_audio_intro(
             "transcript": transcript,
             "evaluation": eval_result,
             "score": db_score,
+            "passed": passed,
             "video_url": video_url
         }
 
@@ -336,31 +378,27 @@ async def evaluate_text_intro(
             api_key=api_key
         )
 
-        raw_score = eval_result.get("overall_score", 0)
-        try:
-            score = float(raw_score)
-        except (ValueError, TypeError):
-            score = 0.0
-
-        if score > 100:
-            db_score = 100
-        else:
-            db_score = int(score)
+        db_score = _normalize_score(eval_result)
+        passed = db_score >= INTRO_PASS_SCORE
 
         conn = get_db_connection()
         try:
-            marketing_id = int(session_id)
+            raw_response = {
+                "source": "text",
+                "transcript": transcript,
+                "evaluation": eval_result,
+            }
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    INSERT INTO aiprep_tool_evaluations (candidate_id, intro_score, intro_status)
-                    VALUES (%s, %s, 'completed')
-                    ON DUPLICATE KEY UPDATE
-                        intro_score  = VALUES(intro_score),
-                        intro_status = 'completed',
-                        updated_at   = NOW()
+                    INSERT INTO aiprep_tool_evaluations
+                        (user_id, type, video_url, score, passed, feedback, raw_response)
+                    VALUES (%s, 'intro', NULL, %s, %s, %s, %s)
                 """, (
-                    marketing_id,
-                    db_score
+                    session_id,
+                    db_score,
+                    passed,
+                    json.dumps(_feedback_payload(eval_result)),
+                    json.dumps(raw_response),
                 ))
             conn.commit()
         finally:
@@ -369,6 +407,7 @@ async def evaluate_text_intro(
         return {
             "evaluation": eval_result,
             "score": db_score,
+            "passed": passed,
             "feedback": eval_result.get("feedback", [])
         }
 
@@ -533,20 +572,21 @@ def get_intro_history(session_id: str):
     try:
         conn = get_db_connection()
 
-        marketing_id = int(session_id)
         with conn.cursor() as cursor:
             cursor.execute("""
-                SELECT id, intro_score AS score, intro_video AS video_url,
-                       intro_status AS status, created_at, updated_at
+                SELECT id, user_id, type, score, passed, feedback,
+                       raw_response, created_at, video_url
                 FROM aiprep_tool_evaluations
-                WHERE candidate_id = %s
-            """, (marketing_id,))
+                WHERE user_id = %s AND type = 'intro'
+                ORDER BY created_at DESC
+            """, (session_id,))
 
-            rows = cursor.fetchall()
+            rows = [_serialize_intro_row(row) for row in cursor.fetchall()]
 
-        best_score = rows[0].get("score", 0) if rows and rows[0].get("score") else 0
-        latest_score = best_score
-        passed = best_score >= 75
+        scores = [row.get("score") or 0 for row in rows]
+        best_score = max(scores) if scores else 0
+        latest_score = scores[0] if scores else 0
+        passed = any(bool(row.get("passed")) for row in rows)
 
         return {
             "aiprep_tool_attempts": rows or [],
@@ -559,6 +599,37 @@ def get_intro_history(session_id: str):
     except Exception as e:
         print("History Error:", str(e))
         raise HTTPException(status_code=500, detail="Failed to fetch history")
+
+    finally:
+        if conn:
+            conn.close()
+
+
+@router.get("/history/{attempt_id}")
+def get_intro_attempt(attempt_id: int, session_id: str):
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT id, user_id, type, score, passed, feedback,
+                       raw_response, created_at, video_url
+                FROM aiprep_tool_evaluations
+                WHERE id = %s AND user_id = %s AND type = 'intro'
+                LIMIT 1
+            """, (attempt_id, session_id))
+            row = cursor.fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Intro attempt not found")
+
+        return {"attempt": _serialize_intro_row(row)}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("Attempt Detail Error:", str(e))
+        raise HTTPException(status_code=500, detail="Failed to fetch intro attempt")
 
     finally:
         if conn:

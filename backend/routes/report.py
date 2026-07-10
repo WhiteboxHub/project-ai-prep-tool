@@ -20,10 +20,16 @@ def get_final_report(session_id: str):
             cursor.execute("SELECT domain, background, skills, product, architecture, role, impact FROM aiprep_tool_project_context WHERE candidate_id = %s", (int(session_id),))
             project = cursor.fetchone()
 
-            # Aggregate intro evaluation
-            cursor.execute("SELECT intro_score AS score FROM aiprep_tool_evaluations WHERE candidate_id = %s", (int(session_id),))
+            # Aggregate latest intro evaluation for this candidate/session.
+            cursor.execute("""
+                SELECT score, passed, feedback, raw_response, video_url, created_at
+                FROM aiprep_tool_evaluations
+                WHERE user_id = %s AND type = 'intro'
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (session_id,))
             intro_row = cursor.fetchone()
-            intro_evals = [{"score": intro_row["score"], "feedback": {}, "raw_response": {}}] if (intro_row and intro_row["score"] is not None) else []
+            intro_evals = [intro_row] if (intro_row and intro_row["score"] is not None) else []
 
             # Aggregate interview answers/evals
             interview_evals = []

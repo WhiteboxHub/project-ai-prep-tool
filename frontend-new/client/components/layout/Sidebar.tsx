@@ -7,6 +7,7 @@ import {
   FileText,
   TrendingUp,
   Settings,
+  History,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -21,6 +22,7 @@ const navItems = [
   { label: "Project Analysis", icon: Lightbulb, href: "/preparation" },
   { label: "Interview Practice", icon: Video, href: "/interview-select" },
   { label: "Documents", icon: FileText, href: "/documents" },
+  { label: "My History", icon: History, href: "/history" },
   { label: "Progress", icon: TrendingUp, href: "/progress" },
   { label: "Settings", icon: Settings, href: "/settings" },
 ];
