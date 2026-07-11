@@ -22,20 +22,21 @@ def get_candidate_context(user_id: str):
                 context["resume"] = resume_obj
 
             # 2. Fetch Project Context
-            cursor.execute("SELECT product, architecture, business_value, role, impact FROM aiprep_tool_project_context WHERE user_id = %s", (user_id,))
+            cursor.execute("SELECT product, architecture, business_value, role, impact FROM aiprep_tool_project_context WHERE candidate_id = %s", (int(user_id),))
             proj = cursor.fetchone()
             if proj:
                 context["project"] = proj
                 
-            # 3. Fetch Intro Eval 
-            cursor.execute("SELECT score, passed, feedback FROM aiprep_tool_evaluations WHERE user_id = %s AND type = 'intro' ORDER BY id DESC LIMIT 1", (user_id,))
+            # 3. Fetch latest Intro Eval
+            cursor.execute("""
+                SELECT score, passed
+                FROM aiprep_tool_evaluations
+                WHERE user_id = %s AND type = 'intro'
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (user_id,))
             intro = cursor.fetchone()
             if intro:
-                if 'feedback' in intro and isinstance(intro['feedback'], str):
-                    try:
-                        intro['feedback'] = json.loads(intro['feedback'])
-                    except:
-                        pass
                 context["intro_eval"] = intro
                 
         conn.close()

@@ -523,13 +523,13 @@ export default function ProjectAnalysis() {
                     <TrendingUp className="w-5 h-5 text-primary" /> AI Evaluation
                   </h3>
                   <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border font-bold text-lg ${score >= 7 ? "text-green-400 border-green-500/30 bg-green-500/10" : score >= 5 ? "text-amber-400 border-amber-500/30 bg-amber-500/10" : "text-red-400 border-red-500/30 bg-red-500/10"}`}>
-                    <Star className="w-5 h-5" /> {score}/10
+                    <Star className="w-5 h-5" /> {score}/100
                   </div>
                 </div>
 
                 {score < 7 && (
                   <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
-                    Score below 7/10. Add specific metrics and architecture detail to strengthen your project narrative before interviews.
+                    Score below 7/100. Add specific metrics and architecture detail to strengthen your project narrative before interviews.
                   </div>
                 )}
 

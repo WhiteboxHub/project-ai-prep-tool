@@ -4,6 +4,7 @@ import os
 from time import sleep
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 # Load .env locally
@@ -11,7 +12,7 @@ if os.environ.get("K_SERVICE") is None:
     load_dotenv()
 
 from db.init_db import init_db
-from routes import setup, intro, project, interview, context, resume, case_study, candidate_setup, report, youtube
+from routes import setup, intro, project, interview, context, resume, case_study, candidate_setup, report, analytics, youtube
 
 app = FastAPI(
     title="AI Candidate Evaluation System",
@@ -27,10 +28,10 @@ def startup():
         for i in range(5):
             try:
                 init_db()
-                print("✅ DB Connection established and tables initialized.")
+                print("DB Connection established and tables initialized.")
                 break
             except Exception as e:
-                print(f"❌ Database initialization failed on attempt {i+1}:", e)
+                print(f"Database initialization failed on attempt {i+1}:", e)
                 sleep(5)
     threading.Thread(target=init).start()
 
@@ -67,6 +68,13 @@ app.include_router(youtube.router)
 
 # Candidate Setup — migrated from wbl-backend
 app.include_router(candidate_setup.router)
+
+# Admin Analytics — protected by ADMIN_KEY
+app.include_router(analytics.router)
+
+# Serve static uploads directory (recorded intro videos)
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 @app.get("/")
 def root():
