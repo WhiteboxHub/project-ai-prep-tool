@@ -366,9 +366,11 @@ export default function ProjectAnalysis() {
     }
   };
 
-  const score = evaluation?.overall_score ?? 0;
-  const feedback: string[] = Array.isArray(evaluation?.feedback) ? evaluation.feedback : [];
-  const strengths: string[] = Array.isArray(evaluation?.strengths) ? evaluation.strengths : [];
+  const rawScore = evaluation?.overall_score || 0;
+  const score = rawScore > 10 ? Math.round((rawScore / 10) * 10) / 10 : rawScore; // Convert to 10-point scale if it's out of 100
+  
+  const strengths = evaluation?.strengths || evaluation?.feedback?.slice(0, 2) || [];
+  const feedback = evaluation?.improvement_areas || evaluation?.missing_points || evaluation?.feedback?.slice(2) || [];
 
   return (
     <MainLayout>
@@ -434,13 +436,6 @@ export default function ProjectAnalysis() {
                           className="px-4 py-2 rounded-xl bg-white/5 border border-border hover:bg-white/10 text-foreground font-semibold text-sm transition-colors"
                         >
                           Cancel &amp; View Results
-                        </motion.button>
-                        <motion.button
-                          whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                          onClick={() => navigate("/intro-practice")}
-                          className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-secondary text-white font-bold text-sm"
-                        >
-                          <Users className="w-4 h-4" /> Practice Introduction <ArrowRight className="w-3.5 h-3.5" />
                         </motion.button>
                       </div>
                     </div>
@@ -511,22 +506,14 @@ export default function ProjectAnalysis() {
           {step === "results" && sessionId && (
             <motion.div key="results" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
 
-              {/* Unlock Banner */}
               <div className="glass-card p-5 rounded-2xl border border-green-500/30 bg-green-500/5 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <CheckCircle2 className="w-8 h-8 text-green-400 flex-shrink-0" />
                   <div>
                     <p className="font-bold text-foreground">Project Analysis Completed!</p>
-                    <p className="text-sm text-muted-foreground">Introduction Practice is now unlocked. Case studies are optional — generate anytime.</p>
+                    <p className="text-sm text-muted-foreground">Case studies are optional — generate anytime.</p>
                   </div>
                 </div>
-                <motion.button
-                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                  onClick={() => navigate("/intro-practice")}
-                  className="flex-shrink-0 flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-primary to-secondary text-white font-bold text-sm"
-                >
-                  <Users className="w-4 h-4" /> Practice Introduction <ArrowRight className="w-4 h-4" />
-                </motion.button>
               </div>
 
               {/* Evaluation Results */}
@@ -599,15 +586,9 @@ export default function ProjectAnalysis() {
                   className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
                   <RefreshCw className="w-3.5 h-3.5" /> Edit Project Details
                 </button>
-                <span className="text-border">|</span>
                 <button onClick={() => navigate("/documents")}
                   className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors">
                   <FileText className="w-3.5 h-3.5" /> View Documents
-                </button>
-                <span className="text-border">|</span>
-                <button onClick={() => navigate("/intro-practice")}
-                  className="flex items-center gap-1.5 text-sm text-primary hover:text-primary/70 transition-colors font-semibold">
-                  <Users className="w-3.5 h-3.5" /> Practice Introduction <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
 

@@ -3,6 +3,7 @@
 
 const SESSION_ID_KEY = "session_id";
 const CANDIDATE_NAME_KEY = "candidate_name";
+const CANDIDATE_EMAIL_KEY = "candidate_email";
 const API_PROVIDER_KEY = "api_provider";
 
 export function getSessionId(): string | null {
@@ -13,14 +14,21 @@ export function getCandidateName(): string {
   return localStorage.getItem(CANDIDATE_NAME_KEY) || "Candidate";
 }
 
+export function getCandidateEmail(): string {
+  return localStorage.getItem(CANDIDATE_EMAIL_KEY) || "";
+}
+
 export function getApiProvider(): string | null {
   return localStorage.getItem(API_PROVIDER_KEY);
 }
 
-export function setSession(sessionId: string, candidateName?: string) {
+export function setSession(sessionId: string, candidateName?: string, candidateEmail?: string) {
   localStorage.setItem(SESSION_ID_KEY, sessionId);
   if (candidateName) {
     localStorage.setItem(CANDIDATE_NAME_KEY, candidateName);
+  }
+  if (candidateEmail) {
+    localStorage.setItem(CANDIDATE_EMAIL_KEY, candidateEmail);
   }
 }
 
@@ -35,6 +43,7 @@ export function setApiProvider(provider: string) {
 export function clearSession() {
   localStorage.removeItem(SESSION_ID_KEY);
   localStorage.removeItem(CANDIDATE_NAME_KEY);
+  localStorage.removeItem(CANDIDATE_EMAIL_KEY);
   localStorage.removeItem(API_PROVIDER_KEY);
 }
 

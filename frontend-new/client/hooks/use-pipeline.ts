@@ -43,8 +43,8 @@ export function usePipeline() {
 
         const newPipeline: PipelineStatus = {
           setup: hasResume && hasApiKey ? "completed" : "pending",
-          project: hasResume && hasApiKey ? (isProjectCompleted ? "completed" : "ready") : "locked",
-          intro: isProjectCompleted ? (hasIntroPassed ? "completed" : "ready") : "locked",
+          project: hasResume && hasApiKey ? (hasProjectData ? "completed" : "ready") : "locked",
+          intro: hasProjectData ? (hasIntroPassed ? "completed" : "ready") : "locked",
           interview: hasIntroPassed ? "ready" : "locked",
         };
 

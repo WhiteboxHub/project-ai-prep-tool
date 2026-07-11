@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Mic, MicOff, Camera, Volume2 } from "lucide-react";
+import { Mic, MicOff, Camera, Volume2, Bot } from "lucide-react";
 
 interface VideoPanelProps {
   title: string;
@@ -54,19 +54,29 @@ export function VideoPanel({
         />
       )}
 
-      {/* Camera Off State */}
-      {isCameraOff && (
+      {/* Camera Off or AI State */}
+      {(!mediaStream || isCameraOff) && (
         <div className="relative z-10 flex flex-col items-center justify-center gap-4">
-          <motion.div
-            animate={{ scale: [1, 1.05, 1] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="w-24 h-24 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center"
-          >
-            <span className="text-4xl font-bold text-white">{initials}</span>
-          </motion.div>
+          {initials === "AI" ? (
+            <motion.div
+              animate={isSpeaking ? { scale: [1, 1.15, 1], boxShadow: ["0 0 0px 0px rgba(124, 58, 237, 0.5)", "0 0 25px 15px rgba(124, 58, 237, 0)"] } : { scale: [1, 1.02, 1] }}
+              transition={{ duration: isSpeaking ? 1.5 : 3, repeat: Infinity, ease: "easeInOut" }}
+              className={`w-32 h-32 rounded-full flex items-center justify-center ${isSpeaking ? "bg-gradient-to-br from-primary via-purple-500 to-secondary shadow-lg shadow-primary/40" : "bg-gradient-to-br from-primary/50 to-secondary/50"}`}
+            >
+              <span className={`text-5xl font-bold text-white ${isSpeaking ? "animate-pulse" : ""}`}>AI</span>
+            </motion.div>
+          ) : (
+            <motion.div
+              animate={{ scale: [1, 1.05, 1] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="w-24 h-24 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center"
+            >
+              <span className="text-4xl font-bold text-white">{initials}</span>
+            </motion.div>
+          )}
           <div className="text-center">
             <p className="text-lg font-semibold text-foreground">{title}</p>
-            <p className="text-sm text-muted-foreground">Camera off</p>
+            <p className="text-sm text-muted-foreground">{initials === "AI" ? (isSpeaking ? "Listening and evaluating..." : "Ready to listen") : "Camera off"}</p>
           </div>
         </div>
       )}

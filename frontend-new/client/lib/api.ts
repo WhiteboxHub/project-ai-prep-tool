@@ -7,10 +7,27 @@ const BASE_URL =
 
 // ─── Generic fetch helpers ────────────────────────────────────────────────────
 
+function getWblToken(): string | null {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; wbl_access_token=`);
+  if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
+  return null;
+}
+
+function getAuthHeaders(existingHeaders: Record<string, string> = {}): Record<string, string> {
+  const token = getWblToken();
+  if (token) {
+    return { ...existingHeaders, Authorization: `Bearer ${token}` };
+  }
+  return existingHeaders;
+}
+
 async function get<T = any>(path: string, params?: Record<string, string>): Promise<T> {
   const url = new URL(`${BASE_URL}${path}`);
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Request failed" }));
     throw new Error(err.detail || "Request failed");
@@ -21,7 +38,7 @@ async function get<T = any>(path: string, params?: Record<string, string>): Prom
 async function post<T = any>(path: string, body: any): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -37,7 +54,11 @@ async function post<T = any>(path: string, body: any): Promise<T> {
 }
 
 async function postForm<T = any>(path: string, form: FormData): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, { method: "POST", body: form });
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: form,
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Request failed" }));
     throw new Error(err.detail || "Request failed");
@@ -48,7 +69,10 @@ async function postForm<T = any>(path: string, form: FormData): Promise<T> {
 async function del<T = any>(path: string, params?: Record<string, string>): Promise<T> {
   const url = new URL(`${BASE_URL}${path}`);
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString(), { method: "DELETE" });
+  const res = await fetch(url.toString(), {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Request failed" }));
     throw new Error(err.detail || "Request failed");
@@ -57,6 +81,10 @@ async function del<T = any>(path: string, params?: Record<string, string>): Prom
 }
 
 // ─── Setup / Auth ─────────────────────────────────────────────────────────────
+
+export function getCandidateMe() {
+  return get<{ session_id: string; candidate_name: string; candidate_email: string }>("/api/candidate/me");
+}
 
 export function syncWithWbl(prepToken: string) {
   return post("/api/setup/sync-from-wbl", { prep_token: prepToken });
@@ -111,10 +139,17 @@ export function evaluateIntro(sessionId: string, audioBlob: Blob, mimeType = "au
   return postForm("/api/intro/evaluate", form);
 }
 
-export function evaluateIntroText(sessionId: string, transcript: string) {
+export function evaluateIntroText(sessionId: string, transcript: string, introType: string = "general", jdText: string = "", videoUrl: string | null = null) {
   const form = new FormData();
   form.append("session_id", sessionId);
   form.append("transcript", transcript);
+  form.append("intro_type", introType);
+  if (jdText) {
+    form.append("job_description", jdText);
+  }
+  if (videoUrl) {
+    form.append("video_url", videoUrl);
+  }
   return postForm("/api/intro/evaluate-text", form);
 }
 

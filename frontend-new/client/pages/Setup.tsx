@@ -105,7 +105,7 @@ export default function Setup() {
     try {
       let sid = sessionId;
       if (!sid) {
-        sid = await createSetupSession();
+        throw new Error("No active session found. Please log in via the WBL platform first.");
       }
 
       try {

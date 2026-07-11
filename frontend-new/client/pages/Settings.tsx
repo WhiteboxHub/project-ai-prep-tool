@@ -8,10 +8,10 @@ import { getResumeSummary, deleteLlmKey, validateApiKey, uploadResume, getExtrac
 import { useNavigate } from "react-router-dom";
 
 export default function Settings() {
-  const { candidateName, sessionId, refresh } = useAuth();
+  const { candidateName, candidateEmail, sessionId, refresh } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<"profile" | "security" | "notifications">("security");
+  const [activeTab, setActiveTab] = useState<"profile" | "security" | "notifications">("profile");
   
   // State
   const [keys, setKeys] = useState<any[]>([]);
@@ -165,7 +165,11 @@ export default function Settings() {
                         <div>
                           <label className="text-sm text-muted-foreground block mb-1">Full Name</label>
                           <input type="text" value={candidateName} disabled className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-border text-foreground text-sm opacity-70 cursor-not-allowed" />
-                          <p className="text-xs text-muted-foreground mt-2">Name is synced from your WBL account.</p>
+                        </div>
+                        <div>
+                          <label className="text-sm text-muted-foreground block mb-1">Email Address</label>
+                          <input type="text" value={candidateEmail} disabled className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-border text-foreground text-sm opacity-70 cursor-not-allowed" />
+                          <p className="text-xs text-muted-foreground mt-2">Name and email are synced from your WBL account.</p>
                         </div>
                       </div>
                     </div>
