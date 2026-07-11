@@ -26,7 +26,12 @@ async function post<T = any>(path: string, body: any): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail || "Request failed");
+    const message = Array.isArray(err.detail)
+      ? err.detail.map((item: any) => item.msg || String(item)).join("; ")
+      : err.detail || "Request failed";
+    const error = new Error(message) as Error & { status?: number };
+    error.status = res.status;
+    throw error;
   }
   return res.json();
 }
@@ -122,6 +127,10 @@ export function evaluateIntroText(sessionId: string, transcript: string, introTy
 
 export function getIntroHistory(sessionId: string) {
   return get("/api/intro/history", { session_id: sessionId });
+}
+
+export function getIntroAttempt(sessionId: string, attemptId: number) {
+  return get(`/api/intro/history/${attemptId}`, { session_id: sessionId });
 }
 
 export function getDynamicTemplate(sessionId: string) {
@@ -244,3 +253,43 @@ export function getMockAnswers(sessionId: string) {
 export function getFinalReport(sessionId: string) {
   return get("/api/report", { session_id: sessionId });
 }
+
+// ─── Analytics ────────────────────────────────────────────────────────────────
+
+export function getAnalyticsSummary(adminKey: string) {
+  return get("/api/analytics/summary", { admin_key: adminKey });
+}
+
+export function getAnalyticsCandidates(
+  adminKey: string,
+  filters?: {
+    search?: string;
+    filter_intro_passed?: boolean;
+    filter_interview_done?: boolean;
+    filter_has_coderpad?: boolean;
+    filter_active_week?: boolean;
+  }
+) {
+  const params: Record<string, string> = { admin_key: adminKey };
+  if (filters) {
+    if (filters.search !== undefined) params.search = filters.search;
+    if (filters.filter_intro_passed !== undefined)
+      params.filter_intro_passed = String(filters.filter_intro_passed);
+    if (filters.filter_interview_done !== undefined)
+      params.filter_interview_done = String(filters.filter_interview_done);
+    if (filters.filter_has_coderpad !== undefined)
+      params.filter_has_coderpad = String(filters.filter_has_coderpad);
+    if (filters.filter_active_week !== undefined)
+      params.filter_active_week = String(filters.filter_active_week);
+  }
+  return get("/api/analytics/candidates", params);
+}
+
+export function getAnalyticsCandidateDetail(userId: string, adminKey: string) {
+  return get(`/api/analytics/candidates/${userId}`, { admin_key: adminKey });
+}
+
+export function syncCoderpad(userId: string, adminKey: string) {
+  return post(`/api/analytics/sync-coderpad/${userId}?admin_key=${adminKey}`, {});
+}
+
