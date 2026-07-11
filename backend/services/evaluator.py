@@ -100,16 +100,44 @@ def load_prompt(filename: str) -> str:
 # ---------------------------
 # INTRO EVALUATION
 # ---------------------------
-async def evaluate_intro(user_id: str, transcript: str, ideal_intro: str = "A clear description of background.", api_key: str = None) -> dict:
+async def evaluate_intro(user_id: str, transcript: str, resume_data: dict = None, api_key: str = None) -> dict:
     system_prompt = load_prompt("intro_eval.txt")
 
     prompt = f"""
 You MUST return valid JSON.
 
-Ideal Answer:
-{ideal_intro}
+Candidate Resume Data:
+{json.dumps(resume_data) if resume_data else "No resume provided."}
 
-Candidate Answer:
+Candidate Answer (Transcript):
+{transcript}
+"""
+
+    res_str = await call_llm_with_context(
+        user_id=user_id,
+        prompt=prompt,
+        system_prompt=system_prompt,
+        api_key=api_key,
+        response_format="json_object"
+    )
+
+    return safe_parse_json(res_str)
+
+
+# ---------------------------
+# JD SPECIFIC INTRO EVALUATION
+# ---------------------------
+async def evaluate_intro_jd(user_id: str, transcript: str, resume_data: dict, job_description: str, api_key: str = None) -> dict:
+    system_prompt = load_prompt("jd_specific_intro.txt")
+
+    prompt = f"""
+JOB_DESCRIPTION:
+{job_description}
+
+CANDIDATE_RESUME:
+{json.dumps(resume_data) if resume_data else "No resume provided."}
+
+CANDIDATE_TRANSCRIPT:
 {transcript}
 """
 

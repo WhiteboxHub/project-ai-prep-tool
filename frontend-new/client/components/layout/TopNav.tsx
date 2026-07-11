@@ -18,7 +18,7 @@ interface TopNavProps {
 
 export function TopNav({ readiness }: TopNavProps) {
   const navigate = useNavigate();
-  const { candidateName, initials } = useAuth();
+  const { candidateName, initials, candidateEmail } = useAuth();
 
   const handleLogout = () => {
     clearSession();
@@ -77,9 +77,17 @@ export function TopNav({ readiness }: TopNavProps) {
           <DropdownMenuTrigger asChild>
             <motion.button
               whileHover={{ scale: 1.05 }}
-              className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-xs font-bold text-white cursor-pointer"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-white/5 smooth-transition cursor-pointer"
             >
-              {initials}
+              <div className="flex flex-col items-end mr-1 hidden sm:flex">
+                <span className="text-sm font-semibold text-foreground max-w-[200px] truncate">
+                  {candidateName}
+                </span>
+                <span className="text-xs text-muted-foreground max-w-[200px] truncate">{candidateEmail || "Candidate"}</span>
+              </div>
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-xs font-bold text-white shadow-sm">
+                {initials}
+              </div>
             </motion.button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48 bg-card border border-border">
@@ -87,7 +95,7 @@ export function TopNav({ readiness }: TopNavProps) {
               <div className="w-4 h-4 rounded-full bg-gradient-to-br from-primary to-secondary" />
               <div className="flex flex-col">
                 <span className="text-sm font-semibold truncate max-w-28">{candidateName}</span>
-                <span className="text-xs text-muted-foreground">Candidate</span>
+                <span className="text-xs text-muted-foreground truncate max-w-28">{candidateEmail || "Candidate"}</span>
               </div>
             </DropdownMenuItem>
             <DropdownMenuSeparator />

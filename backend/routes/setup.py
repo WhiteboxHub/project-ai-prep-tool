@@ -5,8 +5,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Background
 from pydantic import BaseModel
 from db.connection import get_db_connection
 from utils.security import encrypt
-import os
-from openai import OpenAI
+from services.ai_client import validate_api_key
 
 from services.resume_source import (
     fetch_resume_raw,
@@ -54,19 +53,8 @@ def _get_candidate_marketing_id(cursor, candidate_id: int) -> int:
 
 
 def _upsert_eval_login(conn, marketing_id: int):
-    """Upsert aiprep_tool_evaluations row to track login count and last_login."""
-    with conn.cursor() as cursor:
-        cursor.execute(
-            """
-            INSERT INTO aiprep_tool_evaluations (candidate_id, login_count, last_login)
-            VALUES (%s, 1, NOW())
-            ON DUPLICATE KEY UPDATE
-                login_count = login_count + 1,
-                last_login  = NOW()
-            """,
-            (marketing_id,),
-        )
-    conn.commit()
+    """Login tracking is intentionally not stored in aiprep_tool_evaluations."""
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -74,32 +62,33 @@ def _upsert_eval_login(conn, marketing_id: int):
 # ─────────────────────────────────────────────────────────────────────
 
 @router.post("/validate")
-def validate_key(req: ValidationRequest):
-    try:
-        if req.api_provider.lower() == "openai":
-            client = OpenAI(api_key=req.api_key)
-            client.models.list()
+async def validate_key(req: ValidationRequest):
+    provider = req.api_provider.lower().strip()
 
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            marketing_id = int(req.session_id)
+            cursor.execute(
+                "SELECT candidate_id FROM candidate_marketing WHERE id = %s",
+                (marketing_id,),
+            )
+            cm = cursor.fetchone()
+            if not cm:
+                raise HTTPException(404, "Session/Candidate not found")
+            candidate_id = cm["candidate_id"]
+    except ValueError:
+        raise HTTPException(400, "Invalid session id")
+    finally:
+        conn.close()
+
+    try:
+        await validate_api_key(req.api_key, provider)
         encrypted_key = encrypt(req.api_key)
-        
-        conn = get_db_connection()
-        try:
-            with conn.cursor() as cursor:
-                marketing_id = int(req.session_id)
-                cursor.execute(
-                    "SELECT candidate_id FROM candidate_marketing WHERE id = %s",
-                    (marketing_id,),
-                )
-                cm = cursor.fetchone()
-                if not cm:
-                    raise HTTPException(404, "Session/Candidate not found")
-                candidate_id = cm["candidate_id"]
-        finally:
-            conn.close()
 
         upsert_llm_api_key_row(
             candidate_id,
-            req.api_provider,
+            provider,
             encrypted_key,
             req.model_name,
             req.voice_enabled,
@@ -109,9 +98,11 @@ def validate_key(req: ValidationRequest):
 
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     except Exception as e:
-        print("ERROR:", str(e))
-        raise HTTPException(400, "Invalid API Key")
+        print("API key validation error:", str(e))
+        raise HTTPException(500, "Could not validate API key")
 
 
 class SetupInit(BaseModel):
@@ -211,6 +202,7 @@ def init_session(data: SetupInit):
             marketing_id = _resolve_or_create_session(cursor, data)
 
         _upsert_eval_login(conn, marketing_id)
+        conn.commit()
 
         return {"session_id": str(marketing_id)}
     except HTTPException:
@@ -369,8 +361,10 @@ async def upload_resume(
         return {"message": "Resume uploaded"}
 
     except Exception as e:
-        print("ERROR:", str(e))
-        raise HTTPException(500, "Resume upload failed")
+        import traceback
+        err_msg = traceback.format_exc()
+        print("ERROR:", err_msg)
+        raise HTTPException(500, f"Resume upload failed: {str(e)}")
 
     finally:
         conn.close()
@@ -407,6 +401,8 @@ def get_resume_summary(session_id: str):
                 (marketing_id,),
             )
             cm_row = cursor.fetchone()
+            if not cm_row:
+                raise HTTPException(status_code=404, detail="Session/Candidate not found")
             cid = cm_row["candidate_id"] if cm_row else None
 
             llm_keys = []
@@ -514,6 +510,7 @@ def init_and_summary(data: SetupInit):
             marketing_id = _resolve_or_create_session(cursor, data)
 
         _upsert_eval_login(conn, marketing_id)
+        conn.commit()
         session_id = str(marketing_id)
 
         with conn.cursor() as cursor:
@@ -644,3 +641,34 @@ def get_extraction_status(session_id: str):
         return {"status": "completed"}
     finally:
         conn.close()
+
+
+
+
+
+class VerifyReasoningRequest(BaseModel):
+    session_id: str
+    api_key: Optional[str] = None
+
+@router.post("/verify-reasoning")
+def verify_reasoning(req: VerifyReasoningRequest):
+    try:
+        api_key = req.api_key
+        if not api_key:
+            from services.user_context import get_user_api_key
+            api_key = get_user_api_key(req.session_id)
+        if not api_key:
+            raise HTTPException(status_code=400, detail="API Key not configured. Please add an API key first.")
+
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": "Solve 2+2 and answer with just the number."}],
+            max_tokens=10
+        )
+        if response and response.choices:
+            return {"ok": True, "message": "Reasoning verified"}
+        raise HTTPException(status_code=400, detail="Invalid response from LLM")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+

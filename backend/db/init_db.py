@@ -1,3 +1,5 @@
+
+
 from db.connection import get_db_connection
 import pymysql
 import os
@@ -38,26 +40,8 @@ def init_db():
         with conn.cursor() as cursor:
 
             # ---------------------------
-            # 1. EVALUATIONS (per-candidate intro tracking)
-            #    Uses candidate_marketing.id as FK
+            # 1. CANDIDATES / PROJECT CONTEXT placeholder
             # ---------------------------
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS aiprep_tool_evaluations (
-                    id           INT NOT NULL AUTO_INCREMENT,
-                    candidate_id INT NOT NULL,
-                    intro_score  INT DEFAULT NULL COMMENT 'AI-evaluated score for candidate intro video',
-                    intro_video  VARCHAR(500) DEFAULT NULL COMMENT 'URL/path to candidate intro video',
-                    intro_status ENUM('not_started','in_progress','completed','reviewed') DEFAULT 'not_started',
-                    login_count  INT NOT NULL DEFAULT 0,
-                    last_login   TIMESTAMP NULL DEFAULT NULL,
-                    created_at   TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at   TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
-                    PRIMARY KEY (id),
-                    UNIQUE KEY uq_eval_candidate (candidate_id),
-                    INDEX idx_eval_candidate (candidate_id)
-                )
-            """)
 
             # ---------------------------
             # 2. PROJECT CONTEXT (uses candidate_id INT)
@@ -101,7 +85,26 @@ def init_db():
             """)
 
             # ---------------------------
-            # 3. ATTEMPTS (uses candidate_id INT)
+            # 3. EVALUATIONS (append-only evaluation attempts)
+            # ---------------------------
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS aiprep_tool_evaluations (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id VARCHAR(255) NOT NULL,
+                    type VARCHAR(50),
+                    score INT,
+                    passed BOOLEAN,
+                    feedback JSON,
+                    raw_response JSON,
+                    video_url VARCHAR(300) DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_eval_user (user_id),
+                    INDEX idx_eval_type (type)
+                )
+            """)
+
+            # ---------------------------
+            # 4. ATTEMPTS (UPSERT FRIENDLY)
             # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS aiprep_tool_attempts (
@@ -118,7 +121,7 @@ def init_db():
             """)
 
             # ---------------------------
-            # 4. CASE STUDIES (uses candidate_id INT)
+            # 5. CASE STUDIES (uses candidate_id INT)
             # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS aiprep_tool_case_studies (
@@ -132,7 +135,7 @@ def init_db():
             """)
 
             # ---------------------------
-            # 5. CODERPAD CACHE (WBL sync)
+            # 6. CODERPAD CACHE (WBL sync)
             # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS aiprep_tool_coderpad_cache (
@@ -148,7 +151,7 @@ def init_db():
             """)
 
             # ---------------------------
-            # 6. CANDIDATE RESUME (from wbl-backend migration)
+            # 7. CANDIDATE RESUME (from wbl-backend migration)
             # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS candidate_resume (
@@ -163,7 +166,7 @@ def init_db():
             """)
 
             # ---------------------------
-            # 7. CANDIDATE LLM API KEYS (from wbl-backend migration)
+            # 8. CANDIDATE LLM API KEYS (from wbl-backend migration)
             # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS candidate_llm_api_keys (
@@ -182,7 +185,7 @@ def init_db():
             """)
 
             # ---------------------------
-            # 8. PREP TOKENS (one-time sync tokens, replaces Redis)
+            # 9. PREP TOKENS (one-time sync tokens, replaces Redis)
             # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS prep_tokens (

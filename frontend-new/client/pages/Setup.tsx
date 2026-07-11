@@ -6,8 +6,8 @@ import {
   Key, Upload, CheckCircle2, Loader2, AlertCircle, ArrowRight,
   FileText, Sparkles, Shield, Eye, EyeOff, ChevronRight
 } from "lucide-react";
-import { validateApiKey, uploadResume, getExtractionStatus, getResumeSummary } from "@/lib/api";
-import { getSessionId, setSession, setApiProvider } from "@/lib/auth";
+import { validateApiKey, uploadResume, getExtractionStatus, getResumeSummary, initAndSummary } from "@/lib/api";
+import { getSessionId, setSession, setApiProvider, clearSession } from "@/lib/auth";
 import { useAuth } from "@/lib/AuthContext";
 
 type Step = "api-key" | "resume" | "done";
@@ -38,6 +38,18 @@ export default function Setup() {
   const [resumeError, setResumeError] = useState("");
   const [extractionStatus, setExtractionStatus] = useState<"idle" | "pending" | "completed" | "failed">("idle");
 
+  const createSetupSession = async () => {
+    const resp = await initAndSummary({
+      wbl_email: `user_${Date.now()}@temp.local`,
+      name: "Candidate",
+    });
+    const sid = resp.session_id;
+    setSession(sid, "Candidate");
+    setSessionIdState(sid);
+    refresh();
+    return sid;
+  };
+
   // On mount: if already has session + resume, skip to done
   useEffect(() => {
     const sid = getSessionId();
@@ -53,7 +65,11 @@ export default function Setup() {
           setStep("resume");
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        clearSession();
+        setSessionIdState("");
+        refresh();
+      });
   }, [navigate]);
 
   // Poll extraction status
@@ -89,22 +105,35 @@ export default function Setup() {
     try {
       let sid = sessionId;
       if (!sid) {
-        // Create a temporary session via init-and-summary
-        const { initAndSummary } = await import("@/lib/api");
-        const resp = await initAndSummary({ wbl_email: `user_${Date.now()}@temp.local`, name: "Candidate" });
-        sid = resp.session_id;
-        setSession(sid, "Candidate");
-        setSessionIdState(sid);
-        refresh();
+        throw new Error("No active session found. Please log in via the WBL platform first.");
       }
 
-      await validateApiKey({
-        session_id: sid,
-        api_key: apiKey.trim(),
-        api_provider: provider,
-        model_name: model,
-        voice_enabled: voiceEnabled,
-      });
+      try {
+        await validateApiKey({
+          session_id: sid,
+          api_key: apiKey.trim(),
+          api_provider: provider,
+          model_name: model,
+          voice_enabled: voiceEnabled,
+        });
+      } catch (e: any) {
+        const message = String(e.message || "").toLowerCase();
+        const isMissingSession =
+          e.status === 404 || message.includes("session/candidate not found");
+        if (!isMissingSession) {
+          throw e;
+        }
+
+        clearSession();
+        sid = await createSetupSession();
+        await validateApiKey({
+          session_id: sid,
+          api_key: apiKey.trim(),
+          api_provider: provider,
+          model_name: model,
+          voice_enabled: voiceEnabled,
+        });
+      }
 
       setApiProvider(provider);
       setStep("resume");

@@ -27,8 +27,14 @@ def get_candidate_context(user_id: str):
             if proj:
                 context["project"] = proj
                 
-            # 3. Fetch Intro Eval 
-            cursor.execute("SELECT intro_score AS score, (intro_score >= 75) AS passed FROM aiprep_tool_evaluations WHERE candidate_id = %s", (int(user_id),))
+            # 3. Fetch latest Intro Eval
+            cursor.execute("""
+                SELECT score, passed
+                FROM aiprep_tool_evaluations
+                WHERE user_id = %s AND type = 'intro'
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (user_id,))
             intro = cursor.fetchone()
             if intro:
                 context["intro_eval"] = intro

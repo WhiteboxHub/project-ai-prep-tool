@@ -12,7 +12,7 @@ if os.environ.get("K_SERVICE") is None:
     load_dotenv()
 
 from db.init_db import init_db
-from routes import setup, intro, project, interview, context, resume, case_study, candidate_setup, report, analytics
+from routes import setup, intro, project, interview, context, resume, case_study, candidate_setup, report, analytics, youtube
 
 app = FastAPI(
     title="AI Candidate Evaluation System",
@@ -28,10 +28,10 @@ def startup():
         for i in range(5):
             try:
                 init_db()
-                print("✅ DB Connection established and tables initialized.")
+                print("DB Connection established and tables initialized.")
                 break
             except Exception as e:
-                print(f"❌ Database initialization failed on attempt {i+1}:", e)
+                print(f"Database initialization failed on attempt {i+1}:", e)
                 sleep(5)
     threading.Thread(target=init).start()
 
@@ -64,6 +64,7 @@ app.include_router(report.router)
 app.include_router(context.router)
 app.include_router(resume.router)
 app.include_router(case_study.router)
+app.include_router(youtube.router)
 
 # Candidate Setup — migrated from wbl-backend
 app.include_router(candidate_setup.router)
