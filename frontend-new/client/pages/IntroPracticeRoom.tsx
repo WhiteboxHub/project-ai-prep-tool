@@ -73,6 +73,8 @@ export default function IntroPracticeRoom() {
   const recordedChunksRef = useRef<BlobPart[]>([]);
   const recordingIdRef = useRef<string | null>(null);
   const recordingStartTimeRef = useRef<number>(0);
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [silenceRemaining, setSilenceRemaining] = useState<number | null>(null);
 
   // ── Global Cleanup ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -203,35 +205,6 @@ export default function IntroPracticeRoom() {
       stopMediaRecording();
     };
 
-    // Start video recording if camera stream is active
-    if (stream) {
-      chunksRef.current = [];
-      try {
-        const options = { mimeType: "video/webm" };
-        if (!MediaRecorder.isTypeSupported("video/webm")) {
-          options.mimeType = "video/mp4";
-        }
-        const recorder = new MediaRecorder(stream, options);
-        recorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) {
-            chunksRef.current.push(e.data);
-          }
-        };
-        recorder.onstop = async () => {
-          if (chunksRef.current.length > 0) {
-            const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "video/webm" });
-            await submitVideoAnswer(blob);
-          } else {
-            await submitAnswer();
-          }
-        };
-        recorder.start(1000);
-        mediaRecorderRef.current = recorder;
-      } catch (err) {
-        console.warn("MediaRecorder start failed:", err);
-      }
-    }
-
     recognitionRef.current = rec;
     rec.start();
     setRecording(true);
@@ -352,7 +325,7 @@ export default function IntroPracticeRoom() {
     }
   };
 
-  const stopRecognition = () => {
+  const stopRecognition = (silenceSecs?: number, cb?: () => void) => {
     recognitionRef.current?.stop();
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
@@ -364,7 +337,7 @@ export default function IntroPracticeRoom() {
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     setRecording(false);
     stopMediaRecording();
-    if (callback) callback();
+    if (cb) cb();
   };
 
   const submitAnswer = async (textToSubmit?: string) => {
@@ -864,7 +837,7 @@ export default function IntroPracticeRoom() {
 
         {/* Exit Practice — always pinned to bottom */}
         <div className="pt-4 border-t border-border/50 flex-shrink-0">
-          <motion.button onClick={handleExit} className="w-full py-2.5 rounded-lg bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10 text-sm font-semibold smooth-transition">
+          <motion.button onClick={() => navigate("/dashboard")} className="w-full py-2.5 rounded-lg bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10 text-sm font-semibold smooth-transition">
             Exit Practice
           </motion.button>
         </div>

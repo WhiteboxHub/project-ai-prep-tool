@@ -449,7 +449,8 @@ export default function InterviewRoom() {
             setIsCameraOn(enabled);
             toggleVideo(enabled);
           }}
-          onRecordToggle={() => recording ? stopRecognition() : startRecognition()}
+          onRecordStart={startRecognition}
+          onRecordStop={stopRecognition}
           isRecording={recording}
           isAudioDenied={audioState === "denied"}
           isVideoDenied={videoState === "denied"}
