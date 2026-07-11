@@ -641,3 +641,34 @@ def get_extraction_status(session_id: str):
         return {"status": "completed"}
     finally:
         conn.close()
+
+
+
+
+
+class VerifyReasoningRequest(BaseModel):
+    session_id: str
+    api_key: Optional[str] = None
+
+@router.post("/verify-reasoning")
+def verify_reasoning(req: VerifyReasoningRequest):
+    try:
+        api_key = req.api_key
+        if not api_key:
+            from services.user_context import get_user_api_key
+            api_key = get_user_api_key(req.session_id)
+        if not api_key:
+            raise HTTPException(status_code=400, detail="API Key not configured. Please add an API key first.")
+
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": "Solve 2+2 and answer with just the number."}],
+            max_tokens=10
+        )
+        if response and response.choices:
+            return {"ok": True, "message": "Reasoning verified"}
+        raise HTTPException(status_code=400, detail="Invalid response from LLM")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
