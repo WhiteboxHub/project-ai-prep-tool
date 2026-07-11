@@ -1,6 +1,6 @@
 // client/lib/indexedDB.ts
 const DB_NAME = "AiPrepMediaDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = "recordings";
 
 export async function openDB(): Promise<IDBDatabase> {
@@ -9,9 +9,10 @@ export async function openDB(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+      if (db.objectStoreNames.contains(STORE_NAME)) {
+        db.deleteObjectStore(STORE_NAME);
       }
+      db.createObjectStore(STORE_NAME, { keyPath: "id" });
     };
 
     request.onsuccess = (event) => {

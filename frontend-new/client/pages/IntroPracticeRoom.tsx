@@ -11,6 +11,9 @@ import { usePipeline } from "@/hooks/use-pipeline";
 import { useMediaStream } from "@/hooks/useMediaStream";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { saveRecording } from "@/lib/indexedDB";
+import { toast } from "sonner";
+// @ts-ignore
+import fixWebmDuration from "fix-webm-duration";
 
 export default function IntroPracticeRoom() {
   const navigate = useNavigate();
@@ -33,6 +36,7 @@ export default function IntroPracticeRoom() {
   const [messages, setMessages] = useState<{id: string, role: "ai"|"user", text: string}[]>([]);
   const [recording, setRecording] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const [error, setError] = useState("");
   const [template, setTemplate] = useState("");
   const [result, setResult] = useState<any>(null);
@@ -47,12 +51,15 @@ export default function IntroPracticeRoom() {
   }, [messages, transcript, interimTranscript]);
 
   const transcriptRef = useRef("");
+  const interimRef = useRef("");
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
+  const recordingIdRef = useRef<string | null>(null);
+  const recordingStartTimeRef = useRef<number>(0);
 
   // ── Global Cleanup ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -91,9 +98,16 @@ export default function IntroPracticeRoom() {
     }, 1000);
   }, [sessionId, speak]);
 
-  const startRecognition = () => {
+  const startRecognition = async () => {
+    if (recording) return; // Prevent double-start race condition
+    
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) { setError("Speech recognition not supported. Use Chrome."); return; }
+
+    // Hard stop any rogue background instances
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) {}
+    }
 
     // If starting after a previous result, reset everything
     if (result) {
@@ -101,6 +115,7 @@ export default function IntroPracticeRoom() {
       setTranscript("");
       setInterimTranscript("");
       transcriptRef.current = "";
+      interimRef.current = "";
       setRecordedVideoUrl(null);
       setMessages([{ role: "ai", id: "welcome", text: "Welcome back! Ready for another try?" }]);
     }
@@ -109,6 +124,17 @@ export default function IntroPracticeRoom() {
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = "en-US";
+    
+    // Request screen share so we can capture the UI (transcription + camera feed)
+    let fallbackVideoTrack: MediaStreamTrack | null = null;
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser" } });
+      fallbackVideoTrack = screenStream.getVideoTracks()[0];
+    } catch (err) {
+      console.warn("Screen share denied or failed, falling back to dynamic black canvas.", err);
+      toast.error("Screen recording is recommended. Falling back to black background.", { id: "screen-share-toast" });
+    }
+
     rec.onresult = (e: any) => {
       let final = "";
       let interim = "";
@@ -124,6 +150,7 @@ export default function IntroPracticeRoom() {
         });
       }
       setInterimTranscript(interim);
+      interimRef.current = interim;
 
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = setTimeout(() => {
@@ -158,14 +185,78 @@ export default function IntroPracticeRoom() {
     // Start MediaRecorder if stream is available
     if (stream && (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive")) {
       recordedChunksRef.current = [];
+      recordingIdRef.current = crypto.randomUUID();
       try {
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        let finalStream = stream;
+        
+        // We always prioritize capturing the SCREEN (fallbackVideoTrack) because it includes the UI
+        if (fallbackVideoTrack) {
+          finalStream = new MediaStream([
+            ...stream.getAudioTracks(),
+            fallbackVideoTrack
+          ]);
+          
+          // Cleanup screen track when recording stops
+          if (mediaRecorderRef.current) {
+             mediaRecorderRef.current.addEventListener("stop", () => {
+               fallbackVideoTrack?.stop();
+             });
+          }
+        } else {
+            // Fallback: Dynamic black canvas if screen share is denied
+            const canvas = document.createElement("canvas");
+          canvas.width = 640;
+          canvas.height = 480;
+          const ctx = canvas.getContext("2d");
+          
+          let animationId: number;
+          const drawFrame = () => {
+            if (ctx) {
+              // Fill background
+              ctx.fillStyle = "black";
+              ctx.fillRect(0, 0, 640, 480);
+              
+              // Draw moving elements to force VP8/VP9 encoder to emit actual frames
+              // (Otherwise Chrome drops identical frames and YouTube treats it as audio-only)
+              const t = Date.now();
+              ctx.fillStyle = "#333333";
+              ctx.font = "20px monospace";
+              ctx.fillText(new Date(t).toISOString(), 20, 40);
+              
+              // Bouncing box
+              const x = (t / 5) % 640;
+              ctx.fillRect(x, 240, 20, 20);
+            }
+            animationId = requestAnimationFrame(drawFrame);
+          };
+          drawFrame();
+
+          const canvasStream = canvas.captureStream(15);
+          finalStream = new MediaStream([
+            ...stream.getAudioTracks(),
+            canvasStream.getVideoTracks()[0]
+          ]);
+
+          // Cleanup when media recorder stops
+          if (mediaRecorderRef.current) {
+            const oldStop = mediaRecorderRef.current.onstop;
+            mediaRecorderRef.current.addEventListener("stop", () => {
+              cancelAnimationFrame(animationId);
+            });
+          }
+        } // end of else block
+
+        const mimeType = 'video/webm';
+        // Fallback to default if specific mimeType isn't supported
+        const options = MediaRecorder.isTypeSupported(mimeType) ? { mimeType } : undefined;
+        const recorder = new MediaRecorder(finalStream, options);
         recorder.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) {
             recordedChunksRef.current.push(e.data);
           }
         };
         recorder.start(1000);
+        recordingStartTimeRef.current = Date.now();
         mediaRecorderRef.current = recorder;
       } catch (err) {
         console.error("MediaRecorder start failed", err);
@@ -174,23 +265,31 @@ export default function IntroPracticeRoom() {
     
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     silenceTimerRef.current = setTimeout(() => {
-      stopRecognition();
+      if (transcriptRef.current.trim()) {
+        stopRecognition();
+      }
     }, 8000);
   };
 
   const stopMediaRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      const id = crypto.randomUUID();
+      const id = recordingIdRef.current;
+      const duration = Date.now() - recordingStartTimeRef.current;
       mediaRecorderRef.current.onstop = async () => {
+        if (!id) return;
+        // The blob is guaranteed to be a video since we inject a canvas track if missing
         const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
         try {
-          await saveRecording(id, blob);
-          setRecordedVideoUrl(`local:${id}`);
-          
-          // Trigger the Service Worker to begin the background upload immediately
-          if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.controller.postMessage({ type: 'NEW_RECORDING_READY' });
-          }
+          // Fix WebM duration metadata (missing in Chrome MediaRecorder) which causes YouTube to abandon processing
+          fixWebmDuration(blob, duration, async (fixedBlob: Blob) => {
+            await saveRecording(id, fixedBlob);
+            setRecordedVideoUrl(`local:${id}`);
+            
+            // Trigger the Service Worker to begin the background upload immediately
+            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+              navigator.serviceWorker.controller.postMessage({ type: 'NEW_RECORDING_READY' });
+            }
+          });
         } catch (err) {
           console.error("Failed to save recording", err);
         }
@@ -199,16 +298,41 @@ export default function IntroPracticeRoom() {
     }
   };
 
-  const stopRecognition = () => {
-    recognitionRef.current?.stop();
+  const stopRecognition = (delaySeconds = 0, callback?: () => void) => {
+    if (isFinalizing) return;
+    
+    if (delaySeconds > 0) {
+      setIsFinalizing(true);
+      toast.info("Finalizing transcription... Please wait.", { id: "finalizing", duration: delaySeconds * 1000 });
+      setTimeout(() => {
+        setIsFinalizing(false);
+        toast.dismiss("finalizing");
+        executeStop(callback);
+      }, delaySeconds * 1000);
+    } else {
+      executeStop(callback);
+    }
+  };
+
+  const executeStop = (callback?: () => void) => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) {}
+      recognitionRef.current = null;
+    }
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     setRecording(false);
     stopMediaRecording();
+    if (callback) callback();
   };
 
   const submitAnswer = async (textToSubmit?: string) => {
-    const finalTranscript = textToSubmit || transcriptRef.current;
-    if (!finalTranscript.trim()) { setError("Please record your answer using the microphone."); return; }
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    
+    // Append any unfinalized interim text to ensure we don't drop the last sentence
+    const finalTranscript = textToSubmit || (transcriptRef.current + " " + interimRef.current).trim();
+    
+    if (!finalTranscript) {
+      setError("Please record your answer using the microphone."); return; }
     if (!sessionId) return;
 
     // Save user's transcript to chat history
@@ -224,7 +348,11 @@ export default function IntroPracticeRoom() {
     try {
       const introType = sessionStorage.getItem("introType") || "general";
       const jdText = sessionStorage.getItem("jobDescription") || "";
-      const res = await evaluateIntroText(sessionId, userText, introType, jdText, recordedVideoUrl);
+      
+      // Determine the final video URL. Prioritize the synchronously generated ID if recording was active.
+      const finalVideoUrl = recordingIdRef.current ? `local:${recordingIdRef.current}` : recordedVideoUrl;
+      
+      const res = await evaluateIntroText(sessionId, userText, introType, jdText, finalVideoUrl);
       setResult(res);
       const score = res.score !== undefined ? res.score : res.evaluation?.overall_score || 0;
       let msg = "";
@@ -246,6 +374,31 @@ export default function IntroPracticeRoom() {
       setError(errorMsg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExit = () => {
+    if ((transcript || interimTranscript) && !result) {
+      toast.warning("You have unsubmitted practice data", {
+        description: "Do you want to submit your recording for AI evaluation, or exit and discard it?",
+        duration: 10000,
+        action: {
+          label: "Submit",
+          onClick: () => {
+            if (recording && !isFinalizing) {
+              stopRecognition(6, () => submitAnswer());
+            } else if (!isFinalizing) {
+              submitAnswer();
+            }
+          },
+        },
+        cancel: {
+          label: "Exit Anyway",
+          onClick: () => navigate("/"),
+        },
+      });
+    } else {
+      navigate("/");
     }
   };
 
@@ -448,18 +601,6 @@ export default function IntroPracticeRoom() {
             </div>
           )}
 
-          {/* Send for Eval Button */}
-          {transcript && !recording && !loading && !result && (
-            <motion.button
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              onClick={() => submitAnswer()}
-              className="mb-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-primary to-secondary text-white font-bold shadow-[0_0_20px_rgba(124,58,237,0.3)] hover:shadow-[0_0_30px_rgba(124,58,237,0.5)] flex items-center gap-2 hover:-translate-y-0.5 transition-all"
-            >
-              <CheckCircle2 className="w-5 h-5" /> Send for Eval
-            </motion.button>
-          )}
-
           <ControlBar
             onToggleMic={(enabled) => {
               setIsMicOn(enabled);
@@ -469,13 +610,23 @@ export default function IntroPracticeRoom() {
               setIsCameraOn(enabled);
               toggleVideo(enabled);
             }}
-            onRecordToggle={() => recording ? stopRecognition() : startRecognition()}
-            isRecording={recording}
+            onRecordToggle={() => {
+              if (isFinalizing) return;
+              if (recording) stopRecognition(6);
+              else startRecognition();
+            }}
+            isRecording={recording || isFinalizing}
             isAudioDenied={audioState === "denied"}
             isVideoDenied={videoState === "denied"}
             onRetryAudio={requestAudio}
             onRetryVideo={requestVideo}
             wrapperClassName="relative"
+            onSubmit={(!result && !loading && !isFinalizing) ? () => {
+              if (recording) stopRecognition(6, () => submitAnswer());
+              else submitAnswer();
+            } : undefined}
+            onRetry={(!result && !loading) ? startRecognition : undefined}
+            hasTranscript={!!transcript}
           />
         </div>
       </div>
@@ -604,7 +755,7 @@ export default function IntroPracticeRoom() {
 
         {/* Exit Practice — always pinned to bottom */}
         <div className="pt-4 border-t border-border/50 flex-shrink-0">
-          <motion.button onClick={() => navigate("/")} className="w-full py-2.5 rounded-lg bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10 text-sm font-semibold smooth-transition">
+          <motion.button onClick={handleExit} className="w-full py-2.5 rounded-lg bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10 text-sm font-semibold smooth-transition">
             Exit Practice
           </motion.button>
         </div>

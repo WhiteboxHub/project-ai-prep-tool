@@ -52,15 +52,38 @@ export default function IntroSelect() {
     };
   }, [videoSrc]);
 
-  const handlePlayVideo = async (videoUrl: string) => {
+  const handlePlayVideo = async (item: any) => {
+    let videoUrl = item.video_url;
+    
     if (videoUrl.startsWith("local:")) {
       const id = videoUrl.replace("local:", "");
       const blob = await getRecording(id);
+      
       if (blob) {
         const url = URL.createObjectURL(blob);
         setVideoSrc(url);
         setPlayingVideo({ url: videoUrl, isLocal: true });
       } else {
+        // If the local file is missing, the Service Worker may have uploaded it to YouTube and deleted the local copy.
+        // Let's refetch the history to see if the database was updated with the YouTube link!
+        try {
+          const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/intro/history?session_id=${sessionId}`);
+          if (res.ok) {
+            const data = await res.json();
+            const updatedHistory = data.history || [];
+            setHistory(updatedHistory);
+            
+            const updatedItem = updatedHistory.find((h: any) => h.id === item.id);
+            if (updatedItem && updatedItem.video_url && !updatedItem.video_url.startsWith("local:")) {
+              setVideoSrc(updatedItem.video_url);
+              setPlayingVideo({ url: updatedItem.video_url, isLocal: false });
+              return;
+            }
+          }
+        } catch (err) {
+          console.error("Failed to refetch history", err);
+        }
+        
         alert("Video not found locally. It may have been deleted or recorded on another device.");
       }
     } else {
@@ -214,7 +237,7 @@ export default function IntroSelect() {
                             {isJD ? "JD Specific" : "General"}
                           </span>
                           {item.video_url && (
-                            <button onClick={() => handlePlayVideo(item.video_url)} className="flex items-center gap-1 px-2 py-1 bg-white/10 hover:bg-white/20 transition-colors text-foreground rounded-md text-[10px] font-semibold">
+                            <button onClick={() => handlePlayVideo(item)} className="flex items-center gap-1 px-2 py-1 bg-white/10 hover:bg-white/20 transition-colors text-foreground rounded-md text-[10px] font-semibold">
                               <Video className="w-3 h-3 text-primary" /> Watch Recording
                             </button>
                           )}
@@ -270,10 +293,21 @@ export default function IntroSelect() {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="p-4 bg-black/50">
-                {videoSrc && (
+              <div className="p-4 bg-black/50 flex justify-center">
+                {videoSrc && playingVideo.isLocal ? (
                   <video src={videoSrc} controls autoPlay className="w-full h-auto max-h-[70vh] rounded-xl outline-none" />
-                )}
+                ) : videoSrc && videoSrc.includes("youtube.com") ? (
+                  <iframe
+                    className="w-full aspect-video max-h-[70vh] rounded-xl outline-none"
+                    src={`https://www.youtube.com/embed/${new URL(videoSrc).searchParams.get("v")}`}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  ></iframe>
+                ) : videoSrc ? (
+                  <div className="p-8 text-center text-muted-foreground">
+                    Unsupported video format.
+                  </div>
+                ) : null}
               </div>
               {playingVideo.isLocal && (
                 <div className="p-3 text-xs text-center text-muted-foreground bg-primary/5 border-t border-primary/10">

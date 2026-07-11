@@ -28,10 +28,10 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw-youtube.js')
       .then(registration => {
-        console.log('[YouTube SW] ServiceWorker registration successful with scope: ', registration.scope);
+        console.log('[SW] ServiceWorker registration successful with scope: ', registration.scope);
       })
       .catch(err => {
-        console.error('[YouTube SW] ServiceWorker registration failed: ', err);
+        console.error('[SW] ServiceWorker registration failed: ', err);
       });
   });
 }

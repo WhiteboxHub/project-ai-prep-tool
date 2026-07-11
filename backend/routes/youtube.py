@@ -1,6 +1,6 @@
 import os
 import requests
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from db.init_db import get_db_connection
 
@@ -9,6 +9,8 @@ router = APIRouter(prefix="/api/youtube", tags=["youtube"])
 class UploadUrlRequest(BaseModel):
     title: str
     description: str
+    privacyStatus: str = "unlisted"
+    selfDeclaredMadeForKids: bool = False
 
 class UpdateVideoUrlRequest(BaseModel):
     local_id: str
@@ -35,7 +37,7 @@ def get_youtube_access_token():
     return response.json().get("access_token")
 
 @router.post("/get-upload-uri")
-def get_upload_uri(req: UploadUrlRequest):
+def get_upload_uri(req: UploadUrlRequest, request: Request):
     """
     Step 1: Authenticate as the Admin Channel.
     Step 2: Request a resumable upload Session URI from YouTube.
@@ -43,10 +45,14 @@ def get_upload_uri(req: UploadUrlRequest):
     """
     token = get_youtube_access_token()
 
+    # Capture the client's Origin (e.g. http://localhost:8080) to enable CORS on Google's end
+    client_origin = request.headers.get("origin") or "http://localhost:8080"
+
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
-        "X-Upload-Content-Type": "video/webm"
+        "X-Upload-Content-Type": "video/webm",
+        "Origin": client_origin
     }
 
     # Meta-data for the YouTube video
@@ -56,7 +62,8 @@ def get_upload_uri(req: UploadUrlRequest):
             "description": req.description
         },
         "status": {
-            "privacyStatus": "unlisted"
+            "privacyStatus": req.privacyStatus,
+            "selfDeclaredMadeForKids": req.selfDeclaredMadeForKids
         }
     }
 
@@ -114,14 +121,22 @@ def update_video_url(req: UpdateVideoUrlRequest):
     target_local = f"local:{req.local_id}"
     youtube_url = f"https://www.youtube.com/watch?v={req.video_id}"
 
+    import time
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            cursor.execute(
-                "UPDATE aiprep_tool_evaluations SET video_url = %s WHERE video_url = %s",
-                (youtube_url, target_local)
-            )
+            # The LLM evaluation might take a few seconds to insert the record.
+            # If the video upload finishes first, we need to wait for the record to exist.
+            for _ in range(15):
+                cursor.execute(
+                    "UPDATE aiprep_tool_evaluations SET video_url = %s WHERE video_url = %s",
+                    (youtube_url, target_local)
+                )
+                if cursor.rowcount > 0:
+                    break
+                conn.commit() # Commit to release any locks before sleeping
+                time.sleep(2)
         conn.commit()
     except Exception as e:
         if conn:
