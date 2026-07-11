@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
   CheckCircle2, Clock, Lock, ArrowRight, Loader2,
-  Zap, Upload, Star, BarChart2, Code2, Users, BookOpen, ChevronRight, ChevronDown
+  Zap, Upload, Star, BarChart2, Code2, Users, BookOpen, ChevronRight, ChevronDown, Terminal
 } from "lucide-react";
 import { getResumeSummary, getProjectHistory, getIntroHistory } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -165,9 +165,9 @@ export default function Dashboard() {
     },
     {
       id: "intro",
-      title: "Introduction Practice",
+      title: "Intro Practice",
       description: "Record and evaluate your professional intro",
-      href: "/intro-practice",
+      href: "/intro-select",
       status: pipeline.intro,
       icon: <Users className="w-5 h-5" />,
     },
@@ -375,7 +375,7 @@ export default function Dashboard() {
                     whileHover={{ x: 4 }}
                     onClick={() => {
                       if (pipeline.interview === "ready") navigate("/interview-select");
-                      else if (pipeline.intro === "ready") navigate("/intro-practice");
+                      else if (pipeline.intro === "ready") navigate("/intro-select");
                       else if (pipeline.project === "ready") navigate("/preparation");
                       else navigate("/settings");
                     }}
@@ -409,11 +409,11 @@ export default function Dashboard() {
         {/* Quick Actions */}
         <motion.section variants={itemVariants} className="space-y-4">
           <h3 className="text-xl font-semibold text-foreground">Quick Actions</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: "View Progress Report", icon: <BarChart2 className="w-5 h-5" />, href: "/progress", color: "from-blue-500/20 to-blue-600/10" },
-              { label: "View Documents", icon: <BookOpen className="w-5 h-5" />, href: "/documents", color: "from-purple-500/20 to-purple-600/10" },
-              { label: "Start Mock Interview", icon: <Star className="w-5 h-5" />, href: "/interview-select", color: "from-amber-500/20 to-amber-600/10" },
+              { label: "View Progress Report", icon: <BarChart2 className="w-5 h-5" />, href: "/progress", color: "from-blue-500/20 to-blue-600/10", iconColor: "text-blue-400" },
+              { label: "View Documents", icon: <BookOpen className="w-5 h-5" />, href: "/documents", color: "from-purple-500/20 to-purple-600/10", iconColor: "text-purple-400" },
+              { label: "Start Mock Interview", icon: <Star className="w-5 h-5" />, href: "/interview-select", color: "from-amber-500/20 to-amber-600/10", iconColor: "text-amber-400" },
             ].map((action, i) => (
               <motion.button
                 key={i}
@@ -422,7 +422,7 @@ export default function Dashboard() {
                 onClick={() => navigate(action.href)}
                 className={`glass-card p-4 rounded-xl border border-border/50 text-left flex items-center gap-3 bg-gradient-to-br ${action.color} smooth-transition`}
               >
-                <div className="p-2 rounded-lg bg-white/10 text-foreground">{action.icon}</div>
+                <div className={`p-2 rounded-lg bg-white/10 ${action.iconColor}`}>{action.icon}</div>
                 <span className="font-semibold text-foreground text-sm">{action.label}</span>
                 <ArrowRight className="w-4 h-4 text-muted-foreground ml-auto" />
               </motion.button>
