@@ -6,6 +6,19 @@ const DB_NAME = "AiPrepMediaDB";
 const DB_VERSION = 2;
 const STORE_NAME = "recordings";
 
+function getApiBaseUrl() {
+  const hostname = self.location.hostname;
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "0.0.0.0") {
+    const normalizedHost = hostname === "0.0.0.0" ? "127.0.0.1" : hostname;
+    return `http://${normalizedHost}:8000`;
+  }
+  return self.location.origin;
+}
+
+function buildApiUrl(path) {
+  return `${getApiBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 async function openDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -96,7 +109,7 @@ async function processUploads() {
       for (const record of pendingUploads) {
         // 1. Get Session URI from backend
       console.log(`[SW] Getting upload URI for ${record.id}`);
-      const uriResponse = await fetch("http://localhost:8000/api/youtube/get-upload-uri", {
+      const uriResponse = await fetch(buildApiUrl("/api/youtube/get-upload-uri"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -136,7 +149,7 @@ async function processUploads() {
       // 3. Update the Database and Playlist via Backend
       console.log(`[SW] Updating database and playlist...`);
       
-      const updateResponse = await fetch("http://localhost:8000/api/youtube/update-video-url", {
+      const updateResponse = await fetch(buildApiUrl("/api/youtube/update-video-url"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -89,13 +89,7 @@ export default function Setup() {
     try {
       let sid = sessionId;
       if (!sid) {
-        // Create a temporary session via init-and-summary
-        const { initAndSummary } = await import("@/lib/api");
-        const resp = await initAndSummary({ wbl_email: `user_${Date.now()}@temp.local`, name: "Candidate" });
-        sid = resp.session_id;
-        setSession(sid, "Candidate");
-        setSessionIdState(sid);
-        refresh();
+        throw new Error("No active session found. Please log in via the WBL platform first.");
       }
 
       await validateApiKey({

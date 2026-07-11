@@ -23,6 +23,10 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+import { useEffect } from "react";
+import { getCandidateMe } from "@/lib/api";
+import { setSession } from "@/lib/auth";
+
 // Register the YouTube Background Uploader Service Worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -34,6 +38,23 @@ if ('serviceWorker' in navigator) {
         console.error('[SW] ServiceWorker registration failed: ', err);
       });
   });
+}
+
+function SsoSync() {
+  const { sessionId, refresh } = useAuth();
+  useEffect(() => {
+    if (!sessionId || isNaN(Number(sessionId))) {
+      getCandidateMe().then((data) => {
+        if (data.session_id) {
+          setSession(data.session_id, data.candidate_name || "Candidate", data.candidate_email || "");
+          refresh();
+          // Replace URL cleanly without reloading page to clear ?token=
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }).catch(() => {});
+    }
+  }, [sessionId, refresh]);
+  return null;
 }
 
 // Guard: redirect to /setup if not authenticated
@@ -49,6 +70,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
+        <SsoSync />
         <BrowserRouter>
           <Routes>
             {/* Public routes */}

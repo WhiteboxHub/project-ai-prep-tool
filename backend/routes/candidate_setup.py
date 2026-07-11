@@ -111,14 +111,54 @@ def _validate_api_key(provider: str, api_key: str) -> tuple[bool, bool]:
 # ─────────────────────────────────────────────
 
 def _get_candidate_id(cursor, email: str) -> int:
-    cursor.execute("SELECT id FROM candidate WHERE email = %s", (email,))
+    # Safely resolve candidate ID using the authuser uname (which is the email from JWT)
+    cursor.execute(
+        """
+        SELECT c.id 
+        FROM candidate c 
+        JOIN authuser a ON c.email = a.uname 
+        WHERE a.uname = %s
+        """, 
+        (email,)
+    )
     row = cursor.fetchone()
+    
+    # Fallback if the join fails (sometimes email in candidate is different or null, but authuser matches candidate by other means, though usually email is used)
+    if not row:
+        cursor.execute("SELECT id FROM candidate WHERE email = %s", (email,))
+        row = cursor.fetchone()
+        
     if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Candidate profile not found for email: {email}"
         )
     return row["id"]
+
+
+@router.get("/me")
+def get_current_user(user_email: str = Depends(get_wbl_user_email)):
+    """Fetch the real WBL candidate ID and full name for the logged-in user."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            candidate_id = _get_candidate_id(cursor, user_email)
+            cursor.execute("SELECT full_name FROM candidate WHERE id = %s", (candidate_id,))
+            row = cursor.fetchone()
+            name = row["full_name"] if row and row["full_name"] else "Candidate"
+        
+        return {
+            "session_id": str(candidate_id),
+            "candidate_name": name,
+            "candidate_email": user_email
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"get_current_user error for {user_email}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch candidate profile")
+    finally:
+        conn.close()
 
 
 @router.get("/setup-status")
