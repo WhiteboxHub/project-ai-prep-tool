@@ -188,7 +188,7 @@ export default function Setup() {
             <span className="text-sm text-primary font-semibold">WBL SmartPrep</span>
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            Set Up Your <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">AI Prep  --  </span>
+            Set Up Your <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">AI Prep  - </span>
           </h1>
           <p className="text-muted-foreground text-sm">
             Connect your AI model and upload your resume to get started
