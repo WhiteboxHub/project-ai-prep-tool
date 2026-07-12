@@ -44,12 +44,12 @@ def init_db():
             # ---------------------------
 
             # ---------------------------
-            # 2. PROJECT CONTEXT (uses candidate_id INT)
+            # 2. PROJECT CONTEXT (uses user_id VARCHAR)
             # ---------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS aiprep_tool_project_context (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    candidate_id INT NOT NULL,
+                    user_id VARCHAR(255) NOT NULL,
                     product TEXT,
                     architecture TEXT,
                     business_value TEXT,
@@ -79,8 +79,8 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-                    UNIQUE KEY uq_proj_candidate (candidate_id),
-                    INDEX idx_project_candidate (candidate_id)
+                    UNIQUE KEY uq_proj_user (user_id),
+                    INDEX idx_project_user (user_id)
                 )
             """)
 
