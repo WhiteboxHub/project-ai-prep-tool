@@ -98,7 +98,6 @@ async def save_and_evaluate_project(data: ProjectContextData):
     conn = None
     try:
         conn = get_db_connection()
-        marketing_id = int(data.user_id)
 
         # 1. Atomic UPSERT Project Context
         with conn.cursor() as cursor:
@@ -180,10 +179,10 @@ Future Scope: {data.future_roadmap}
         # 5. Store attempt in attempts table
         with conn.cursor() as cursor:
             cursor.execute("""
-                INSERT INTO aiprep_tool_attempts (candidate_id, attempt_type, attempt_count)
+                INSERT INTO aiprep_tool_attempts (user_id, attempt_type, attempt_count)
                 VALUES (%s, 'project', 1)
                 ON DUPLICATE KEY UPDATE attempt_count = attempt_count + 1
-            """, (marketing_id,))
+            """, (data.user_id,))
 
         conn.commit()
 
@@ -214,13 +213,12 @@ def get_project_history(session_id: str):
     conn = None
     try:
         conn = get_db_connection()
-        marketing_id = int(session_id)
         with conn.cursor() as cursor:
             # 1. Fetch attempts for project
             cursor.execute("""
                 SELECT attempt_count FROM aiprep_tool_attempts 
-                WHERE candidate_id = %s AND attempt_type = 'project'
-            """, (marketing_id,))
+                WHERE user_id = %s AND attempt_type = 'project'
+            """, (session_id,))
             row = cursor.fetchone()
             is_completed = (row["attempt_count"] > 0) if row else False
 
@@ -229,7 +227,7 @@ def get_project_history(session_id: str):
             has_project = cursor.fetchone() is not None
 
             # 3. Check case studies
-            cursor.execute("SELECT id FROM aiprep_tool_case_studies WHERE candidate_id = %s", (marketing_id,))
+            cursor.execute("SELECT id FROM aiprep_tool_case_studies WHERE user_id = %s", (session_id,))
             case_studies = cursor.fetchall()
 
             return {
