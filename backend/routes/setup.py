@@ -298,7 +298,7 @@ async def extract_latest_company_bg(session_id: str, resume_json: dict):
                     cursor.execute(
                         """
                         INSERT INTO aiprep_tool_project_context (
-                            candidate_id, company_name, domain, product, business_problem, previous_system,
+                            user_id, company_name, domain, product, business_problem, previous_system,
                             key_problems, ai_techniques, agent_usage, impact, evaluation_approach,
                             challenges_learnings, learnings, future_roadmap,
                             background, skills, architecture, business_value, role
@@ -470,8 +470,8 @@ async def sync_from_wbl(data: SyncFromWblRequest):
         with conn.cursor() as cursor:
             marketing_id = int(session_id)
             cursor.execute(
-                "SELECT id FROM aiprep_tool_project_context WHERE candidate_id = %s",
-                (marketing_id,),
+                "SELECT id FROM aiprep_tool_project_context WHERE user_id = %s",
+                (session_id,),
             )
             needs_extraction = not cursor.fetchone()
 
@@ -631,8 +631,8 @@ def get_extraction_status(session_id: str):
         with conn.cursor() as cursor:
             marketing_id = int(session_id)
             cursor.execute(
-                "SELECT id FROM aiprep_tool_project_context WHERE candidate_id = %s",
-                (marketing_id,),
+                "SELECT id FROM aiprep_tool_project_context WHERE user_id = %s",
+                (session_id,),
             )
             row = cursor.fetchone()
             return {"status": "completed" if row else "pending"}
