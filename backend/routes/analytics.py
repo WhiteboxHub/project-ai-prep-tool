@@ -132,6 +132,240 @@ def _extract_from_resume(resume_json):
     return name, email
 
 
+# ─── GET /api/analytics/ai-prep-report ────────────────────────────────────────
+# Called by the WBL frontend AiPrepAnalyticsPanel (uses WBL Bearer JWT, no ADMIN_KEY needed)
+
+@router.get("/ai-prep-report")
+def get_ai_prep_report(
+    authorization: Optional[str] = Header(None),
+    search: Optional[str] = Query(None),
+):
+    """
+    Returns a ReportSummary for the WBL avatar analytics AI-Prep tab.
+    Shape expected by AiPrepAnalyticsPanel:
+      { total_users, users_with_intro, active_last_7_days, avg_intro_score, pass_rate_pct, users[] }
+    Each user row:
+      { session_id, wbl_email, name, login_count, last_active, extraction_status,
+        intro_attempts, intro_best_score, intro_latest_score, intro_passed,
+        last_intro_date, video_url, scores, overall_score,
+        strengths, weaknesses, ai_suggestions, improvement_areas, created_at }
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            # Fetch all candidates from candidate_marketing with aggregated intro eval data
+            cursor.execute("""
+                SELECT
+                    cm.id              AS marketing_id,
+                    cm.email           AS wbl_email,
+                    c.full_name        AS name,
+                    (
+                        SELECT COUNT(*)
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                    ) AS intro_attempts,
+                    (
+                        SELECT MAX(ev.score)
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                    ) AS intro_best_score,
+                    (
+                        SELECT ev.score
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                        ORDER BY ev.created_at DESC
+                        LIMIT 1
+                    ) AS intro_latest_score,
+                    (
+                        SELECT MAX(ev.passed)
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                    ) AS intro_passed_flag,
+                    (
+                        SELECT ev.video_url
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                        ORDER BY ev.created_at DESC
+                        LIMIT 1
+                    ) AS latest_video_url,
+                    (
+                        SELECT ev.feedback
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                        ORDER BY ev.created_at DESC
+                        LIMIT 1
+                    ) AS latest_feedback,
+                    (
+                        SELECT ev.raw_response
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                        ORDER BY ev.created_at DESC
+                        LIMIT 1
+                    ) AS latest_raw_response,
+                    (
+                        SELECT MAX(ev.created_at)
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR) AND ev.type = 'intro'
+                    ) AS last_intro_date,
+                    (
+                        SELECT MAX(ev.created_at)
+                        FROM aiprep_tool_evaluations ev
+                        WHERE ev.user_id = CAST(cm.id AS CHAR)
+                    ) AS last_active
+                FROM candidate_marketing cm
+                JOIN candidate c ON c.id = cm.candidate_id
+                WHERE cm.status = 'active'
+                ORDER BY last_intro_date DESC
+            """)
+            rows = cursor.fetchall()
+
+        def _parse_json(v):
+            if not v:
+                return {}
+            if isinstance(v, (dict, list)):
+                return v
+            try:
+                return json.loads(v)
+            except Exception:
+                return {}
+
+        def _extract_scores(feedback, raw_response):
+            """Extract dimension scores from feedback or raw_response JSON."""
+            scores = {}
+            # Try feedback first (structured evaluation result)
+            fb = _parse_json(feedback)
+            if isinstance(fb, dict):
+                # Look for scores dict at top level or nested
+                for key in ("scores", "dimension_scores", "dimensions"):
+                    if key in fb and isinstance(fb[key], dict):
+                        scores = fb[key]
+                        break
+                if not scores:
+                    # Flat scores in feedback dict itself
+                    dim_keys = {
+                        "communication_clarity", "confidence", "structure",
+                        "professionalism", "fluency", "completeness",
+                        "technical_articulation", "speaking_quality"
+                    }
+                    for k in dim_keys:
+                        if k in fb:
+                            scores[k] = fb[k]
+
+            if not scores:
+                rr = _parse_json(raw_response)
+                if isinstance(rr, dict):
+                    for key in ("scores", "dimension_scores", "dimensions"):
+                        if key in rr and isinstance(rr[key], dict):
+                            scores = rr[key]
+                            break
+
+            return scores
+
+        def _extract_list(feedback, raw_response, *keys):
+            """Extract a list field from feedback or raw_response by trying multiple key names."""
+            for data in (_parse_json(feedback), _parse_json(raw_response)):
+                if not isinstance(data, dict):
+                    continue
+                for k in keys:
+                    val = data.get(k)
+                    if isinstance(val, list) and val:
+                        return val
+            return []
+
+        def dtstr(v):
+            return v.isoformat() if v else None
+
+        from datetime import datetime, timedelta
+        week_ago = datetime.now() - timedelta(days=7)
+
+        users = []
+        total_intro_scores = []
+        passed_count = 0
+        active_count = 0
+
+        for row in rows:
+            intro_attempts = row.get("intro_attempts") or 0
+            intro_best_score = row.get("intro_best_score")
+            intro_latest_score = row.get("intro_latest_score")
+            intro_passed = bool(row.get("intro_passed_flag"))
+            last_intro_date = row.get("last_intro_date")
+            last_active = row.get("last_active")
+            feedback = row.get("latest_feedback")
+            raw_response = row.get("latest_raw_response")
+
+            scores = _extract_scores(feedback, raw_response)
+            strengths = _extract_list(feedback, raw_response, "strengths", "strength")
+            weaknesses = _extract_list(feedback, raw_response, "weaknesses", "weakness", "areas_for_improvement")
+            ai_suggestions = _extract_list(feedback, raw_response, "ai_suggestions", "suggestions", "recommendations")
+            improvement_areas = _extract_list(feedback, raw_response, "improvement_areas", "improvements")
+
+            # Compute overall score from dimension scores if not directly available
+            overall_score = intro_best_score
+            if not overall_score and scores:
+                vals = [v for v in scores.values() if isinstance(v, (int, float))]
+                if vals:
+                    overall_score = round(sum(vals) / len(vals), 1)
+
+            if intro_passed:
+                passed_count += 1
+            if intro_best_score is not None:
+                total_intro_scores.append(float(intro_best_score))
+            if last_active and last_active > week_ago:
+                active_count += 1
+
+            name = row.get("name") or "—"
+            wbl_email = row.get("wbl_email") or "—"
+
+            # Apply optional search filter
+            if search:
+                q = search.lower()
+                if q not in name.lower() and q not in wbl_email.lower():
+                    continue
+
+            users.append({
+                "session_id": str(row["marketing_id"]),
+                "wbl_email": wbl_email,
+                "name": name,
+                "login_count": 0,
+                "last_active": dtstr(last_active),
+                "extraction_status": "completed",
+                "intro_attempts": intro_attempts,
+                "intro_best_score": intro_best_score,
+                "intro_latest_score": intro_latest_score,
+                "intro_passed": intro_passed,
+                "last_intro_date": dtstr(last_intro_date),
+                "video_url": row.get("latest_video_url"),
+                "scores": scores,
+                "overall_score": overall_score,
+                "strengths": strengths,
+                "weaknesses": weaknesses,
+                "ai_suggestions": ai_suggestions,
+                "improvement_areas": improvement_areas,
+                "created_at": dtstr(last_intro_date),
+            })
+
+        total_users = len(rows)
+        users_with_intro = sum(1 for r in rows if (r.get("intro_attempts") or 0) > 0)
+        avg_intro_score = round(sum(total_intro_scores) / len(total_intro_scores), 1) if total_intro_scores else 0
+        pass_rate_pct = round(passed_count / users_with_intro * 100, 1) if users_with_intro else 0
+
+        return {
+            "total_users": total_users,
+            "users_with_intro": users_with_intro,
+            "active_last_7_days": active_count,
+            "avg_intro_score": avg_intro_score,
+            "pass_rate_pct": pass_rate_pct,
+            "users": users,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+
 # ─── GET /api/analytics/summary ───────────────────────────────────────────────
 
 @router.get("/summary")
