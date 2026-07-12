@@ -17,15 +17,8 @@ def get_user_api_context(user_id: str) -> dict:
         provider = None
 
         with conn.cursor() as cursor:
-            marketing_id = int(user_id)
-            # Get the candidate.id from candidate_marketing
-            cursor.execute(
-                "SELECT candidate_id FROM candidate_marketing WHERE id = %s",
-                (marketing_id,),
-            )
-            cm = cursor.fetchone()
-            if cm and cm.get("candidate_id"):
-                cid = cm["candidate_id"]
+            cid = int(user_id)
+            if cid:
                 cursor.execute(
                     """
                     SELECT api_key, provider_name FROM candidate_llm_api_keys

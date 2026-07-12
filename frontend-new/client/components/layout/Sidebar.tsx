@@ -15,7 +15,6 @@ import {
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/AuthContext";
-import { clearSession } from "@/lib/auth";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/" },
@@ -34,10 +33,7 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { candidateName, initials } = useAuth();
 
-  const handleLogout = () => {
-    clearSession();
-    navigate("/setup");
-  };
+
 
   return (
     <motion.aside
