@@ -104,7 +104,7 @@ async def save_and_evaluate_project(data: ProjectContextData):
         with conn.cursor() as cursor:
             cursor.execute("""
                 INSERT INTO aiprep_tool_project_context (
-                    candidate_id, product, architecture, business_value, role, impact,
+                    user_id, product, architecture, business_value, role, impact,
                     business_problem, previous_system, key_objectives, users_scale,
                     agents_components, key_workflows, tools_integrations, tech_stack,
                     ai_techniques, evaluation_approach, challenges_learnings,
@@ -136,7 +136,7 @@ async def save_and_evaluate_project(data: ProjectContextData):
                     agent_usage = VALUES(agent_usage),
                     learnings = VALUES(learnings)
             """, (
-                marketing_id, data.product, data.architecture, data.business_value, data.role, data.impact,
+                data.user_id, data.product, data.architecture, data.business_value, data.role, data.impact,
                 data.business_problem, data.previous_system, data.key_objectives, data.users_scale,
                 data.agents_components, data.key_workflows, data.tools_integrations, data.tech_stack,
                 data.ai_techniques, data.evaluation_approach, data.challenges_learnings,
@@ -225,7 +225,7 @@ def get_project_history(session_id: str):
             is_completed = (row["attempt_count"] > 0) if row else False
 
             # 2. Check if project context exists
-            cursor.execute("SELECT id FROM aiprep_tool_project_context WHERE candidate_id = %s", (marketing_id,))
+            cursor.execute("SELECT id FROM aiprep_tool_project_context WHERE user_id = %s", (session_id,))
             has_project = cursor.fetchone() is not None
 
             # 3. Check case studies
