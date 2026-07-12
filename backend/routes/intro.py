@@ -67,12 +67,11 @@ def get_candidate_ideal_intro(session_id: str) -> str:
     context_data = "Professional self-introduction covering background, core technical expertise, accomplishments, and role alignment."
     try:
         with conn.cursor() as cursor:
-            marketing_id = int(session_id)
             cursor.execute("""
                 SELECT product, architecture, role, company_name, domain
                 FROM aiprep_tool_project_context
-                WHERE candidate_id = %s
-            """, (marketing_id,))
+                WHERE user_id = %s
+            """, (session_id,))
             res = cursor.fetchone()
             if res:
                 context_data = f"Candidate worked at {res.get('company_name', 'Enterprise')} ({res.get('domain', 'Tech')}) as {res.get('role', 'AI Engineer')}. Built {res.get('product', '')} using {res.get('architecture', '')}."
@@ -369,12 +368,11 @@ async def get_dynamic_intro_template(session_id: str):
         context_data = ""
         try:
             with conn.cursor() as cursor:
-                marketing_id = int(session_id)
                 cursor.execute("""
                     SELECT product, architecture, business_value, role, impact
                     FROM aiprep_tool_project_context
-                    WHERE candidate_id = %s
-                """, (marketing_id,))
+                    WHERE user_id = %s
+                """, (session_id,))
                 res = cursor.fetchone()
 
                 if res:
