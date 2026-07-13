@@ -49,13 +49,12 @@ async function getAllRecordings() {
       const dataReq = store.getAll();
       dataReq.onsuccess = () => {
         for (let i = 0; i < keys.length; i++) {
-          // dataReq.result[i] contains the object { id, blob, timestamp, uploaded }
-          // We need to extract the actual Blob so it can be uploaded
           blobs.push({ 
             id: keys[i], 
             blob: dataReq.result[i].blob,
             timestamp: dataReq.result[i].timestamp,
-            uploaded: dataReq.result[i].uploaded || false
+            uploaded: dataReq.result[i].uploaded || false,
+            approved: dataReq.result[i].approved || false
           });
         }
         resolve(blobs);
@@ -97,17 +96,45 @@ async function markAsUploaded(id) {
   });
 }
 
+// Check if backend is reachable and YouTube is configured before uploading
+async function canReachBackend() {
+  try {
+    const res = await fetch(buildApiUrl("/api/youtube/status"), { method: "GET" });
+    if (!res.ok) return false;
+    const data = await res.json();
+    // Only proceed if YouTube OAuth is configured on the backend
+    return data.configured === true;
+  } catch (e) {
+    console.log("[SW] Backend not reachable, skipping upload.", e);
+    return false;
+  }
+}
+
 // Function to process the uploads
 async function processUploads() {
   try {
+    // Guard 1: Only upload if backend is reachable AND YouTube is configured
+    const ready = await canReachBackend();
+    if (!ready) {
+      console.log("[SW] Backend not ready or YouTube not configured. Skipping upload.");
+      return;
+    }
+
     const recordings = await getAllRecordings();
-    const pendingUploads = recordings.filter(r => !r.uploaded);
 
-    if (pendingUploads.length > 0) {
-      console.log(`[SW] Found ${pendingUploads.length} pending recordings to upload.`);
+    // Guard 2: ONLY upload recordings that were explicitly approved after a
+    // successful LLM evaluation. Never upload drafts from incomplete sessions.
+    const pendingUploads = recordings.filter(r => r.approved === true && !r.uploaded);
 
-      for (const record of pendingUploads) {
-        // 1. Get Session URI from backend
+    if (pendingUploads.length === 0) {
+      console.log("[SW] No approved recordings pending upload.");
+      return;
+    }
+
+    console.log(`[SW] Found ${pendingUploads.length} approved recording(s) to upload.`);
+
+    for (const record of pendingUploads) {
+      // 1. Get Session URI from backend
       console.log(`[SW] Getting upload URI for ${record.id}`);
       const uriResponse = await fetch(buildApiUrl("/api/youtube/get-upload-uri"), {
         method: "POST",
@@ -131,9 +158,7 @@ async function processUploads() {
       console.log(`[SW] Uploading ${record.blob.size} bytes directly to YouTube...`);
       const uploadResponse = await fetch(uploadUrl, {
         method: "PUT",
-        headers: {
-          "Content-Type": "video/webm"
-        },
+        headers: { "Content-Type": "video/webm" },
         body: record.blob
       });
 
@@ -148,7 +173,6 @@ async function processUploads() {
 
       // 3. Update the Database and Playlist via Backend
       console.log(`[SW] Updating database and playlist...`);
-      
       const updateResponse = await fetch(buildApiUrl("/api/youtube/update-video-url"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -163,19 +187,17 @@ async function processUploads() {
         continue;
       }
 
-      // 4. Mark as uploaded instead of deleting immediately
+      // 4. Mark as uploaded
       console.log(`[SW] Marking local IndexedDB storage as uploaded for ${record.id}`);
       await markAsUploaded(record.id);
     }
-    }
 
-    // 5. Cleanup: Keep only the 3 most recent recordings, delete the rest
+    // 5. Cleanup: Keep only the 3 most recent recordings, delete older ones
     const finalRecordings = await getAllRecordings();
     if (finalRecordings.length > 3) {
-      // Sort newest first
       finalRecordings.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
       const toDelete = finalRecordings.slice(3);
-      console.log(`[SW] Cleaning up ${toDelete.length} old local recordings to save space...`);
+      console.log(`[SW] Cleaning up ${toDelete.length} old local recordings...`);
       for (const oldRecord of toDelete) {
         await deleteRecording(oldRecord.id);
       }
@@ -194,14 +216,13 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
   console.log("[SW] Activated and claimed clients.");
-  
-  // Do an immediate check on startup
-  processUploads();
+  // NOTE: Do NOT call processUploads() here. We only upload when the client
+  // explicitly sends RECORDING_APPROVED after a successful evaluation.
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === 'NEW_RECORDING_READY') {
-    console.log("[SW] Received NEW_RECORDING_READY event. Processing uploads...");
+  if (event.data && event.data.type === "RECORDING_APPROVED") {
+    console.log("[SW] Received RECORDING_APPROVED event. Processing approved uploads...");
     processUploads();
   }
 });

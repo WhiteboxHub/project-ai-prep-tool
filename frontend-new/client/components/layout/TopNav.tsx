@@ -10,7 +10,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/AuthContext";
-import { clearSession } from "@/lib/auth";
 
 interface TopNavProps {
   readiness?: number;
@@ -19,11 +18,6 @@ interface TopNavProps {
 export function TopNav({ readiness }: TopNavProps) {
   const navigate = useNavigate();
   const { candidateName, initials, candidateEmail } = useAuth();
-
-  const handleLogout = () => {
-    clearSession();
-    navigate("/setup");
-  };
 
   const score = readiness ?? 0;
 
@@ -107,17 +101,9 @@ export function TopNav({ readiness }: TopNavProps) {
             </DropdownMenuItem>
             <DropdownMenuItem
               className="cursor-pointer"
-              onClick={() => navigate("/setup")}
+              onClick={() => navigate("/settings?tab=security")}
             >
               Manage API Keys
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="cursor-pointer flex items-center gap-2 text-red-400"
-              onClick={handleLogout}
-            >
-              <LogOut className="w-4 h-4" />
-              Sign Out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

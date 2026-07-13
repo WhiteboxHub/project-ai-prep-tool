@@ -40,16 +40,14 @@ def _get_candidate_id_from_marketing(cursor, marketing_id: int) -> Optional[int]
 def fetch_resume_raw(session_id: str) -> Any:
     """
     Returns raw JSON column value (dict/str) or None.
-    session_id = str(candidate_marketing.id)
+    session_id = str(candidate.id)
     Priority: candidate_resume.resume_json > candidate_marketing.candidate_json
     """
+    if not session_id or session_id == "null": return None
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            marketing_id = int(session_id)
-            cid = _get_candidate_id_from_marketing(cursor, marketing_id)
-            if not cid:
-                return None
+            cid = int(session_id)
 
             # 1st priority: candidate_resume
             cursor.execute(
@@ -91,16 +89,13 @@ def fetch_resume_dict(session_id: str) -> Optional[dict]:
 def save_resume_for_session(session_id: str, resume_data: dict) -> None:
     """
     Save resume JSON to candidate_resume (keyed by candidate.id).
-    session_id = str(candidate_marketing.id)
+    session_id = str(candidate.id)
     """
     resume_json_str = json.dumps(resume_data)
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            marketing_id = int(session_id)
-            cid = _get_candidate_id_from_marketing(cursor, marketing_id)
-            if not cid:
-                raise ValueError(f"No candidate found for marketing_id={marketing_id}")
+            cid = int(session_id)
 
             cursor.execute(
                 "SELECT id FROM candidate_resume WHERE candidate_id = %s ORDER BY id DESC LIMIT 1",

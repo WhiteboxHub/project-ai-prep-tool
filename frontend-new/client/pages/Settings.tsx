@@ -3,15 +3,23 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { motion } from "framer-motion";
 import { Shield, Key, Bell, CreditCard, LogOut, CheckCircle2, AlertCircle, Plus, Trash2, Upload, Loader2, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
-import { clearSession } from "@/lib/auth";
 import { getResumeSummary, deleteLlmKey, validateApiKey, uploadResume, getExtractionStatus } from "@/lib/api";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 export default function Settings() {
   const { candidateName, candidateEmail, sessionId, refresh } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<"profile" | "security" | "notifications">("profile");
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const tabParam = searchParams.get("tab") as "profile" | "security" | "notifications" | null;
+  const [activeTab, setActiveTab] = useState<"profile" | "security" | "notifications">(tabParam || "profile");
+
+  useEffect(() => {
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
   
   // State
   const [keys, setKeys] = useState<any[]>([]);
@@ -45,10 +53,7 @@ export default function Settings() {
 
   useEffect(() => { loadSettings(); }, [sessionId]);
 
-  const handleLogout = () => {
-    clearSession();
-    navigate("/setup");
-  };
+
 
   const handleDeleteKey = async (keyId: number) => {
     if (!sessionId) return;
@@ -70,6 +75,7 @@ export default function Settings() {
         api_key: newKey.trim(),
         api_provider: provider,
         model_name: "gpt-4o",
+        voice_enabled: true,
       });
       setNewKey("");
       await loadSettings();
@@ -144,11 +150,7 @@ export default function Settings() {
                 </button>
               );
             })}
-            <div className="pt-4 mt-4 border-t border-border/50">
-              <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-red-400 hover:bg-red-500/10 transition-colors">
-                <LogOut className="w-4 h-4" /> Sign Out
-              </button>
-            </div>
+
           </div>
 
           <div className="flex-1">

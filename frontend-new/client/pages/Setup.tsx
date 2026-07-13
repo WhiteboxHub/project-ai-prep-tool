@@ -27,7 +27,7 @@ export default function Setup() {
   const [apiKey, setApiKey] = useState("");
   const [provider, setProvider] = useState("openai");
   const [model, setModel] = useState("gpt-4o");
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [showKey, setShowKey] = useState(false);
   const [keyLoading, setKeyLoading] = useState(false);
   const [keyError, setKeyError] = useState("");
