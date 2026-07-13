@@ -59,6 +59,8 @@ export default function IntroPracticeRoom() {
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showAutoSubmitModalRef = useRef(false);
   showAutoSubmitModalRef.current = showAutoSubmitModal;
+  const isFinalizingRef = useRef(false);
+  isFinalizingRef.current = isFinalizing;
   const hasAskedScreenShareRef = useRef(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
