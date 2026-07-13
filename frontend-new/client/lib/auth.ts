@@ -45,6 +45,9 @@ export function clearSession() {
   localStorage.removeItem(CANDIDATE_NAME_KEY);
   localStorage.removeItem(CANDIDATE_EMAIL_KEY);
   localStorage.removeItem(API_PROVIDER_KEY);
+  
+  // Expire the WBL JWT token cookie to fully invalidate the session
+  document.cookie = "wbl_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
 }
 
 export function isAuthenticated(): boolean {

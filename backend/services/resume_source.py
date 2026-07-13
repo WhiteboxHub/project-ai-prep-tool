@@ -64,19 +64,21 @@ def fetch_resume_raw(session_id: str) -> Any:
             if row and row["resume_json"]:
                 return row["resume_json"]
 
-            # 2nd priority: candidate_marketing.candidate_json
+            # 2nd priority: candidate_marketing.my_resume or candidate_json
             cursor.execute(
                 """
-                SELECT candidate_json
+                SELECT my_resume, candidate_json
                 FROM candidate_marketing
-                WHERE candidate_id = %s AND candidate_json IS NOT NULL
+                WHERE candidate_id = %s AND (my_resume IS NOT NULL OR candidate_json IS NOT NULL)
                 ORDER BY id DESC
                 LIMIT 1
                 """,
                 (cid,),
             )
             row = cursor.fetchone()
-            return row["candidate_json"] if row else None
+            if row:
+                return row["my_resume"] if row["my_resume"] else row["candidate_json"]
+            return None
     finally:
         conn.close()
 

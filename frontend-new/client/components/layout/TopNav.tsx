@@ -1,5 +1,6 @@
 import React from "react";
-import { Bell, Upload, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
@@ -10,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/AuthContext";
+import { clearSession } from "@/lib/auth";
 
 interface TopNavProps {
   readiness?: number;
@@ -53,18 +55,7 @@ export function TopNav({ readiness }: TopNavProps) {
           </motion.div>
         )}
 
-
-        {/* Upload Resume */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => navigate("/settings")}
-          className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary smooth-transition text-sm font-medium"
-        >
-          <Upload className="w-4 h-4" />
-          Resume
-        </motion.button>
-
+        <ThemeToggle />
 
         {/* User Menu */}
         <DropdownMenu>
@@ -94,16 +85,14 @@ export function TopNav({ readiness }: TopNavProps) {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={() => navigate("/settings")}
+              className="cursor-pointer text-red-400 hover:text-red-300 hover:bg-red-500/10"
+              onClick={() => {
+                clearSession();
+                window.location.href = "/";
+              }}
             >
-              Profile Settings
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={() => navigate("/settings?tab=security")}
-            >
-              Manage API Keys
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

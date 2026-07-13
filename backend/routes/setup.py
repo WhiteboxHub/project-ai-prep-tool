@@ -110,10 +110,10 @@ class SetupInit(BaseModel):
     name: Optional[str] = None
 
 
-def _resolve_or_create_session(cursor, data: SetupInit) -> int:
+def _resolve_session(cursor, data: SetupInit) -> int:
     """
-    Resolves or creates a candidate_marketing record for the session.
-    Returns the candidate_marketing.id.
+    Resolves a candidate_marketing record for the session.
+    Returns the candidate_marketing.id. Raises 404 if not found.
     """
     if data.candidate_id is not None:
         # 1. candidate_id is directly provided
@@ -156,19 +156,7 @@ def _resolve_or_create_session(cursor, data: SetupInit) -> int:
     if row:
         cid = row["id"]
     else:
-        # Create a new dummy candidate in candidate table
-        cursor.execute("SELECT batchid FROM batch LIMIT 1")
-        batch_row = cursor.fetchone()
-        batch_id = batch_row["batchid"] if batch_row else 150
-        
-        cursor.execute(
-            """
-            INSERT INTO candidate (full_name, email, batchid, status)
-            VALUES (%s, %s, %s, 'active')
-            """,
-            (data.name or "Candidate", data.wbl_email, batch_id),
-        )
-        cid = cursor.lastrowid
+        raise HTTPException(status_code=404, detail="Candidate not found in the database. Please ensure your setup is complete on WBL.")
 
     return cid
 
@@ -183,7 +171,7 @@ def init_session(data: SetupInit):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            marketing_id = _resolve_or_create_session(cursor, data)
+            marketing_id = _resolve_session(cursor, data)
 
         _upsert_eval_login(conn, marketing_id)
         conn.commit()
@@ -473,7 +461,7 @@ def init_and_summary(data: SetupInit):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            marketing_id = _resolve_or_create_session(cursor, data)
+            marketing_id = _resolve_session(cursor, data)
 
         _upsert_eval_login(conn, marketing_id)
         conn.commit()

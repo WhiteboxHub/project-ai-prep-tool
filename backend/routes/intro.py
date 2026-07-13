@@ -59,28 +59,6 @@ def _serialize_intro_row(row: dict) -> dict:
     }
 
 
-# -----------------------------------
-# Helper to get candidate ideal intro context
-# -----------------------------------
-def get_candidate_ideal_intro(session_id: str) -> str:
-    conn = get_db_connection()
-    context_data = "Professional self-introduction covering background, core technical expertise, accomplishments, and role alignment."
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                SELECT product, architecture, role, company_name, domain
-                FROM aiprep_tool_project_context
-                WHERE user_id = %s
-            """, (session_id,))
-            res = cursor.fetchone()
-            if res:
-                context_data = f"Candidate worked at {res.get('company_name', 'Enterprise')} ({res.get('domain', 'Tech')}) as {res.get('role', 'AI Engineer')}. Built {res.get('product', '')} using {res.get('architecture', '')}."
-    except:
-        pass
-    finally:
-        if conn:
-            conn.close()
-    return context_data
 
 
 # -----------------------------------
@@ -363,28 +341,10 @@ async def get_dynamic_intro_template(session_id: str):
         if not api_key:
             raise Exception("API key not found")
 
-        conn = get_db_connection()
-
-        context_data = ""
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute("""
-                    SELECT product, architecture, business_value, role, impact
-                    FROM aiprep_tool_project_context
-                    WHERE user_id = %s
-                """, (session_id,))
-                res = cursor.fetchone()
-
-                if res:
-                    context_data = f"""
-Product: {res.get('product')}
-Architecture: {res.get('architecture')}
-Business Value: {res.get('business_value')}
-Role: {res.get('role')}
-Impact: {res.get('impact')}
-"""
-        finally:
-            conn.close()
+        from services.resume_source import fetch_resume_dict
+        import json
+        resume_data = fetch_resume_dict(session_id)
+        context_data = json.dumps(resume_data) if resume_data else "No resume data available."
 
         # ✅ Load template
         template_path = os.path.join(

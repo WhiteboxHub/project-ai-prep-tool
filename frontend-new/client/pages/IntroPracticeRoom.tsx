@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bot, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Mic, MicOff, Loader2, CheckCircle2, AlertCircle, ArrowRight, Volume2, Lock, Camera, VideoOff, RotateCcw } from "lucide-react";
+import { Mic, MicOff, Loader2, CheckCircle2, AlertCircle, ArrowRight, Volume2, Lock, Camera, VideoOff, RotateCcw, Zap, Sparkles } from "lucide-react";
 import { VideoPanel } from "@/components/interview/VideoPanel";
 import { ControlBar } from "@/components/interview/ControlBar";
 import { evaluateIntroText, getDynamicTemplate, getIntroHistory } from "@/lib/api";
@@ -203,7 +203,9 @@ export default function IntroPracticeRoom() {
     // via rec.onstart — so if mic is denied we don't ask for screen share.
     // ─────────────────────────────────────────────────────────────
     const rec = new SR();
-    rec.continuous = true;
+    // Using continuous = false with an auto-restart loop in onend is the industry standard 
+    // workaround for Chrome's webkitSpeechRecognition dropping words during long dictations.
+    rec.continuous = false;
     rec.interimResults = true;
     rec.lang = "en-US";
 
@@ -358,9 +360,28 @@ export default function IntroPracticeRoom() {
     };
 
     rec.onend = () => {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      setRecording(false);
-      stopMediaRecording();
+      // If we are finalizing the submission, let it die gracefully.
+      if (isFinalizingRef.current) {
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        setRecording(false);
+      } else {
+        // Auto-restart to prevent Chrome from dropping speech buffers
+        if (interimRef.current) {
+           setTranscript((p) => {
+             const newText = p + interimRef.current + " ";
+             transcriptRef.current = newText;
+             return newText;
+           });
+           setInterimTranscript("");
+           interimRef.current = "";
+        }
+        try {
+          // Restart immediately to catch the next phrase
+          recognitionRef.current?.start();
+        } catch (e) {
+          console.error("Auto-restart failed", e);
+        }
+      }
     };
 
     recognitionRef.current = rec;
@@ -534,7 +555,7 @@ export default function IntroPracticeRoom() {
             <Lock className="w-8 h-8 text-muted-foreground" />
           </div>
           <h2 className="text-2xl font-bold text-foreground">Practice Locked</h2>
-          <p className="text-muted-foreground max-w-md">You must complete your setup and project explanation before practicing your introduction.</p>
+          <p className="text-muted-foreground max-w-md">You must complete your setup before practicing your introduction.</p>
           <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => navigate("/")} className="px-6 py-2 bg-primary/20 hover:bg-primary/30 text-primary font-semibold rounded-lg mt-4 smooth-transition">
             Return to Dashboard
           </motion.button>
@@ -669,7 +690,7 @@ export default function IntroPracticeRoom() {
               className="glass-card p-8 rounded-2xl border border-border/50 shadow-2xl max-w-sm w-full mx-4 text-center"
             >
               <div className="w-14 h-14 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">⏱️</span>
+                <span className="text-2xl"> 🔇 </span>
               </div>
               <h3 className="text-lg font-bold text-foreground mb-2">Silence Detected</h3>
               <p className="text-sm text-muted-foreground mb-6">It looks like you've stopped speaking. Would you like to submit your answer for evaluation?</p>
@@ -830,41 +851,45 @@ export default function IntroPracticeRoom() {
         {result && (() => {
             const scoreNum = result?.score !== undefined ? result.score : result?.total_score !== undefined ? result.total_score : result?.evaluation?.overall_score || 0;
             const hasPassed = scoreNum >= 75;
-            const evalData = result?.evaluation || {};
-            const strengths = evalData.strengths || [];
-            const weaknesses = evalData.weaknesses || [];
-            const suggestions = evalData.ai_suggestions || [];
-            const improvement = evalData.improvement_areas || [];
+            const evalData = result?.feedback || result?.evaluation || result?.raw_response || {};
+            const strengths = evalData.strengths || result?.strengths || [];
+            const weaknesses = evalData.weaknesses || result?.weaknesses || [];
+            const suggestions = evalData.ai_suggestions || result?.ai_suggestions || [];
+            const improvement = evalData.improvement_areas || result?.improvement_areas || [];
+            const dimensions = evalData.scores || result?.raw_response?.scores || result?.evaluation?.scores;
 
           return (
-            <div className="flex-1 overflow-y-auto min-h-0 mb-4">
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-                <div className={`glass-card p-4 rounded-xl border ${hasPassed ? "border-green-500/30 bg-green-500/5 shadow-[0_0_15px_rgba(34,197,94,0.1)]" : "border-amber-500/30 bg-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.1)]"}`}>
+            <div className="flex-1 overflow-y-auto min-h-0 mb-4 scrollbar-hide">
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 pr-1">
+                <div className={`glass-card p-5 rounded-2xl border ${hasPassed ? "border-green-500/30 bg-gradient-to-b from-green-500/10 to-transparent shadow-[0_0_20px_rgba(34,197,94,0.15)]" : "border-amber-500/30 bg-gradient-to-b from-amber-500/10 to-transparent shadow-[0_0_20px_rgba(245,158,11,0.15)]"}`}>
                   
                   {/* Status Badge */}
-                  <div className="mb-4 flex items-center justify-between">
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 border ${
-                      hasPassed ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                  <div className="mb-5 flex items-center justify-between">
+                    <span className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-widest flex items-center gap-1.5 border shadow-sm ${
+                      hasPassed ? "bg-green-500/20 text-green-400 border-green-500/40" : "bg-amber-500/20 text-amber-400 border-amber-500/40"
                     }`}>
-                      {hasPassed ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                      {hasPassed ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
                       {hasPassed ? "COMPLETED & UNLOCKED" : "NEEDS IMPROVEMENT (<75)"}
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-center mb-4 pb-3 border-b border-border/50">
-                    <span className="text-xs font-semibold text-foreground">Overall Evaluation Score</span>
-                    <span className={`text-2xl font-extrabold ${hasPassed ? "text-green-400" : "text-amber-400"}`}>{scoreNum}<span className="text-sm font-normal text-muted-foreground">/100</span></span>
+                  <div className="flex flex-col mb-6 pb-4 border-b border-border/50">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Overall Score</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className={`text-4xl font-black tracking-tighter ${hasPassed ? "text-green-400 drop-shadow-[0_0_10px_rgba(34,197,94,0.4)]" : "text-amber-400 drop-shadow-[0_0_10px_rgba(245,158,11,0.4)]"}`}>{scoreNum}</span>
+                      <span className="text-sm font-semibold text-muted-foreground">/100</span>
+                    </div>
                   </div>
 
                   {/* Individual Dimension Scores */}
-                  {evalData.scores && (
-                    <div className="space-y-2 mb-4">
-                      <p className="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">Assessment Dimensions</p>
+                  {dimensions && Object.keys(dimensions).length > 0 && (
+                    <div className="space-y-3 mb-6">
+                      <p className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground">Assessment Dimensions</p>
                       <div className="grid grid-cols-2 gap-2 text-xs">
-                        {Object.entries(evalData.scores).map(([k, v]) => (
-                          <div key={k} className="p-2 rounded-lg bg-white/5 flex justify-between items-center">
-                            <span className="text-muted-foreground text-[11px] capitalize truncate mr-1.5">{k.replace(/_/g, " ")}:</span>
-                            <span className="font-semibold text-foreground">{Math.round(Number(v))}%</span>
+                        {Object.entries(dimensions).map(([k, v]) => (
+                          <div key={k} className="p-2.5 rounded-xl bg-white/5 border border-white/5 flex flex-col justify-center gap-1 hover:bg-white/10 transition-colors">
+                            <span className="text-muted-foreground text-[10px] capitalize truncate">{k.replace(/_/g, " ")}</span>
+                            <span className="font-bold text-foreground text-sm">{Math.round(Number(v))}%</span>
                           </div>
                         ))}
                       </div>
@@ -872,33 +897,71 @@ export default function IntroPracticeRoom() {
                   )}
 
                   {/* Feedback Sections */}
-                  {strengths.length > 0 && (
-                    <div className="space-y-1.5 mt-3 pt-3 border-t border-border/50">
-                      <p className="text-xs font-bold text-green-400 flex items-center gap-1">✔ Key Strengths</p>
-                      {strengths.map((s: string, i: number) => <p key={i} className="text-xs text-foreground leading-relaxed">• {s}</p>)}
-                    </div>
-                  )}
+                  <div className="space-y-5 mt-4">
+                    {strengths.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-[11px] font-bold text-green-400 flex items-center gap-1.5 uppercase tracking-wider">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Key Strengths
+                        </h4>
+                        <div className="space-y-1.5">
+                          {strengths.map((s: string, i: number) => (
+                            <div key={i} className="flex gap-2 items-start p-2.5 rounded-xl bg-green-500/5 border border-green-500/10 hover:bg-green-500/10 transition-colors">
+                              <span className="text-green-500/50 text-[10px] mt-0.5">✦</span>
+                              <p className="text-[12px] text-foreground/90 leading-snug">{s}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                  {weaknesses.length > 0 && (
-                    <div className="space-y-1.5 mt-3 pt-3 border-t border-border/50">
-                      <p className="text-xs font-bold text-amber-400 flex items-center gap-1">⚠ Areas for Growth</p>
-                      {weaknesses.map((w: string, i: number) => <p key={i} className="text-xs text-foreground leading-relaxed">• {w}</p>)}
-                    </div>
-                  )}
+                    {weaknesses.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5 uppercase tracking-wider">
+                          <AlertCircle className="w-3.5 h-3.5" /> Areas for Growth
+                        </h4>
+                        <div className="space-y-1.5">
+                          {weaknesses.map((w: string, i: number) => (
+                            <div key={i} className="flex gap-2 items-start p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/10 hover:bg-amber-500/10 transition-colors">
+                              <span className="text-amber-500/50 text-[10px] mt-0.5">✦</span>
+                              <p className="text-[12px] text-foreground/90 leading-snug">{w}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                  {suggestions.length > 0 && (
-                    <div className="space-y-1.5 mt-3 pt-3 border-t border-border/50">
-                      <p className="text-xs font-bold text-primary flex items-center gap-1">✨ AI Coach Suggestions</p>
-                      {suggestions.map((s: string, i: number) => <p key={i} className="text-xs text-foreground leading-relaxed">• {s}</p>)}
-                    </div>
-                  )}
+                    {improvement.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-[11px] font-bold text-blue-400 flex items-center gap-1.5 uppercase tracking-wider">
+                          <Zap className="w-3.5 h-3.5" /> Next Steps to Polish
+                        </h4>
+                        <div className="space-y-1.5">
+                          {improvement.map((imp: string, i: number) => (
+                            <div key={i} className="flex gap-2 items-start p-2.5 rounded-xl bg-blue-500/5 border border-blue-500/10 hover:bg-blue-500/10 transition-colors">
+                              <span className="text-blue-500/50 text-[10px] mt-0.5">✦</span>
+                              <p className="text-[12px] text-foreground/90 leading-snug">{imp}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                  {improvement.length > 0 && (
-                    <div className="space-y-1.5 mt-3 pt-3 border-t border-border/50">
-                      <p className="text-xs font-bold text-blue-400 flex items-center gap-1">💡 Next Steps to Polish</p>
-                      {improvement.map((imp: string, i: number) => <p key={i} className="text-xs text-foreground leading-relaxed">• {imp}</p>)}
-                    </div>
-                  )}
+                    {suggestions.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-[11px] font-bold text-primary flex items-center gap-1.5 uppercase tracking-wider">
+                          <Sparkles className="w-3.5 h-3.5" /> AI Coach Suggestions
+                        </h4>
+                        <div className="space-y-1.5">
+                          {suggestions.map((s: string, i: number) => (
+                            <div key={i} className="flex gap-2 items-start p-2.5 rounded-xl bg-primary/5 border border-primary/10 hover:bg-primary/10 transition-colors">
+                              <span className="text-primary/50 text-[10px] mt-0.5">✦</span>
+                              <p className="text-[12px] text-foreground/90 leading-snug">{s}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Primary CTA Button */}
                   <div className="mt-6 pt-4 border-t border-border/50">

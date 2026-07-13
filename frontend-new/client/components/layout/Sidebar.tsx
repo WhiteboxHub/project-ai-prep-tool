@@ -15,13 +15,11 @@ import {
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/AuthContext";
+import { clearSession } from "@/lib/auth";
 
 const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, href: "/" },
-  { label: "Project Analysis", icon: Lightbulb, href: "/preparation" },
   { label: "Intro Practice", icon: FileText, href: "/intro-select" },
   { label: "Interview Practice", icon: Video, href: "/interview-select" },
-  { label: "Documents", icon: FileText, href: "/documents" },
   { label: "My History", icon: History, href: "/history" },
   { label: "Progress", icon: TrendingUp, href: "/progress" },
   // { label: "Settings", icon: Settings, href: "/settings" },
@@ -108,8 +106,11 @@ export function Sidebar() {
       {/* Footer */}
       <div className="p-3 border-t border-border/50 space-y-2">
         {/* Logout button */}
-        {/* <button
-          onClick={handleLogout}
+        <button
+          onClick={() => {
+            clearSession();
+            window.location.href = "/";
+          }}
           className={cn(
             "w-full px-3 py-2 rounded-lg flex items-center gap-3 text-muted-foreground hover:bg-red-500/10 hover:text-red-400 smooth-transition",
             isCollapsed ? "justify-center" : ""
@@ -117,21 +118,7 @@ export function Sidebar() {
         >
           <LogOut className="w-4 h-4 flex-shrink-0" />
           {!isCollapsed && <span className="text-sm font-medium">Sign Out</span>}
-        </button> */}
-
-        {/* User info */}
-        <div className="glass-card p-3 rounded-lg text-center">
-          {isCollapsed ? (
-            <div className="w-8 h-8 mx-auto rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-xs font-bold text-white">
-              {initials}
-            </div>
-          ) : (
-            <div className="text-sm">
-              <p className="font-semibold text-foreground truncate">{candidateName}</p>
-              <p className="text-xs text-muted-foreground">AI Prep Candidate</p>
-            </div>
-          )}
-        </div>
+        </button>
       </div>
     </motion.aside>
   );
