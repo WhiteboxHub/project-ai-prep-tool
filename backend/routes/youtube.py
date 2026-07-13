@@ -6,6 +6,15 @@ from db.init_db import get_db_connection
 
 router = APIRouter(prefix="/api/youtube", tags=["youtube"])
 
+@router.get("/status")
+def youtube_status():
+    """Health check: returns whether YouTube OAuth credentials are configured."""
+    client_id = os.environ.get("YOUTUBE_CLIENT_ID")
+    client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET")
+    refresh_token = os.environ.get("YOUTUBE_REFRESH_TOKEN")
+    configured = bool(client_id and client_secret and refresh_token)
+    return {"configured": configured}
+
 class UploadUrlRequest(BaseModel):
     title: str
     description: str

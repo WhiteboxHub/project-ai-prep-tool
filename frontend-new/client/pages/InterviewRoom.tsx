@@ -440,24 +440,23 @@ export default function InterviewRoom() {
           )}
         </AnimatePresence>
 
-        <ControlBar
-          onToggleMic={(enabled) => {
-            setIsMicOn(enabled);
-            toggleAudio(enabled);
-          }}
-          onToggleCamera={(enabled) => {
-            setIsCameraOn(enabled);
-            toggleVideo(enabled);
-          }}
-          onRecordStart={startRecognition}
-          onRecordStop={stopRecognition}
-          isRecording={recording}
-          isAudioDenied={audioState === "denied"}
-          isVideoDenied={videoState === "denied"}
-          onRetryAudio={requestAudio}
-          onRetryVideo={requestVideo}
-          wrapperClassName="relative"
-        />
+          <ControlBar
+            onToggleMic={(enabled) => {
+              setIsMicOn(enabled);
+              toggleAudio(enabled);
+            }}
+            onToggleCamera={(enabled) => {
+              setIsCameraOn(enabled);
+              toggleVideo(enabled);
+            }}
+            onRecordToggle={() => recording ? stopRecognition() : startRecognition()}
+            isRecording={recording}
+            isAudioDenied={audioState === "denied"}
+            isVideoDenied={videoState === "denied"}
+            onRetryAudio={requestAudio}
+            onRetryVideo={requestVideo}
+            wrapperClassName="relative"
+          />
       </div>
 
       {/* Progress summary (bottom left) */}

@@ -793,7 +793,7 @@ def sync_coderpad(
         conn = get_db_connection()
         with conn.cursor() as cursor:
             cursor.execute(
-                "SELECT email FROM candidate_marketing WHERE id = %s",
+                "SELECT email FROM candidate WHERE id = %s",
                 (candidate_id,)
             )
             row = cursor.fetchone()
