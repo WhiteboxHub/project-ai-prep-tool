@@ -67,12 +67,11 @@ def get_candidate_ideal_intro(session_id: str) -> str:
     context_data = "Professional self-introduction covering background, core technical expertise, accomplishments, and role alignment."
     try:
         with conn.cursor() as cursor:
-            marketing_id = int(session_id)
             cursor.execute("""
                 SELECT product, architecture, role, company_name, domain
                 FROM aiprep_tool_project_context
-                WHERE candidate_id = %s
-            """, (marketing_id,))
+                WHERE user_id = %s
+            """, (session_id,))
             res = cursor.fetchone()
             if res:
                 context_data = f"Candidate worked at {res.get('company_name', 'Enterprise')} ({res.get('domain', 'Tech')}) as {res.get('role', 'AI Engineer')}. Built {res.get('product', '')} using {res.get('architecture', '')}."
@@ -176,11 +175,12 @@ async def evaluate_audio_intro(
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (
                 session_id,
-                video_url,
+                db_type,
                 db_score,
                 passed,
                 json.dumps(_feedback_payload(eval_result)),
                 json.dumps(raw_response),
+                video_url,
             ))
 
         conn.commit()
@@ -259,15 +259,6 @@ async def evaluate_text_intro(
             score = 0.0
 
         db_score = min(int(score), 100)
-        ideal_ctx = get_candidate_ideal_intro(session_id)
-        eval_result = await evaluate_intro(
-            user_id=session_id,
-            transcript=transcript,
-            ideal_intro=ideal_ctx,
-            api_key=api_key
-        )
-
-        db_score = _normalize_score(eval_result)
         passed = db_score >= INTRO_PASS_SCORE
 
         conn = get_db_connection()
@@ -280,8 +271,8 @@ async def evaluate_text_intro(
             with conn.cursor() as cursor:
                 cursor.execute("""
                     INSERT INTO aiprep_tool_evaluations
-                        (user_id, type, video_url, score, passed, passed, feedback, raw_response, raw_response, video_url)
-                    VALUES (%s, 'intro', NULL, %s, %s, %s, %s, %s, %s, %s)
+                        (user_id, type, score, passed, feedback, raw_response, video_url)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """, (
                     session_id,
                     db_type,
@@ -377,12 +368,11 @@ async def get_dynamic_intro_template(session_id: str):
         context_data = ""
         try:
             with conn.cursor() as cursor:
-                marketing_id = int(session_id)
                 cursor.execute("""
                     SELECT product, architecture, business_value, role, impact
                     FROM aiprep_tool_project_context
-                    WHERE candidate_id = %s
-                """, (marketing_id,))
+                    WHERE user_id = %s
+                """, (session_id,))
                 res = cursor.fetchone()
 
                 if res:
