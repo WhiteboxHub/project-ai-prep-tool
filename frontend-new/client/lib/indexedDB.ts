@@ -25,15 +25,43 @@ export async function openDB(): Promise<IDBDatabase> {
   });
 }
 
+/**
+ * Save a raw recording blob as a DRAFT (approved: false).
+ * The service worker will NOT upload drafts.
+ * Call approveRecording() only after a successful LLM evaluation.
+ */
 export async function saveRecording(id: string, blob: Blob): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, "readwrite");
     const store = transaction.objectStore(STORE_NAME);
-    const request = store.put({ id, blob, timestamp: Date.now() });
+    const request = store.put({ id, blob, timestamp: Date.now(), approved: false, uploaded: false });
 
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Mark a recording as approved for upload.
+ * Call this ONLY after evaluateIntroText() returns a successful result.
+ * This is what triggers the service worker to pick it up.
+ */
+export async function approveRecording(id: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, "readwrite");
+    const store = transaction.objectStore(STORE_NAME);
+    const getReq = store.get(id);
+    getReq.onsuccess = () => {
+      const record = getReq.result;
+      if (!record) { resolve(); return; }
+      record.approved = true;
+      const putReq = store.put(record);
+      putReq.onsuccess = () => resolve();
+      putReq.onerror = () => reject(putReq.error);
+    };
+    getReq.onerror = () => reject(getReq.error);
   });
 }
 
