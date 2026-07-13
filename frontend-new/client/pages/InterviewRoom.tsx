@@ -310,9 +310,9 @@ export default function InterviewRoom() {
             <Lock className="w-8 h-8 text-muted-foreground" />
           </div>
           <h2 className="text-2xl font-bold text-foreground">Interview Locked</h2>
-          <p className="text-muted-foreground max-w-md">You must complete Introduction Practice and Project Evaluation before starting the Interview Room.</p>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => navigate("/")} className="px-6 py-2 bg-primary/20 hover:bg-primary/30 text-primary font-semibold rounded-lg mt-4 smooth-transition">
-            Return to Dashboard
+          <p className="text-muted-foreground max-w-md">Please go to the Intro Section and complete your introduction practice to unlock the interview. That is the required flow.</p>
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => navigate("/intro-select")} className="px-6 py-2 bg-primary/20 hover:bg-primary/30 text-primary font-semibold rounded-lg mt-4 smooth-transition">
+            Go to Intro Practice
           </motion.button>
         </div>
       </MainLayout>
