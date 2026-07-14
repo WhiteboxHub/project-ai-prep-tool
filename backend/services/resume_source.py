@@ -49,27 +49,11 @@ def fetch_resume_raw(session_id: str) -> Any:
         with conn.cursor() as cursor:
             cid = int(session_id)
 
-            # 1st priority: candidate_resume
             cursor.execute(
                 """
-                SELECT resume_json
-                FROM candidate_resume
-                WHERE candidate_id = %s AND resume_json IS NOT NULL
-                ORDER BY id DESC
-                LIMIT 1
-                """,
-                (cid,),
-            )
-            row = cursor.fetchone()
-            if row and row["resume_json"]:
-                return row["resume_json"]
-
-            # 2nd priority: candidate_marketing.my_resume or candidate_json
-            cursor.execute(
-                """
-                SELECT my_resume, candidate_json
+                SELECT candidate_json
                 FROM candidate_marketing
-                WHERE candidate_id = %s AND (my_resume IS NOT NULL OR candidate_json IS NOT NULL)
+                WHERE candidate_id = %s AND candidate_json IS NOT NULL
                 ORDER BY id DESC
                 LIMIT 1
                 """,
@@ -77,7 +61,7 @@ def fetch_resume_raw(session_id: str) -> Any:
             )
             row = cursor.fetchone()
             if row:
-                return row["my_resume"] if row["my_resume"] else row["candidate_json"]
+                return row["candidate_json"]
             return None
     finally:
         conn.close()
@@ -90,7 +74,7 @@ def fetch_resume_dict(session_id: str) -> Optional[dict]:
 
 def save_resume_for_session(session_id: str, resume_data: dict) -> None:
     """
-    Save resume JSON to candidate_resume (keyed by candidate.id).
+    Save resume JSON to candidate_marketing.candidate_json (keyed by candidate.id).
     session_id = str(candidate.id)
     """
     resume_json_str = json.dumps(resume_data)
@@ -100,27 +84,28 @@ def save_resume_for_session(session_id: str, resume_data: dict) -> None:
             cid = int(session_id)
 
             cursor.execute(
-                "SELECT id FROM candidate_resume WHERE candidate_id = %s ORDER BY id DESC LIMIT 1",
+                "SELECT id FROM candidate_marketing WHERE candidate_id = %s ORDER BY id DESC LIMIT 1",
                 (cid,),
             )
             row = cursor.fetchone()
             if row:
                 cursor.execute(
                     """
-                    UPDATE candidate_resume
-                    SET resume_json = %s, updated_at = NOW()
+                    UPDATE candidate_marketing
+                    SET candidate_json = %s
                     WHERE id = %s
                     """,
                     (resume_json_str, row["id"]),
                 )
             else:
-                file_name = resume_data.get("_meta_filename", f"candidate_{cid}_resume.json")
+                # If there is no marketing row, we must create one.
+                # Marketing requires start_date. Use current date.
                 cursor.execute(
                     """
-                    INSERT INTO candidate_resume (candidate_id, resume_json, file_name, created_at, updated_at)
-                    VALUES (%s, %s, %s, NOW(), NOW())
+                    INSERT INTO candidate_marketing (candidate_id, start_date, status, candidate_json)
+                    VALUES (%s, CURDATE(), 'active', %s)
                     """,
-                    (cid, resume_json_str, file_name),
+                    (cid, resume_json_str),
                 )
         conn.commit()
     finally:
