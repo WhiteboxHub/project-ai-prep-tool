@@ -41,6 +41,9 @@ function SsoSync() {
   const { sessionId, refresh } = useAuth();
   useEffect(() => {
     if (!sessionId || isNaN(Number(sessionId))) {
+      if (localStorage.getItem("ai_prep_explicit_logout") === "true") {
+        return;
+      }
       getCandidateMe().then((data) => {
         if (data.session_id) {
           setSession(data.session_id, data.candidate_name || "Candidate", data.candidate_email || "");

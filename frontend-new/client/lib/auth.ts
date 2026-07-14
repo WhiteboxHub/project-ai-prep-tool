@@ -46,10 +46,10 @@ export function clearSession() {
   localStorage.removeItem(CANDIDATE_EMAIL_KEY);
   localStorage.removeItem(API_PROVIDER_KEY);
   
-  // Expire the WBL JWT token cookie to fully invalidate the session across all possible subdomains
-  document.cookie = "wbl_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "wbl_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.whitebox-learning.com;";
-  document.cookie = "wbl_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=whitebox-learning.com;";
+  // Instead of deleting the wbl_access_token cookie (which logs the user out of the main WBL site),
+  // we set a flag indicating the user explicitly signed out of the AI Prep Tool.
+  // This prevents SsoSync from automatically logging them back in infinitely.
+  localStorage.setItem("ai_prep_explicit_logout", "true");
 }
 
 export function isAuthenticated(): boolean {
