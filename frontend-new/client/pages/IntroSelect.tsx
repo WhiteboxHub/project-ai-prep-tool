@@ -108,6 +108,13 @@ export default function IntroSelect() {
       .catch(console.error);
   }, [sessionId]);
 
+  const getYouTubeId = (url: string) => {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
   if (loading) {
     return (
       <MainLayout>
@@ -126,10 +133,7 @@ export default function IntroSelect() {
             <Lock className="w-8 h-8 text-muted-foreground" />
           </div>
           <h2 className="text-2xl font-bold text-foreground">Practice Locked</h2>
-          <p className="text-muted-foreground max-w-md">You must complete your setup and project explanation before practicing your introduction.</p>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => navigate("/")} className="px-6 py-2 bg-primary/20 hover:bg-primary/30 text-primary font-semibold rounded-lg mt-4 smooth-transition">
-            Return to Dashboard
-          </motion.button>
+          <p className="text-muted-foreground max-w-md">Please go back to the Whitebox Learning platform and update your setup to unlock the introduction practice.</p>
         </div>
       </MainLayout>
     );
@@ -296,10 +300,10 @@ export default function IntroSelect() {
               <div className="p-4 bg-black/50 flex justify-center">
                 {videoSrc && playingVideo.isLocal ? (
                   <video src={videoSrc} controls autoPlay className="w-full h-auto max-h-[70vh] rounded-xl outline-none" />
-                ) : videoSrc && videoSrc.includes("youtube.com") ? (
+                ) : videoSrc && getYouTubeId(videoSrc) ? (
                   <iframe
                     className="w-full aspect-video max-h-[70vh] rounded-xl outline-none"
-                    src={`https://www.youtube.com/embed/${new URL(videoSrc).searchParams.get("v")}`}
+                    src={`https://www.youtube.com/embed/${getYouTubeId(videoSrc)}`}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                   ></iframe>

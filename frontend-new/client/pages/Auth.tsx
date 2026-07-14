@@ -34,7 +34,7 @@ export default function Auth() {
           const syncData = await syncWithWbl(token);
           if (syncData?.candidate_name) {
             setCandidateName(syncData.candidate_name);
-            setSession(token, syncData.candidate_name);
+            setSession(token, syncData.candidate_name, syncData.candidate_email);
             refresh();
           }
         } catch {
@@ -50,7 +50,9 @@ export default function Auth() {
           // Update name from resume/DB if available
           if (summary?.candidate_name) {
             setCandidateName(summary.candidate_name);
-            setSession(token, summary.candidate_name);
+            if (summary.candidate_email) {
+              setSession(token, summary.candidate_name, summary.candidate_email);
+            }
             refresh();
           }
 
@@ -58,8 +60,8 @@ export default function Auth() {
             // Both resume and API key present — go straight to dashboard
             navigate("/");
           } else {
-            // Missing one or both — guide through setup wizard
-            navigate("/setup");
+            // Missing one or both — just go to dashboard and let it handle missing data
+            navigate("/");
           }
         } catch {
           // If summary fetch fails, fall back to dashboard — let it handle gracefully
@@ -119,10 +121,10 @@ export default function Auth() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => navigate("/setup")}
+              onClick={() => window.location.href = "/"}
               className="px-6 py-2.5 rounded-xl bg-primary/20 text-primary font-semibold hover:bg-primary/30 transition-colors"
             >
-              Go to Setup
+              Back to Home
             </motion.button>
           </div>
         )}

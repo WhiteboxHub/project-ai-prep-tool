@@ -43,6 +43,7 @@ def fetch_resume_raw(session_id: str) -> Any:
     session_id = str(candidate_marketing.id)
     Reads from candidate_marketing.candidate_json only
     """
+    if not session_id or session_id == "null": return None
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -56,7 +57,9 @@ def fetch_resume_raw(session_id: str) -> Any:
                 (marketing_id,),
             )
             row = cursor.fetchone()
-            return row["candidate_json"] if row else None
+            if row:
+                return row["candidate_json"]
+            return None
     finally:
         conn.close()
 
@@ -84,6 +87,7 @@ def save_resume_for_session(session_id: str, resume_data: dict) -> None:
                 """,
                 (resume_json_str, marketing_id),
             )
+
         conn.commit()
     finally:
         conn.close()

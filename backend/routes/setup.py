@@ -27,7 +27,7 @@ class ValidationRequest(BaseModel):
     api_provider: str
     session_id: str
     model_name: Optional[str] = None
-    voice_enabled: bool = False
+    voice_enabled: bool = True
 
 class SyncFromWblRequest(BaseModel):
     prep_token: str
@@ -68,15 +68,14 @@ async def validate_key(req: ValidationRequest):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            marketing_id = int(req.session_id)
+            candidate_id = int(req.session_id)
             cursor.execute(
-                "SELECT candidate_id FROM candidate_marketing WHERE id = %s",
-                (marketing_id,),
+                "SELECT id FROM candidate WHERE id = %s",
+                (candidate_id,),
             )
-            cm = cursor.fetchone()
-            if not cm:
+            c = cursor.fetchone()
+            if not c:
                 raise HTTPException(404, "Session/Candidate not found")
-            candidate_id = cm["candidate_id"]
     except ValueError:
         raise HTTPException(400, "Invalid session id")
     finally:
@@ -111,10 +110,10 @@ class SetupInit(BaseModel):
     name: Optional[str] = None
 
 
-def _resolve_or_create_session(cursor, data: SetupInit) -> int:
+def _resolve_session(cursor, data: SetupInit) -> int:
     """
-    Resolves or creates a candidate_marketing record for the session.
-    Returns the candidate_marketing.id.
+    Resolves a candidate_marketing record for the session.
+    Returns the candidate_marketing.id. Raises 404 if not found.
     """
     if data.candidate_id is not None:
         # 1. candidate_id is directly provided
@@ -136,14 +135,7 @@ def _resolve_or_create_session(cursor, data: SetupInit) -> int:
         c_row = cursor.fetchone()
         c_email = c_row["email"] if c_row else (data.wbl_email or "")
         
-        cursor.execute(
-            """
-            INSERT INTO candidate_marketing (candidate_id, email, status, start_date)
-            VALUES (%s, %s, 'active', CURRENT_DATE())
-            """,
-            (data.candidate_id, c_email),
-        )
-        return cursor.lastrowid
+        return data.candidate_id
 
     # 2. candidate_id is NOT provided (fallback using wbl_email)
     if not data.wbl_email:
@@ -164,29 +156,9 @@ def _resolve_or_create_session(cursor, data: SetupInit) -> int:
     if row:
         cid = row["id"]
     else:
-        # Create a new dummy candidate in candidate table
-        cursor.execute("SELECT batchid FROM batch LIMIT 1")
-        batch_row = cursor.fetchone()
-        batch_id = batch_row["batchid"] if batch_row else 150
-        
-        cursor.execute(
-            """
-            INSERT INTO candidate (full_name, email, batchid, status)
-            VALUES (%s, %s, %s, 'active')
-            """,
-            (data.name or "Candidate", data.wbl_email, batch_id),
-        )
-        cid = cursor.lastrowid
+        raise HTTPException(status_code=404, detail="Candidate not found in the database. Please ensure your setup is complete on WBL.")
 
-    # Create candidate_marketing row
-    cursor.execute(
-        """
-        INSERT INTO candidate_marketing (candidate_id, email, status, start_date)
-        VALUES (%s, %s, 'active', CURRENT_DATE())
-        """,
-        (cid, data.wbl_email),
-    )
-    return cursor.lastrowid
+    return cid
 
 
 @router.post("/init")
@@ -199,7 +171,7 @@ def init_session(data: SetupInit):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            marketing_id = _resolve_or_create_session(cursor, data)
+            marketing_id = _resolve_session(cursor, data)
 
         _upsert_eval_login(conn, marketing_id)
         conn.commit()
@@ -588,11 +560,12 @@ Rules:
 def get_resume_summary(session_id: str):
     conn = get_db_connection()
     try:
+        if session_id == "null" or not session_id:
+            raise HTTPException(status_code=404, detail="Invalid session ID")
         with conn.cursor() as cursor:
-            # session_id = str(candidate_marketing.id)
-            marketing_id = int(session_id)
+            cid = int(session_id)
 
-            # Get candidate name via candidate_marketing -> candidate
+            # Get candidate name and email
             cursor.execute(
                 """
                 SELECT c.full_name AS name, cm.email, (cm.My_Resume IS NOT NULL) AS has_binary_resume, cm.my_resume_filename
@@ -603,23 +576,16 @@ def get_resume_summary(session_id: str):
                 (marketing_id,),
             )
             cand_row = cursor.fetchone()
+            if not cand_row:
+                raise HTTPException(status_code=404, detail="Session/Candidate not found")
             candidate_name = cand_row["name"] if cand_row and cand_row.get("name") else ""
+            candidate_email = cand_row["email"] if cand_row and cand_row.get("email") else ""
             has_binary_resume = bool(cand_row["has_binary_resume"]) if cand_row and "has_binary_resume" in cand_row else False
             binary_resume_filename = cand_row["my_resume_filename"] if cand_row and cand_row.get("my_resume_filename") else None
 
             # Get resume from candidate_marketing.candidate_json
             raw_resume = fetch_resume_raw(session_id)
             has_resume = raw_resume is not None
-
-            # Get LLM API keys via candidate_marketing -> candidate_id -> candidate_llm_api_keys
-            cursor.execute(
-                "SELECT candidate_id FROM candidate_marketing WHERE id = %s",
-                (marketing_id,),
-            )
-            cm_row = cursor.fetchone()
-            if not cm_row:
-                raise HTTPException(status_code=404, detail="Session/Candidate not found")
-            cid = cm_row["candidate_id"] if cm_row else None
 
             llm_keys = []
             has_api_key = False
@@ -656,6 +622,7 @@ def get_resume_summary(session_id: str):
             return {
                 "resume_text": "Exists" if has_resume else None,
                 "candidate_name": candidate_name,
+                "candidate_email": candidate_email,
                 "has_api_key": has_api_key,
                 "resume_json": resume_json_out,
                 "resume_filename": resume_filename,
@@ -683,28 +650,26 @@ async def sync_from_wbl(data: SyncFromWblRequest):
 
     needs_extraction = False
     name = "Candidate"
+    email = ""
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            marketing_id = int(session_id)
+            candidate_id = int(session_id)
             cursor.execute(
-                "SELECT id FROM aiprep_tool_project_context WHERE user_id = %s",
-                (session_id,),
+                "SELECT id FROM aiprep_tool_project_context WHERE candidate_id = %s",
+                (candidate_id,),
             )
             needs_extraction = not cursor.fetchone()
 
             cursor.execute(
-                """
-                SELECT c.full_name AS name
-                FROM candidate_marketing cm
-                JOIN candidate c ON c.id = cm.candidate_id
-                WHERE cm.id = %s
-                """,
-                (marketing_id,),
+                "SELECT full_name AS name, email FROM candidate WHERE id = %s",
+                (candidate_id,),
             )
             row = cursor.fetchone()
-            if row and row["name"]:
-                name = row["name"]
+            if row:
+                if row.get("name"):
+                    name = row["name"]
+                email = row.get("email") or ""
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
@@ -716,7 +681,7 @@ async def sync_from_wbl(data: SyncFromWblRequest):
         except Exception as e:
             print(f"Extraction failed during sync: {e}")
 
-    return {"session_id": session_id, "candidate_name": name}
+    return {"session_id": session_id, "candidate_name": name, "candidate_email": email}
 
 
 @router.post("/init-and-summary")
@@ -725,13 +690,14 @@ def init_and_summary(data: SetupInit):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            marketing_id = _resolve_or_create_session(cursor, data)
+            marketing_id = _resolve_session(cursor, data)
 
         _upsert_eval_login(conn, marketing_id)
         conn.commit()
         session_id = str(marketing_id)
 
         with conn.cursor() as cursor:
+            cid = marketing_id  # now marketing_id is actually candidate_id
             cursor.execute(
                 """
                 SELECT c.full_name AS name, cm.candidate_id, (cm.My_Resume IS NOT NULL) AS has_binary_resume, cm.my_resume_filename
@@ -810,21 +776,11 @@ def delete_llm_key(key_id: int, session_id: str):
     """Remove a row from candidate_llm_api_keys by key_id."""
     conn = get_db_connection()
     try:
-        marketing_id = int(session_id)
+        candidate_id = int(session_id)
         with conn.cursor() as cursor:
-            # Verify the key belongs to this candidate_marketing entry
-            cursor.execute(
-                "SELECT candidate_id FROM candidate_marketing WHERE id = %s",
-                (marketing_id,),
-            )
-            cm = cursor.fetchone()
-            if not cm:
-                raise HTTPException(status_code=404, detail="Session not found")
-
-            cid = cm["candidate_id"]
             cursor.execute(
                 "DELETE FROM candidate_llm_api_keys WHERE id = %s AND candidate_id = %s",
-                (key_id, cid),
+                (key_id, candidate_id),
             )
             if cursor.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Key not found")
@@ -851,10 +807,10 @@ def get_extraction_status(session_id: str):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            marketing_id = int(session_id)
+            candidate_id = int(session_id)
             cursor.execute(
-                "SELECT id FROM aiprep_tool_project_context WHERE user_id = %s",
-                (session_id,),
+                "SELECT id FROM aiprep_tool_project_context WHERE candidate_id = %s",
+                (candidate_id,),
             )
             row = cursor.fetchone()
             return {"status": "completed" if row else "pending"}

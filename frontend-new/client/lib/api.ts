@@ -5,6 +5,28 @@
 const BASE_URL =
   (import.meta as any).env?.VITE_API_URL || "http://127.0.0.1:8000";
 
+import { clearSession, isAuthenticated } from "./auth";
+
+function handle401(res: Response) {
+  if (res.status === 401) {
+    const wasAuthenticated = isAuthenticated();
+    
+    // In local development, we don't have domain cookies. 
+    // Allow the local fallback session (prep_token) to survive 401s.
+    const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    if (isLocal && wasAuthenticated && !getWblToken()) {
+      return;
+    }
+
+    clearSession();
+    // Only redirect if the user was authenticated.
+    // This prevents infinite reload loops when SsoSync checks /me with an expired cookie.
+    if (wasAuthenticated && window.location.pathname !== "/auth") {
+      window.location.href = "/";
+    }
+  }
+}
+
 // ─── Generic fetch helpers ────────────────────────────────────────────────────
 
 function getWblToken(): string | null {
@@ -29,6 +51,7 @@ async function get<T = any>(path: string, params?: Record<string, string>): Prom
     headers: getAuthHeaders(),
   });
   if (!res.ok) {
+    handle401(res);
     const err = await res.json().catch(() => ({ detail: "Request failed" }));
     throw new Error(err.detail || "Request failed");
   }
@@ -42,6 +65,7 @@ async function post<T = any>(path: string, body: any): Promise<T> {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
+    handle401(res);
     const err = await res.json().catch(() => ({ detail: "Request failed" }));
     const message = Array.isArray(err.detail)
       ? err.detail.map((item: any) => item.msg || String(item)).join("; ")
@@ -60,6 +84,7 @@ async function postForm<T = any>(path: string, form: FormData): Promise<T> {
     body: form,
   });
   if (!res.ok) {
+    handle401(res);
     const err = await res.json().catch(() => ({ detail: "Request failed" }));
     throw new Error(err.detail || "Request failed");
   }
@@ -74,6 +99,7 @@ async function del<T = any>(path: string, params?: Record<string, string>): Prom
     headers: getAuthHeaders(),
   });
   if (!res.ok) {
+    handle401(res);
     const err = await res.json().catch(() => ({ detail: "Request failed" }));
     throw new Error(err.detail || "Request failed");
   }
