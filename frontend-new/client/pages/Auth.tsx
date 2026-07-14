@@ -25,6 +25,7 @@ export default function Auth() {
       try {
         // Step 1: Store the token as session_id immediately (mirrors old frontend approach)
         // WBL sends the numeric candidate_id as the token — this IS the session_id
+        localStorage.removeItem("ai_prep_explicit_logout");
         setSession(token, "Candidate");
         refresh();
 
