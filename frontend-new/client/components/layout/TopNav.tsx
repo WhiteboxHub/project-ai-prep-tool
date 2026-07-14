@@ -94,7 +94,13 @@ export function TopNav({ readiness }: TopNavProps) {
               className="cursor-pointer text-red-400 hover:text-red-300 hover:bg-red-500/10"
               onClick={() => {
                 clearSession();
-                window.location.href = "/";
+                const isProduction = window.location.hostname.endsWith("whitebox-learning.com");
+                if (isProduction) {
+                  // Redirect to WBL login so WBL's auth state also gets invalidated
+                  window.location.href = "https://whitebox-learning.com/login";
+                } else {
+                  window.location.href = "/";
+                }
               }}
             >
               <LogOut className="w-4 h-4 mr-2" />

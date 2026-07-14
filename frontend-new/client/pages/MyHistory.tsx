@@ -61,6 +61,13 @@ function fullVideoUrl(url?: string | null) {
   return `${API_BASE}${url}`;
 }
 
+function getYouTubeId(url?: string | null) {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+}
+
 export default function MyHistory() {
   const { sessionId } = useAuth();
   const [attempts, setAttempts] = useState<IntroAttempt[]>([]);
@@ -249,13 +256,22 @@ export default function MyHistory() {
                   </div>
 
                   {selected.video_url ? (
-                    <div className="overflow-hidden rounded-lg border border-border/50 bg-black">
-                      <video
-                        key={selected.video_url}
-                        src={fullVideoUrl(selected.video_url)}
-                        controls
-                        className="aspect-video w-full"
-                      />
+                    <div className="overflow-hidden rounded-lg border border-border/50 bg-black flex justify-center">
+                      {getYouTubeId(selected.video_url) ? (
+                        <iframe
+                          className="w-full aspect-video max-h-[70vh] rounded-xl outline-none"
+                          src={`https://www.youtube.com/embed/${getYouTubeId(selected.video_url)}`}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        ></iframe>
+                      ) : (
+                        <video
+                          key={selected.video_url}
+                          src={fullVideoUrl(selected.video_url)}
+                          controls
+                          className="aspect-video w-full"
+                        />
+                      )}
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-background/40 p-4 text-sm text-muted-foreground">
