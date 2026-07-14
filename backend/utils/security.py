@@ -16,9 +16,12 @@ except Exception:
 
 cipher = Fernet(SECRET_KEY)
 
-# Fallback WBL key used by wbl-backend if ENCRYPTION_KEY is not set
-FALLBACK_KEY = b'HIizg-wNBLUCcw5JjCA8JVGKu0WE5Omst8gI59UMqEc='
-fallback_cipher = Fernet(FALLBACK_KEY)
+# Fallback WBL keys
+FALLBACK_KEYS = [
+    b'HIizg-wNBLUCcw5JjCA8JVGKu0WE5Omst8gI59UMqEc=',
+    b'7aqK1zhMEO0AF08ewGf1tL6nqY9kA9v8_E00MlsNjLw='
+]
+fallback_ciphers = [Fernet(k) for k in FALLBACK_KEYS]
 
 def encrypt(text: str) -> str:
     return cipher.encrypt(text.encode()).decode()
@@ -29,9 +32,10 @@ def decrypt(token: str) -> str:
     try:
         return cipher.decrypt(token.encode()).decode()
     except Exception:
-        try:
-            # If the primary key fails, try the fallback key (useful for legacy WBL candidate keys)
-            return fallback_cipher.decrypt(token.encode()).decode()
-        except Exception:
-            # Final fallback: if decryption fails (e.g. it is already a plain-text API key), return it directly
-            return token
+        for f_cipher in fallback_ciphers:
+            try:
+                return f_cipher.decrypt(token.encode()).decode()
+            except Exception:
+                continue
+        # Final fallback: if decryption fails (e.g. it is already a plain-text API key), return it directly
+        return token

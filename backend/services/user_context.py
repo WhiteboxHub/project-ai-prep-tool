@@ -30,7 +30,7 @@ def get_user_api_context(user_id: str) -> dict:
                     """
                     SELECT api_key, provider_name FROM candidate_llm_api_keys
                     WHERE candidate_id = %s
-                    ORDER BY updated_at DESC, id DESC
+                    ORDER BY is_default DESC, updated_at DESC, id DESC
                     LIMIT 1
                     """,
                     (cid,),

@@ -370,6 +370,162 @@ async def upload_resume(
         conn.close()
 
 
+@router.post("/parse-binary-resume")
+async def parse_binary_resume(
+    session_id: str = Form(...),
+    file: UploadFile = File(...),
+):
+    import tempfile
+    import os
+    from services.resume_parser import parse_resume
+    from services.user_context import get_user_api_context
+    from services.ai_client import generate_text
+
+    content = await file.read()
+    filename = file.filename or "resume.pdf"
+    ext = os.path.splitext(filename)[1].lower()
+    if not ext:
+        ext = ".pdf"
+
+    # Save to a temporary file
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create temporary file: {str(e)}")
+
+    # Extract text from file
+    try:
+        extracted_text = parse_resume(tmp_path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to extract text from file: {str(e)}")
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+    if not extracted_text.strip():
+        raise HTTPException(status_code=400, detail="The uploaded file contains no readable text content.")
+
+    # Get Candidate LLM Key
+    api_ctx = get_user_api_context(session_id)
+    api_key = None
+    provider = None
+    if api_ctx and api_ctx.get("api_key"):
+        api_key = api_ctx["api_key"]
+        provider = api_ctx.get("provider") or "openai"
+
+    if not api_key:
+        raise HTTPException(status_code=400, detail="No active LLM API key configured. Please set up your LLM key in 'My LLM Setup' first.")
+
+    # AI parsing Prompt
+    system_prompt = """You are an expert resume parsing assistant. 
+Your task is to analyze the candidate's raw resume text and extract all details into a clean, structured JSON format matching this exact schema:
+
+{
+  "personal": {
+    "name": "Full Name",
+    "email": "Email Address",
+    "phone": "Phone Number",
+    "linkedin": "LinkedIn profile URL"
+  },
+  "work": [
+    {
+      "company": "Company Name",
+      "position": "Job Title / Role",
+      "startDate": "Start Date (e.g. Month Year or Year)",
+      "endDate": "End Date or 'Present'",
+      "highlights": [
+        "Key achievement, project, or task bullet point 1",
+        "Key achievement, project, or task bullet point 2"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "name": "Skill Category (e.g. Languages, Databases, Cloud)",
+      "keywords": ["Python", "SQL", "etc"]
+    }
+  ],
+  "education": [
+    {
+      "institution": "University/School Name",
+      "studyType": "Degree (e.g. B.S., M.S.)",
+      "area": "Major / Field of Study"
+    }
+  ],
+  "custom_fields": {
+    "technical_screening": "Details of any technical screening or assessments, or empty string",
+    "application_logistics": "Visa status, relocation preferences, or empty string",
+    "legal": "Any legal notices or empty string",
+    "eeo": "EEO statements or empty string"
+  }
+}
+
+Rules:
+1. Return ONLY the strict JSON object. No extra explanations, markdown tags, or headers.
+2. Ensure fields are strictly populated from the resume text. 
+3. Try to categorize all skills and keep highlights rich and detailed."""
+
+    prompt = f"Extract structured details from this resume text:\n\n{extracted_text}"
+
+    # Generate Structured JSON
+    try:
+        response_text = await generate_text(
+            prompt=prompt,
+            api_key=api_key,
+            provider=provider,
+            system_prompt=system_prompt,
+            response_format="json_object",
+        )
+        parsed_json = json.loads(response_text)
+    except Exception as e:
+        print("Failed to call LLM or parse JSON:", str(e))
+        raise HTTPException(500, f"AI resume parsing failed: {str(e)}")
+
+    # Save structured JSON
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            marketing_id = int(session_id)
+            cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (marketing_id,))
+            row = cursor.fetchone()
+            if not row:
+                raise ValueError("No candidate marketing record found.")
+            cid = row["candidate_id"]
+
+            parsed_json_str = json.dumps(parsed_json)
+            # Update candidate_marketing
+            cursor.execute(
+                "UPDATE candidate_marketing SET candidate_json = %s WHERE id = %s",
+                (parsed_json_str, marketing_id),
+            )
+            # Update candidate_resume
+            cursor.execute(
+                "SELECT id FROM candidate_resume WHERE candidate_id = %s ORDER BY id DESC LIMIT 1",
+                (cid,),
+            )
+            r_row = cursor.fetchone()
+            if r_row:
+                cursor.execute(
+                    "UPDATE candidate_resume SET resume_json = %s, updated_at = NOW() WHERE id = %s",
+                    (parsed_json_str, r_row["id"]),
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO candidate_resume (candidate_id, resume_json, file_name, created_at, updated_at) VALUES (%s, %s, %s, NOW(), NOW())",
+                    (cid, parsed_json_str, f"parsed_resume_{cid}.json"),
+                )
+        conn.commit()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save JSON to DB: {str(e)}")
+    finally:
+        conn.close()
+
+    return {"message": "Resume text parsed and JSON saved successfully", "json": parsed_json}
+
 @router.get("/summary")
 def get_resume_summary(session_id: str):
     conn = get_db_connection()
@@ -381,7 +537,7 @@ def get_resume_summary(session_id: str):
             # Get candidate name via candidate_marketing -> candidate
             cursor.execute(
                 """
-                SELECT c.full_name AS name, cm.email
+                SELECT c.full_name AS name, cm.email, (cm.My_Resume IS NOT NULL) AS has_binary_resume, cm.my_resume_filename
                 FROM candidate_marketing cm
                 JOIN candidate c ON c.id = cm.candidate_id
                 WHERE cm.id = %s
@@ -390,6 +546,8 @@ def get_resume_summary(session_id: str):
             )
             cand_row = cursor.fetchone()
             candidate_name = cand_row["name"] if cand_row and cand_row.get("name") else ""
+            has_binary_resume = bool(cand_row["has_binary_resume"]) if cand_row and "has_binary_resume" in cand_row else False
+            binary_resume_filename = cand_row["my_resume_filename"] if cand_row and cand_row.get("my_resume_filename") else None
 
             # Get resume from candidate_resume (primary) or candidate_marketing.candidate_json
             raw_resume = fetch_resume_raw(session_id)
@@ -444,6 +602,8 @@ def get_resume_summary(session_id: str):
                 "resume_json": resume_json_out,
                 "resume_filename": resume_filename,
                 "llm_keys": llm_keys,
+                "has_binary_resume": has_binary_resume,
+                "binary_resume_filename": binary_resume_filename,
             }
     except Exception as e:
         print("ERROR:", str(e))
@@ -516,7 +676,7 @@ def init_and_summary(data: SetupInit):
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT c.full_name AS name, cm.candidate_id
+                SELECT c.full_name AS name, cm.candidate_id, (cm.My_Resume IS NOT NULL) AS has_binary_resume, cm.my_resume_filename
                 FROM candidate_marketing cm
                 JOIN candidate c ON c.id = cm.candidate_id
                 WHERE cm.id = %s
@@ -526,6 +686,8 @@ def init_and_summary(data: SetupInit):
             cand_row = cursor.fetchone()
             candidate_name = cand_row["name"] if cand_row and cand_row.get("name") else ""
             cid = cand_row["candidate_id"] if cand_row else None
+            has_binary_resume = bool(cand_row["has_binary_resume"]) if cand_row and "has_binary_resume" in cand_row else False
+            binary_resume_filename = cand_row["my_resume_filename"] if cand_row and cand_row.get("my_resume_filename") else None
 
             raw_resume = fetch_resume_raw(session_id)
             has_resume = raw_resume is not None
@@ -570,6 +732,8 @@ def init_and_summary(data: SetupInit):
                     "resume_json": resume_json_out,
                     "resume_filename": resume_filename,
                     "llm_keys": llm_keys,
+                    "has_binary_resume": has_binary_resume,
+                    "binary_resume_filename": binary_resume_filename,
                 }
             }
     except HTTPException:
