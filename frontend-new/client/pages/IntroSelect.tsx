@@ -108,6 +108,13 @@ export default function IntroSelect() {
       .catch(console.error);
   }, [sessionId]);
 
+  const getYouTubeId = (url: string) => {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
   if (loading) {
     return (
       <MainLayout>
@@ -293,10 +300,10 @@ export default function IntroSelect() {
               <div className="p-4 bg-black/50 flex justify-center">
                 {videoSrc && playingVideo.isLocal ? (
                   <video src={videoSrc} controls autoPlay className="w-full h-auto max-h-[70vh] rounded-xl outline-none" />
-                ) : videoSrc && videoSrc.includes("youtube.com") ? (
+                ) : videoSrc && getYouTubeId(videoSrc) ? (
                   <iframe
                     className="w-full aspect-video max-h-[70vh] rounded-xl outline-none"
-                    src={`https://www.youtube.com/embed/${new URL(videoSrc).searchParams.get("v")}`}
+                    src={`https://www.youtube.com/embed/${getYouTubeId(videoSrc)}`}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                   ></iframe>
