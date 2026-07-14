@@ -527,6 +527,7 @@ def sync_data(token: str):
             "resume_json": resume_json,
             "api_keys": decrypted_keys,
             "candidate_name": candidate_name,
+            "candidate_email": user_email,
         }
     except HTTPException:
         raise

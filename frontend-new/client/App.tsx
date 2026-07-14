@@ -38,12 +38,15 @@ if ('serviceWorker' in navigator) {
 }
 
 function SsoSync() {
-  const { sessionId, refresh } = useAuth();
+  const { sessionId, candidateEmail, refresh } = useAuth();
   useEffect(() => {
-    if (!sessionId || isNaN(Number(sessionId))) {
-      if (localStorage.getItem("ai_prep_explicit_logout") === "true") {
-        return;
-      }
+    const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    const hasToken = document.cookie.includes("wbl_access_token=");
+    
+    // In local dev without a cookie, /me will strictly return 401. Don't spam the network.
+    if (isLocal && !hasToken) return;
+
+    if (!sessionId || isNaN(Number(sessionId)) || !candidateEmail) {
       getCandidateMe().then((data) => {
         if (data.session_id) {
           setSession(data.session_id, data.candidate_name || "Candidate", data.candidate_email || "");
@@ -53,7 +56,7 @@ function SsoSync() {
         }
       }).catch(() => {});
     }
-  }, [sessionId, refresh]);
+  }, [sessionId, candidateEmail, refresh]);
   return null;
 }
 
