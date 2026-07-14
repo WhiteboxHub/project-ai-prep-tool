@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { Mic, MicOff, Loader2, CheckCircle2, AlertCircle, ArrowRight, Volume2, Lock, Camera, VideoOff, RotateCcw, Zap, Sparkles } from "lucide-react";
 import { VideoPanel } from "@/components/interview/VideoPanel";
 import { ControlBar } from "@/components/interview/ControlBar";
-import { evaluateIntroText, getDynamicTemplate, getIntroHistory } from "@/lib/api";
+import { evaluateIntroText, getDynamicTemplate, getResumeSummary } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { usePipeline } from "@/hooks/use-pipeline";
 import { useMediaStream } from "@/hooks/useMediaStream";
@@ -114,42 +114,25 @@ export default function IntroPracticeRoom() {
   // ── Pre-session health check ────────────────────────────────────────────────
   const checkSessionReady = async (): Promise<boolean> => {
     try {
-      const BASE_URL = (import.meta as any).env?.VITE_API_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${BASE_URL}/api/candidate/setup-status`, {
-        headers: {
-          Authorization: `Bearer ${document.cookie.split("wbl_access_token=")[1]?.split(";")[0] || ""}`
-        }
-      });
+      if (!sessionId) return false;
+      const data = await getResumeSummary(sessionId);
 
-      if (res.status === 401 || res.status === 403) {
-        setError("Session expired. Please refresh the page and log in again.");
-        return false;
-      }
-
-      if (!res.ok) {
-        setError(`Server error (${res.status}). Please try again in a moment.`);
-        return false;
-      }
-
-      const data = await res.json();
-
-      if (!data.api_keys_configured) {
+      if (!data.has_api_key) {
         setError(
           "No LLM API key configured. Without it, your speech cannot be evaluated. " +
           "Please go to Settings and add your OpenAI or Gemini API key before starting."
         );
         return false;
       }
-
       setError("");
       return true;
-    } catch (e) {
-      // fetch() itself threw — this means the backend is genuinely unreachable
-      // (network down, server not running, CORS block, etc.) — NOT an LLM credit issue
-      setError(
-        "Cannot reach the server. Please check that your internet connection is active " +
-        "and the application backend is running."
-      );
+    } catch (e: any) {
+      if (e?.message === "Unauthorized") {
+        setError("Session expired. Please refresh the page and log in again.");
+      } else {
+        setError(`Server error. Please try again in a moment.`);
+      }
+      return false;
     }
   };
 

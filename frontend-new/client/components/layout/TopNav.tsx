@@ -28,7 +28,7 @@ export function TopNav({ readiness }: TopNavProps) {
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="fixed top-0 left-80 right-0 h-16 z-30 glass-card border-b border-border bg-card/50 backdrop-blur-xl flex items-center justify-between px-6"
+      className="fixed top-0 left-80 right-0 h-16 z-30 glass-card border-b border-border bg-background flex items-center justify-between px-6"
     >
       {/* Left Section */}
       <div className="flex-1 min-w-0">
@@ -65,22 +65,28 @@ export function TopNav({ readiness }: TopNavProps) {
               className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-white/5 smooth-transition cursor-pointer"
             >
               <div className="flex flex-col items-end mr-1 hidden sm:flex">
-                <span className="text-sm font-semibold text-foreground max-w-[200px] truncate">
-                  {candidateName}
-                </span>
-                <span className="text-xs text-muted-foreground max-w-[200px] truncate">{candidateEmail || "Candidate"}</span>
+                  <p className="text-sm font-medium leading-tight text-foreground">
+                    {candidateName}
+                  </p>
+                  {candidateEmail && (
+                    <p className="text-xs leading-tight text-muted-foreground truncate max-w-[180px] pb-0.5">
+                      {candidateEmail}
+                    </p>
+                  )}
               </div>
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-xs font-bold text-white shadow-sm">
                 {initials}
               </div>
             </motion.button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48 bg-card border border-border">
-            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer">
-              <div className="w-4 h-4 rounded-full bg-gradient-to-br from-primary to-secondary" />
-              <div className="flex flex-col">
-                <span className="text-sm font-semibold truncate max-w-28">{candidateName}</span>
-                <span className="text-xs text-muted-foreground truncate max-w-28">{candidateEmail || "Candidate"}</span>
+          <DropdownMenuContent align="end" className="w-64 bg-card border border-border">
+            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer py-2">
+              <div className="w-4 h-4 flex-shrink-0 rounded-full bg-gradient-to-br from-primary to-secondary" />
+              <div className="flex flex-col items-start ml-2 mr-1 overflow-hidden">
+                <span className="text-sm font-semibold truncate w-full">{candidateName}</span>
+                {candidateEmail && (
+                  <span className="text-xs text-muted-foreground truncate w-full mt-1">{candidateEmail}</span>
+                )}
               </div>
             </DropdownMenuItem>
             <DropdownMenuSeparator />

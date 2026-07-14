@@ -351,7 +351,7 @@ def get_resume_summary(session_id: str):
         with conn.cursor() as cursor:
             cid = int(session_id)
 
-            # Get candidate name
+            # Get candidate name and email
             cursor.execute(
                 "SELECT full_name AS name, email FROM candidate WHERE id = %s",
                 (cid,),
@@ -360,6 +360,7 @@ def get_resume_summary(session_id: str):
             if not cand_row:
                 raise HTTPException(status_code=404, detail="Session/Candidate not found")
             candidate_name = cand_row["name"] if cand_row and cand_row.get("name") else ""
+            candidate_email = cand_row["email"] if cand_row and cand_row.get("email") else ""
 
             raw_resume = fetch_resume_raw(session_id)
             has_resume = raw_resume is not None
@@ -399,6 +400,7 @@ def get_resume_summary(session_id: str):
             return {
                 "resume_text": "Exists" if has_resume else None,
                 "candidate_name": candidate_name,
+                "candidate_email": candidate_email,
                 "has_api_key": has_api_key,
                 "resume_json": resume_json_out,
                 "resume_filename": resume_filename,
@@ -424,6 +426,7 @@ async def sync_from_wbl(data: SyncFromWblRequest):
 
     needs_extraction = False
     name = "Candidate"
+    email = ""
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -435,12 +438,14 @@ async def sync_from_wbl(data: SyncFromWblRequest):
             needs_extraction = not cursor.fetchone()
 
             cursor.execute(
-                "SELECT full_name AS name FROM candidate WHERE id = %s",
+                "SELECT full_name AS name, email FROM candidate WHERE id = %s",
                 (candidate_id,),
             )
             row = cursor.fetchone()
-            if row and row["name"]:
-                name = row["name"]
+            if row:
+                if row.get("name"):
+                    name = row["name"]
+                email = row.get("email") or ""
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
@@ -452,7 +457,7 @@ async def sync_from_wbl(data: SyncFromWblRequest):
         except Exception as e:
             print(f"Extraction failed during sync: {e}")
 
-    return {"session_id": session_id, "candidate_name": name}
+    return {"session_id": session_id, "candidate_name": name, "candidate_email": email}
 
 
 @router.post("/init-and-summary")
