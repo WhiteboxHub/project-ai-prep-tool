@@ -96,8 +96,10 @@ export function TopNav({ readiness }: TopNavProps) {
                 clearSession();
                 const isProduction = window.location.hostname.endsWith("whitebox-learning.com");
                 if (isProduction) {
-                  // Redirect to WBL login so WBL's auth state also gets invalidated
-                  window.location.href = "https://whitebox-learning.com/login";
+                  // Redirect to WBL's /logout page which triggers WBL's full
+                  // logout() — clears localStorage, next-auth, cookies, then
+                  // redirects to /login
+                  window.location.href = "https://whitebox-learning.com/logout";
                 } else {
                   window.location.href = "/";
                 }
