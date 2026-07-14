@@ -563,12 +563,12 @@ def get_resume_summary(session_id: str):
         if session_id == "null" or not session_id:
             raise HTTPException(status_code=404, detail="Invalid session ID")
         with conn.cursor() as cursor:
-            cid = int(session_id)
+            marketing_id = int(session_id)
 
-            # Get candidate name and email
+            # Get candidate name, email, and actual candidate_id
             cursor.execute(
                 """
-                SELECT c.full_name AS name, cm.email, (cm.My_Resume IS NOT NULL) AS has_binary_resume, cm.my_resume_filename
+                SELECT c.full_name AS name, cm.email, cm.candidate_id, (cm.My_Resume IS NOT NULL) AS has_binary_resume, cm.my_resume_filename
                 FROM candidate_marketing cm
                 JOIN candidate c ON c.id = cm.candidate_id
                 WHERE cm.id = %s
@@ -580,6 +580,7 @@ def get_resume_summary(session_id: str):
                 raise HTTPException(status_code=404, detail="Session/Candidate not found")
             candidate_name = cand_row["name"] if cand_row and cand_row.get("name") else ""
             candidate_email = cand_row["email"] if cand_row and cand_row.get("email") else ""
+            cid = cand_row["candidate_id"] if cand_row else None
             has_binary_resume = bool(cand_row["has_binary_resume"]) if cand_row and "has_binary_resume" in cand_row else False
             binary_resume_filename = cand_row["my_resume_filename"] if cand_row and cand_row.get("my_resume_filename") else None
 
