@@ -62,3 +62,59 @@ def get_user_api_context(user_id: str) -> dict:
 def get_user_api_key(user_id: str):
     ctx = get_user_api_context(user_id)
     return ctx["api_key"]
+
+
+def get_all_user_keys(user_id: str) -> list[dict]:
+    """
+    Returns a list of dicts for all keys matching candidate_id.
+    Each dict contains: "api_key", "provider", "model_name".
+    Ordered by is_default DESC, updated_at DESC.
+    """
+    conn = get_db_connection()
+    try:
+        keys = []
+        with conn.cursor() as cursor:
+            marketing_id = int(user_id)
+            cursor.execute(
+                "SELECT candidate_id FROM candidate_marketing WHERE id = %s",
+                (marketing_id,),
+            )
+            cm = cursor.fetchone()
+            if cm and cm.get("candidate_id"):
+                cid = cm["candidate_id"]
+                cursor.execute(
+                    """
+                    SELECT api_key, provider_name, model_name FROM candidate_llm_api_keys
+                    WHERE candidate_id = %s
+                    ORDER BY is_default DESC, updated_at DESC, id DESC
+                    """,
+                    (cid,),
+                )
+                rows = cursor.fetchall() or []
+                for row in rows:
+                    if row.get("api_key"):
+                        try:
+                            dec_key = decrypt(row["api_key"])
+                            p_name = (row.get("provider_name") or "").lower()
+                            provider = "openai"
+                            if "openai" in p_name:
+                                provider = "openai"
+                            elif "gemini" in p_name or "google" in p_name:
+                                provider = "gemini"
+                            elif "claude" in p_name or "anthropic" in p_name:
+                                provider = "claude"
+                            else:
+                                provider = p_name
+                            keys.append({
+                                "api_key": dec_key,
+                                "provider": provider,
+                                "model_name": row.get("model_name")
+                            })
+                        except Exception as dec_err:
+                            print(f"[user_context] failed to decrypt key row: {dec_err}")
+        return keys
+    except Exception as e:
+        print(f"[user_context] get_all_user_keys error: {e}")
+        return []
+    finally:
+        conn.close()

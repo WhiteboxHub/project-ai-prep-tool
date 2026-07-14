@@ -370,6 +370,60 @@ async def upload_resume(
         conn.close()
 
 
+def generate_fallback_template(candidate_name: str, candidate_email: str, candidate_phone: str) -> dict:
+    first_name = ""
+    last_name = ""
+    if candidate_name:
+        parts = candidate_name.strip().split()
+        if len(parts) > 0:
+            first_name = parts[0]
+            if len(parts) > 1:
+                last_name = " ".join(parts[1:])
+            else:
+                last_name = ""
+
+    return {
+        "personal": {
+            "first_name": first_name or "First",
+            "last_name": last_name or "Last",
+            "email": candidate_email or "email@example.com",
+            "phone": candidate_phone or "+1 (123) 456-7890",
+            "location": "City, State, Country",
+            "linkedin": "https://www.linkedin.com/in/yourprofile",
+            "github": "https://github.com/yourprofile"
+        },
+        "education": [
+            {
+                "degree": "Degree / Field of Study (e.g., Bachelor of Science)",
+                "institution": "University / Institution Name",
+                "location": "City, State",
+                "start_date": "YYYY-MM",
+                "end_date": "YYYY-MM"
+            }
+        ],
+        "experience": [
+            {
+                "company": "Company Name Placeholder",
+                "title": "Your Role / Position",
+                "location": "City, State",
+                "start_date": "YYYY-MM",
+                "end_date": "Present",
+                "description": "Brief summary of your role and responsibilities.",
+                "achievements": [
+                    "Designed and implemented high-performance backend systems and APIs."
+                ]
+            }
+        ],
+        "skills": [
+            "Python",
+            "JavaScript",
+            "SQL",
+            "Docker",
+            "Git"
+        ]
+    }
+
+
 @router.post("/parse-binary-resume")
 async def parse_binary_resume(
     session_id: str = Form(...),
@@ -378,123 +432,143 @@ async def parse_binary_resume(
     import tempfile
     import os
     from services.resume_parser import parse_resume
-    from services.user_context import get_user_api_context
+    from services.user_context import get_all_user_keys
     from services.ai_client import generate_text
 
     content = await file.read()
     filename = file.filename or "resume.pdf"
-    ext = os.path.splitext(filename)[1].lower()
-    if not ext:
-        ext = ".pdf"
 
-    # Save to a temporary file
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create temporary file: {str(e)}")
+    # Extract text from uploaded binary file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
 
-    # Extract text from file
     try:
         extracted_text = parse_resume(tmp_path)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to extract text from file: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to extract text from binary resume: {str(e)}")
     finally:
         try:
-            os.unlink(tmp_path)
+            os.remove(tmp_path)
         except Exception:
             pass
 
     if not extracted_text.strip():
         raise HTTPException(status_code=400, detail="The uploaded file contains no readable text content.")
 
-    # Get Candidate LLM Key
-    api_ctx = get_user_api_context(session_id)
-    api_key = None
-    provider = None
-    if api_ctx and api_ctx.get("api_key"):
-        api_key = api_ctx["api_key"]
-        provider = api_ctx.get("provider") or "openai"
-
-    if not api_key:
+    # Get All Candidate LLM Keys
+    user_keys = get_all_user_keys(session_id)
+    if not user_keys:
         raise HTTPException(status_code=400, detail="No active LLM API key configured. Please set up your LLM key in 'My LLM Setup' first.")
 
     # AI parsing Prompt
-    system_prompt = """You are an expert resume parsing assistant. 
+    system_prompt = """You are an expert resume parsing assistant.
 Your task is to analyze the candidate's raw resume text and extract all details into a clean, structured JSON format matching this exact schema:
 
 {
   "personal": {
-    "name": "Full Name",
-    "email": "Email Address",
+    "first_name": "First Name",
+    "last_name": "Last Name",
+    "email": "Email Address (REQUIRED - must be present)",
     "phone": "Phone Number",
-    "linkedin": "LinkedIn profile URL"
+    "location": "City, State, Country",
+    "linkedin": "Full LinkedIn profile URL (e.g. https://linkedin.com/in/username) (REQUIRED)",
+    "github": "GitHub profile URL or null"
   },
-  "work": [
+  "summary": "A 2-3 sentence professional summary extracted or inferred from the resume",
+  "education": [
+    {
+      "degree": "Full degree name (e.g. Bachelor of Science in Computer Science)",
+      "institution": "University/School Name",
+      "location": "City, State",
+      "start_date": "YYYY-MM",
+      "end_date": "YYYY-MM or present"
+    }
+  ],
+  "experience": [
     {
       "company": "Company Name",
-      "position": "Job Title / Role",
-      "startDate": "Start Date (e.g. Month Year or Year)",
-      "endDate": "End Date or 'Present'",
-      "highlights": [
-        "Key achievement, project, or task bullet point 1",
-        "Key achievement, project, or task bullet point 2"
+      "title": "Job Title / Role",
+      "location": "City, State",
+      "start_date": "YYYY-MM",
+      "end_date": "YYYY-MM or present",
+      "description": "Brief description of role or null",
+      "achievements": [
+        "Bullet point achievement or responsibility 1",
+        "Bullet point achievement or responsibility 2"
       ]
     }
   ],
   "skills": [
-    {
-      "name": "Skill Category (e.g. Languages, Databases, Cloud)",
-      "keywords": ["Python", "SQL", "etc"]
-    }
+    "Skill 1",
+    "Skill 2",
+    "Skill 3"
   ],
-  "education": [
+  "certifications": [
     {
-      "institution": "University/School Name",
-      "studyType": "Degree (e.g. B.S., M.S.)",
-      "area": "Major / Field of Study"
+      "name": "Certification Name",
+      "issuer": "Issuing Organization",
+      "date": "YYYY-MM or null"
     }
-  ],
-  "custom_fields": {
-    "technical_screening": "Details of any technical screening or assessments, or empty string",
-    "application_logistics": "Visa status, relocation preferences, or empty string",
-    "legal": "Any legal notices or empty string",
-    "eeo": "EEO statements or empty string"
-  }
+  ]
 }
 
 Rules:
-1. Return ONLY the strict JSON object. No extra explanations, markdown tags, or headers.
-2. Ensure fields are strictly populated from the resume text. 
-3. Try to categorize all skills and keep highlights rich and detailed."""
+1. Return ONLY the strict JSON object. No extra explanations, markdown tags, code fences, or headers.
+2. skills MUST be a flat list of plain strings, NOT objects. Example: ["Python", "React", "SQL"]
+3. personal.email and personal.linkedin are REQUIRED — always extract or leave as empty string "" if not found (never omit the key).
+4. Extract ALL relevant work experience, education history, and every skill found in the resume text.
+5. If a field is not present in the resume, use null for optional fields or an empty array [] for list fields."""
 
     prompt = f"Extract structured details from this resume text:\n\n{extracted_text}"
 
-    # Generate Structured JSON
-    try:
-        response_text = await generate_text(
-            prompt=prompt,
-            api_key=api_key,
-            provider=provider,
-            system_prompt=system_prompt,
-            response_format="json_object",
-        )
-        parsed_json = json.loads(response_text)
-    except Exception as e:
-        print("Failed to call LLM or parse JSON:", str(e))
-        raise HTTPException(500, f"AI resume parsing failed: {str(e)}")
+    use_fallback = True
+    parsed_json = {}
+    
+    # Try parsing using candidate's keys in priority order
+    for idx, key_info in enumerate(user_keys):
+        api_key = key_info["api_key"]
+        provider = key_info["provider"]
+        try:
+            print(f"Attempting parse with key {idx+1}/{len(user_keys)} (Provider: {provider})...")
+            response_text = await generate_text(
+                prompt=prompt,
+                api_key=api_key,
+                provider=provider,
+                system_prompt=system_prompt,
+                response_format="json_object",
+            )
+            parsed_json = json.loads(response_text)
+            use_fallback = False
+            print(f"Successfully parsed resume using candidate key {idx+1}!")
+            break
+        except Exception as e:
+            print(f"Candidate key {idx+1} failed: {str(e)}")
+            continue
 
-    # Save structured JSON
+    if use_fallback:
+        print("All candidate LLM API keys failed. Loading fallback resume template.")
+
+    # Save structured JSON to candidate_marketing.candidate_json only
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             marketing_id = int(session_id)
-            cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (marketing_id,))
+            cursor.execute(
+                """
+                SELECT cm.id, c.full_name, cm.email, c.phone
+                FROM candidate_marketing cm
+                JOIN candidate c ON c.id = cm.candidate_id
+                WHERE cm.id = %s
+                """,
+                (marketing_id,),
+            )
             row = cursor.fetchone()
             if not row:
                 raise ValueError("No candidate marketing record found.")
-            cid = row["candidate_id"]
+
+            if use_fallback:
+                parsed_json = generate_fallback_template(row["full_name"], row["email"], row["phone"])
 
             parsed_json_str = json.dumps(parsed_json)
             # Update candidate_marketing
@@ -502,22 +576,6 @@ Rules:
                 "UPDATE candidate_marketing SET candidate_json = %s WHERE id = %s",
                 (parsed_json_str, marketing_id),
             )
-            # Update candidate_resume
-            cursor.execute(
-                "SELECT id FROM candidate_resume WHERE candidate_id = %s ORDER BY id DESC LIMIT 1",
-                (cid,),
-            )
-            r_row = cursor.fetchone()
-            if r_row:
-                cursor.execute(
-                    "UPDATE candidate_resume SET resume_json = %s, updated_at = NOW() WHERE id = %s",
-                    (parsed_json_str, r_row["id"]),
-                )
-            else:
-                cursor.execute(
-                    "INSERT INTO candidate_resume (candidate_id, resume_json, file_name, created_at, updated_at) VALUES (%s, %s, %s, NOW(), NOW())",
-                    (cid, parsed_json_str, f"parsed_resume_{cid}.json"),
-                )
         conn.commit()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save JSON to DB: {str(e)}")
@@ -549,7 +607,7 @@ def get_resume_summary(session_id: str):
             has_binary_resume = bool(cand_row["has_binary_resume"]) if cand_row and "has_binary_resume" in cand_row else False
             binary_resume_filename = cand_row["my_resume_filename"] if cand_row and cand_row.get("my_resume_filename") else None
 
-            # Get resume from candidate_resume (primary) or candidate_marketing.candidate_json
+            # Get resume from candidate_marketing.candidate_json
             raw_resume = fetch_resume_raw(session_id)
             has_resume = raw_resume is not None
 
