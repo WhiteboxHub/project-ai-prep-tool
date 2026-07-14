@@ -557,10 +557,7 @@ export default function IntroPracticeRoom() {
             <Lock className="w-8 h-8 text-muted-foreground" />
           </div>
           <h2 className="text-2xl font-bold text-foreground">Practice Locked</h2>
-          <p className="text-muted-foreground max-w-md">You must complete your setup before practicing your introduction.</p>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => navigate("/")} className="px-6 py-2 bg-primary/20 hover:bg-primary/30 text-primary font-semibold rounded-lg mt-4 smooth-transition">
-            Return to Dashboard
-          </motion.button>
+          <p className="text-muted-foreground max-w-md">Please go back to the Whitebox Learning platform and update your setup to unlock the introduction practice.</p>
         </div>
       </MainLayout>
     );

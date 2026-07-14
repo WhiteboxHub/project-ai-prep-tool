@@ -15,6 +15,8 @@ from pydantic import BaseModel
 from db.connection import get_db_connection
 from utils.security import encrypt, decrypt
 from utils.wbl_auth import get_wbl_user_email
+from services.resume_source import save_resume_for_session, fetch_resume_dict
+from utils.wbl_auth import get_wbl_user_email
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +174,7 @@ def get_setup_status(
             candidate_id = _get_candidate_id(cursor, user_email)
 
             cursor.execute(
-                "SELECT id FROM candidate_resume WHERE candidate_id = %s", (candidate_id,)
+                "SELECT id FROM candidate_marketing WHERE candidate_id = %s AND candidate_json IS NOT NULL", (candidate_id,)
             )
             resume_exists = cursor.fetchone() is not None
 
@@ -202,45 +204,16 @@ def upload_resume(
     user_email: str = Depends(get_wbl_user_email),
 ):
     """Upload or replace the resume JSON for this user."""
-    conn = get_db_connection()
     try:
-        resume_str = json.dumps(body.resume_json)
+        conn = get_db_connection()
         with conn.cursor() as cursor:
             candidate_id = _get_candidate_id(cursor, user_email)
+        conn.close()
 
-            cursor.execute(
-                "SELECT id FROM candidate_resume WHERE candidate_id = %s", (candidate_id,)
-            )
-            existing = cursor.fetchone()
-            if existing:
-                cursor.execute(
-                    """UPDATE candidate_resume
-                       SET resume_json = %s, file_name = %s
-                       WHERE candidate_id = %s""",
-                    (resume_str, body.file_name, candidate_id),
-                )
-                cursor.execute(
-                    "SELECT * FROM candidate_resume WHERE candidate_id = %s", (candidate_id,)
-                )
-                row = cursor.fetchone()
-            else:
-                cursor.execute(
-                    """INSERT INTO candidate_resume (candidate_id, resume_json, file_name)
-                       VALUES (%s, %s, %s)""",
-                    (candidate_id, resume_str, body.file_name),
-                )
-                cursor.execute(
-                    "SELECT * FROM candidate_resume WHERE id = %s",
-                    (cursor.lastrowid,),
-                )
-                row = cursor.fetchone()
-        conn.commit()
-        row["resume_json"] = (
-            json.loads(row["resume_json"])
-            if isinstance(row["resume_json"], str)
-            else row["resume_json"]
-        )
-        return row
+        save_resume_for_session(str(candidate_id), body.resume_json)
+        updated_resume = fetch_resume_dict(str(candidate_id))
+        
+        return {"resume_json": updated_resume, "file_name": body.file_name}
     except HTTPException:
         raise
     except Exception as e:
@@ -253,22 +226,17 @@ def upload_resume(
 @router.get("/resume")
 def get_resume(user_email: str = Depends(get_wbl_user_email)):
     """Get the stored resume JSON for this user."""
-    conn = get_db_connection()
     try:
+        conn = get_db_connection()
         with conn.cursor() as cursor:
             candidate_id = _get_candidate_id(cursor, user_email)
-            cursor.execute(
-                "SELECT * FROM candidate_resume WHERE candidate_id = %s", (candidate_id,)
-            )
-            row = cursor.fetchone()
-        if not row:
+        conn.close()
+
+        resume_data = fetch_resume_dict(str(candidate_id))
+        if not resume_data:
             raise HTTPException(status_code=404, detail="Resume not found")
-        row["resume_json"] = (
-            json.loads(row["resume_json"])
-            if isinstance(row["resume_json"], str)
-            else row["resume_json"]
-        )
-        return row
+
+        return {"resume_json": resume_data}
     except HTTPException:
         raise
     except Exception as e:
@@ -284,33 +252,16 @@ def update_resume(
     user_email: str = Depends(get_wbl_user_email),
 ):
     """Update the resume JSON for this user."""
-    conn = get_db_connection()
     try:
+        conn = get_db_connection()
         with conn.cursor() as cursor:
             candidate_id = _get_candidate_id(cursor, user_email)
-            cursor.execute(
-                "SELECT id FROM candidate_resume WHERE candidate_id = %s", (candidate_id,)
-            )
-            if not cursor.fetchone():
-                raise HTTPException(status_code=404, detail="Resume not found")
-            resume_str = json.dumps(body.resume_json)
-            cursor.execute(
-                """UPDATE candidate_resume
-                   SET resume_json = %s, file_name = %s
-                   WHERE candidate_id = %s""",
-                (resume_str, body.file_name, candidate_id),
-            )
-            cursor.execute(
-                "SELECT * FROM candidate_resume WHERE candidate_id = %s", (candidate_id,)
-            )
-            row = cursor.fetchone()
-        conn.commit()
-        row["resume_json"] = (
-            json.loads(row["resume_json"])
-            if isinstance(row["resume_json"], str)
-            else row["resume_json"]
-        )
-        return row
+        conn.close()
+
+        save_resume_for_session(str(candidate_id), body.resume_json)
+        updated_resume = fetch_resume_dict(str(candidate_id))
+        
+        return {"resume_json": updated_resume, "file_name": body.file_name}
     except HTTPException:
         raise
     except Exception as e:
@@ -526,7 +477,7 @@ def sync_data(token: str):
 
             # Fetch resume
             cursor.execute(
-                "SELECT resume_json FROM candidate_resume WHERE candidate_id = %s",
+                "SELECT candidate_json FROM candidate_marketing WHERE candidate_id = %s ORDER BY id DESC LIMIT 1",
                 (candidate_id,),
             )
             resume_row = cursor.fetchone()
@@ -542,11 +493,14 @@ def sync_data(token: str):
 
         resume_json = None
         if resume_row:
-            resume_json = (
-                json.loads(resume_row["resume_json"])
-                if isinstance(resume_row["resume_json"], str)
-                else resume_row["resume_json"]
-            )
+            raw = resume_row["candidate_json"]
+            if isinstance(raw, str):
+                try:
+                    resume_json = json.loads(raw)
+                except:
+                    pass
+            else:
+                resume_json = raw
 
         candidate_name = ""
         if resume_json:
