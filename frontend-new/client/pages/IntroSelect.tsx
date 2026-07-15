@@ -154,7 +154,7 @@ export default function IntroSelect() {
 
   return (
     <MainLayout>
-      <div className="max-w-4xl mx-auto space-y-8">
+      <div className="max-w-6xl mx-auto space-y-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-2 text-center max-w-2xl mx-auto">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-4">
             <Sparkles className="w-4 h-4 text-primary" />
@@ -213,8 +213,9 @@ export default function IntroSelect() {
             </motion.button>
             <p className="text-center text-xs text-muted-foreground mt-4">Make sure your camera and microphone are ready</p>
           </motion.div>
+        </div>
 
-          {/* History Section */}
+        {/* History Section */}
           {history.length > 0 && (
             <div className="pt-12 mt-8 border-t border-border/50">
               <h3 className="text-xl font-bold mb-6 text-foreground flex items-center gap-2">
@@ -227,62 +228,95 @@ export default function IntroSelect() {
                   const parsedResp = typeof item.raw_response === "string" ? JSON.parse(item.raw_response) : (item.raw_response || {});
                   const isJD = item.type === "intro_jd" || item.type === "intro_eval_jd";
                   
-                  const strengthsList = parsedFeed.strengths || parsedResp.strengths || [];
-                  const improvementList = parsedFeed.improvement_areas || parsedResp.improvement_areas || parsedFeed.weaknesses || parsedResp.weaknesses || [];
+                  const suggestionsList = parsedFeed.ai_suggestions || parsedResp.evaluation?.ai_suggestions || [];
+                  const scores = parsedResp.evaluation?.scores || {};
+                  const transcript = parsedResp.transcript || "";
+                  const strengthsList = parsedFeed.strengths || parsedResp.strengths || parsedResp.evaluation?.strengths || [];
+                  const improvementList = parsedFeed.improvement_areas || parsedResp.improvement_areas || parsedFeed.weaknesses || parsedResp.weaknesses || parsedResp.evaluation?.weaknesses || parsedResp.evaluation?.improvement_areas || [];
                   
                   return (
                     <div key={item.id || i} className="bg-card/40 p-5 rounded-2xl border border-border/50 transition-all hover:bg-card/60">
-                      <div className="flex justify-between items-center mb-3">
-                        <div className="flex items-center gap-3">
-                          <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${item.score >= 75 ? "bg-green-500/20 text-green-400" : "bg-amber-500/20 text-amber-400"}`}>
+                      <div className="flex justify-between items-center mb-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className={`px-3 py-1 text-xs font-bold rounded-full shadow-sm ${item.score >= 75 ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-amber-500/20 text-amber-400 border border-amber-500/30"}`}>
                             {item.score >= 75 ? "Passed" : "Needs Work"} ({item.score}/100)
                           </span>
-                          <span className="text-[10px] font-semibold px-2 py-1 bg-primary/20 text-primary rounded-md uppercase tracking-wider">
-                            {isJD ? "JD Specific" : "General"}
+                          <span className="text-xs font-semibold px-3 py-1 bg-primary/20 text-primary rounded-md uppercase tracking-wider border border-primary/30 shadow-sm">
+                            {item.type ? item.type.replace(/_/g, ' ') : (isJD ? "JD Specific" : "General")}
                           </span>
                           {item.video_url && (
-                            <button onClick={() => handlePlayVideo(item)} className="flex items-center gap-1 px-2 py-1 bg-white/10 hover:bg-white/20 transition-colors text-foreground rounded-md text-[10px] font-semibold">
-                              <Video className="w-3 h-3 text-primary" /> Watch Recording
+                            <button onClick={() => handlePlayVideo(item)} className="flex items-center gap-1.5 px-3 py-1 bg-white/10 hover:bg-white/20 transition-colors text-foreground rounded-md text-xs font-semibold border border-white/10 shadow-sm">
+                              <Video className="w-4 h-4 text-primary" /> Watch Recording
                             </button>
                           )}
                         </div>
-                        <span className="text-[10px] text-muted-foreground">{new Date(item.created_at).toLocaleString()}</span>
+                        <span className="text-xs text-muted-foreground font-medium">{new Date(item.created_at).toLocaleString()}</span>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                      {Object.keys(scores).length > 0 && (
+                        <div className="mb-6 flex flex-wrap gap-2">
+                          {Object.entries(scores).map(([key, value]) => (
+                            <span key={key} className="text-xs font-medium px-2.5 py-1 bg-white/5 border border-white/10 rounded-md text-muted-foreground capitalize">
+                              <span className="text-foreground">{key.replace(/_/g, " ")}:</span> {Math.round(Number(value))}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm mb-6">
                         {strengthsList.length > 0 && (
-                          <div>
-                            <h4 className="font-semibold text-green-400 mb-1 flex items-center gap-1">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                          <div className="bg-green-500/5 p-4 rounded-xl border border-green-500/10">
+                            <h4 className="font-semibold text-green-400 mb-2 flex items-center gap-1.5 text-base">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                               Strengths
                             </h4>
-                            <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">
+                            <ul className="list-disc pl-5 space-y-1.5 text-foreground/90">
                               {strengthsList.map((s: string, idx: number) => <li key={idx}>{s}</li>)}
                             </ul>
                           </div>
                         )}
                         {improvementList.length > 0 && (
-                          <div>
-                            <h4 className="font-semibold text-amber-400 mb-1 flex items-center gap-1">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                          <div className="bg-amber-500/5 p-4 rounded-xl border border-amber-500/10">
+                            <h4 className="font-semibold text-amber-400 mb-2 flex items-center gap-1.5 text-base">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                               Areas for Improvement
                             </h4>
-                            <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">
+                            <ul className="list-disc pl-5 space-y-1.5 text-foreground/90">
                               {improvementList.map((s: string, idx: number) => <li key={idx}>{s}</li>)}
                             </ul>
                           </div>
                         )}
+                        {suggestionsList.length > 0 && (
+                          <div className="bg-blue-500/5 p-4 rounded-xl border border-blue-500/10">
+                            <h4 className="font-semibold text-blue-400 mb-2 flex items-center gap-1.5 text-base">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>
+                              AI Suggestions
+                            </h4>
+                            <ul className="list-disc pl-5 space-y-1.5 text-foreground/90">
+                              {suggestionsList.map((s: string, idx: number) => <li key={idx}>{s}</li>)}
+                            </ul>
+                          </div>
+                        )}
                       </div>
+
+                      {transcript && (
+                        <div className="mt-2 bg-black/20 p-4 rounded-xl border border-border/50">
+                          <h4 className="font-semibold text-foreground mb-2 flex items-center gap-1.5 text-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                            Transcript
+                          </h4>
+                          <p className="text-sm text-muted-foreground leading-relaxed max-h-32 overflow-y-auto pr-2 custom-scrollbar italic">
+                            "{transcript}"
+                          </p>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
             </div>
           )}
-          {/* History Section */}
-          {/* ... existing code ... */}
 
-        </div>
       </div>
 
       <AnimatePresence>
