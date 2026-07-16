@@ -28,10 +28,13 @@ export function TopNav({ readiness }: TopNavProps) {
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="fixed top-0 left-80 right-0 h-16 z-30 glass-card border-b border-border bg-background flex items-center justify-between px-6"
+      className="fixed top-0 left-16 right-0 h-16 z-30 glass-card border-b border-border bg-background flex items-center justify-between px-6"
     >
-      {/* Left Section */}
-      <div className="flex-1 min-w-0">
+      {/* Left Section / Spacer */}
+      <div className="flex-1 min-w-0" />
+
+      {/* Centered Title */}
+      <div className="absolute left-1/2 transform -translate-x-1/2 z-10">
         <h1 className="text-lg font-semibold text-foreground truncate">
           Interview Preparation
         </h1>
