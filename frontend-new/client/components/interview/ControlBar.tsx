@@ -18,6 +18,7 @@ interface ControlBarProps {
   isAudioDenied?: boolean;
   isVideoDenied?: boolean;
   onRetryAudio?: () => void;
+  onRetryVideo?: () => void;
   onRetry?: () => void;
   hasTranscript?: boolean;
   mediaStream?: MediaStream | null;
