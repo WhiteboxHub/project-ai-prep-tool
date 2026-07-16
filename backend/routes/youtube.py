@@ -22,7 +22,7 @@ class UploadUrlRequest(BaseModel):
     selfDeclaredMadeForKids: bool = False
 
 class UpdateVideoUrlRequest(BaseModel):
-    local_id: str
+    eval_id: int
     video_id: str
 
 def get_youtube_access_token():
@@ -127,7 +127,6 @@ def update_video_url(req: UpdateVideoUrlRequest):
         print("Notice: YOUTUBE_PLAYLIST_ID not configured. Skipping playlist addition.")
 
     # 2. Update Database
-    target_local = f"local:{req.local_id}"
     youtube_url = f"https://www.youtube.com/watch?v={req.video_id}"
 
     import time
@@ -139,8 +138,8 @@ def update_video_url(req: UpdateVideoUrlRequest):
             # If the video upload finishes first, we need to wait for the record to exist.
             for _ in range(15):
                 cursor.execute(
-                    "UPDATE aiprep_tool_evaluations SET video_url = %s WHERE video_url = %s",
-                    (youtube_url, target_local)
+                    "UPDATE aiprep_tool_evaluations SET video_url = %s WHERE id = %s",
+                    (youtube_url, req.eval_id)
                 )
                 if cursor.rowcount > 0:
                     break

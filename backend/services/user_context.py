@@ -17,8 +17,16 @@ def get_user_api_context(user_id: str) -> dict:
         provider = None
 
         with conn.cursor() as cursor:
-            cid = int(user_id)
-            if cid:
+            marketing_id = int(user_id)
+            if marketing_id:
+                # Resolve the true candidate_id from candidate_marketing
+                cursor.execute(
+                    "SELECT candidate_id FROM candidate_marketing WHERE id = %s",
+                    (marketing_id,)
+                )
+                cm_row = cursor.fetchone()
+                real_candidate_id = cm_row["candidate_id"] if cm_row else marketing_id
+
                 cursor.execute(
                     """
                     SELECT api_key, provider_name FROM candidate_llm_api_keys
@@ -26,7 +34,7 @@ def get_user_api_context(user_id: str) -> dict:
                     ORDER BY updated_at DESC, id DESC
                     LIMIT 1
                     """,
-                    (cid,),
+                    (real_candidate_id,),
                 )
                 res = cursor.fetchone()
                 if res and res.get("api_key"):

@@ -100,7 +100,7 @@ def load_prompt(filename: str) -> str:
 # ---------------------------
 # INTRO EVALUATION
 # ---------------------------
-async def evaluate_intro(user_id: str, transcript: str, resume_data: dict = None, api_key: str = None) -> dict:
+async def evaluate_intro(user_id: str, transcript_raw: str, transcript_corrected: str, resume_data: dict = None, api_key: str = None) -> dict:
     system_prompt = load_prompt("intro_eval.txt")
 
     prompt = f"""
@@ -109,8 +109,11 @@ You MUST return valid JSON.
 Candidate Resume Data:
 {json.dumps(resume_data) if resume_data else "No resume provided."}
 
-Candidate Answer (Transcript):
-{transcript}
+RAW_TRANSCRIPT:
+{transcript_raw}
+
+CORRECTED_TRANSCRIPT:
+{transcript_corrected}
 """
 
     res_str = await call_llm_with_context(
@@ -127,7 +130,7 @@ Candidate Answer (Transcript):
 # ---------------------------
 # JD SPECIFIC INTRO EVALUATION
 # ---------------------------
-async def evaluate_intro_jd(user_id: str, transcript: str, resume_data: dict, job_description: str, api_key: str = None) -> dict:
+async def evaluate_intro_jd(user_id: str, transcript_raw: str, transcript_corrected: str, resume_data: dict, job_description: str, api_key: str = None) -> dict:
     system_prompt = load_prompt("jd_specific_intro.txt")
 
     prompt = f"""
@@ -137,8 +140,11 @@ JOB_DESCRIPTION:
 CANDIDATE_RESUME:
 {json.dumps(resume_data) if resume_data else "No resume provided."}
 
-CANDIDATE_TRANSCRIPT:
-{transcript}
+RAW_TRANSCRIPT:
+{transcript_raw}
+
+CORRECTED_TRANSCRIPT:
+{transcript_corrected}
 """
 
     res_str = await call_llm_with_context(

@@ -90,13 +90,17 @@ async def evaluate_audio_intro(
         with open(file_path, "wb") as f:
             f.write(await audio.read())
 
-        transcript = transcribe_audio(file_path, api_key=api_key)
+        transcript_data = transcribe_audio(file_path, api_key=api_key)
+        raw_text = transcript_data["raw_text"]
+        corrected_text = transcript_data["corrected_text"]
+        
         resume_data = fetch_resume_dict(session_id)
 
         if intro_type == "jd-specific":
             eval_result = await evaluate_intro_jd(
                 user_id=session_id,
-                transcript=transcript,
+                transcript_raw=raw_text,
+                transcript_corrected=corrected_text,
                 resume_data=resume_data,
                 job_description=job_description,
                 api_key=api_key
@@ -104,7 +108,8 @@ async def evaluate_audio_intro(
         else:
             eval_result = await evaluate_intro(
                 user_id=session_id,
-                transcript=transcript,
+                transcript_raw=raw_text,
+                transcript_corrected=corrected_text,
                 resume_data=resume_data,
                 api_key=api_key
             )
@@ -121,24 +126,26 @@ async def evaluate_audio_intro(
 
         conn = get_db_connection()
 
-        # Handle different response formats based on the prompt
-        if intro_type == "jd-specific":
-            raw_score = eval_result.get("score", 0)
-            passed = eval_result.get("passed", False)
-            feedback = eval_result.get("feedback", {})
-            raw_response = eval_result.get("raw_response", eval_result)
-            db_type = "intro_jd"
-        else:
-            raw_score = eval_result.get("overall_score", 0)
-            passed = eval_result.get("passed", False)
+        # The LLM now returns the exact db-friendly format for both general and jd-specific intros
+        raw_score = eval_result.get("score", eval_result.get("overall_score", 0))
+        passed = eval_result.get("passed", False)
+        feedback = eval_result.get("feedback", {})
+        
+        # Legacy fallback just in case
+        if not feedback and ("strengths" in eval_result or "weaknesses" in eval_result):
             feedback = {
                 "strengths": eval_result.get("strengths", []),
                 "weaknesses": eval_result.get("weaknesses", []),
                 "ai_suggestions": eval_result.get("ai_suggestions", []),
                 "improvement_areas": eval_result.get("improvement_areas", [])
             }
-            raw_response = eval_result
-            db_type = "intro"
+            
+        raw_response = eval_result.get("raw_response", eval_result)
+        if isinstance(raw_response, dict):
+            raw_response["transcript"] = raw_text
+            raw_response["corrected_transcript"] = corrected_text
+            
+        db_type = "intro_jd" if intro_type == "jd-specific" else "intro"
 
         try:
             score = float(raw_score)
@@ -160,11 +167,14 @@ async def evaluate_audio_intro(
                 json.dumps(raw_response),
                 video_url,
             ))
+            eval_id = cursor.lastrowid
 
         conn.commit()
 
         return {
-            "transcript": transcript,
+            "id": eval_id,
+            "transcript": raw_text,
+            "corrected_transcript": corrected_text,
             "evaluation": eval_result,
             "score": db_score,
             "passed": passed,
@@ -172,8 +182,20 @@ async def evaluate_audio_intro(
         }
 
     except Exception as e:
-        print("Intro Error:", str(e))
-        raise HTTPException(status_code=500, detail="Evaluation failed")
+        err_name = type(e).__name__
+        err_msg = str(e)
+        print("Intro Error:", err_name, err_msg)
+        if "RateLimitError" in err_name or "insufficient_quota" in err_msg or "quota" in err_msg.lower():
+            raise HTTPException(
+                status_code=402,
+                detail="Your OpenAI API key has no credits or has exceeded its quota. Please check your OpenAI billing details."
+            )
+        elif "AuthenticationError" in err_name or "invalid_api_key" in err_msg.lower():
+            raise HTTPException(
+                status_code=401,
+                detail="Your OpenAI API key is invalid. Please check your API key settings."
+            )
+        raise HTTPException(status_code=500, detail=f"Evaluation failed: {err_msg}")
 
     finally:
         if conn:
@@ -197,39 +219,47 @@ async def evaluate_text_intro(
             raise Exception("User not initialized")
 
         resume_data = fetch_resume_dict(session_id)
+        from services.speech_service import correct_technical_terms, GLOSSARY
+        corrected_text = correct_technical_terms(transcript, [], GLOSSARY)
 
         if intro_type == "jd-specific":
             eval_result = await evaluate_intro_jd(
                 user_id=session_id,
-                transcript=transcript,
+                transcript_raw=transcript,
+                transcript_corrected=corrected_text,
                 resume_data=resume_data,
                 job_description=job_description,
                 api_key=api_key
             )
-            
-            raw_score = eval_result.get("score", 0)
-            passed = eval_result.get("passed", False)
-            feedback = eval_result.get("feedback", {})
-            raw_response = eval_result.get("raw_response", eval_result)
-            db_type = "intro_jd"
         else:
             eval_result = await evaluate_intro(
                 user_id=session_id,
-                transcript=transcript,
+                transcript_raw=transcript,
+                transcript_corrected=corrected_text,
                 resume_data=resume_data,
                 api_key=api_key
             )
             
-            raw_score = eval_result.get("overall_score", 0)
-            passed = eval_result.get("passed", False)
+        # The LLM now returns the exact db-friendly format for both general and jd-specific intros
+        raw_score = eval_result.get("score", eval_result.get("overall_score", 0))
+        passed = eval_result.get("passed", False)
+        feedback = eval_result.get("feedback", {})
+        
+        # Legacy fallback just in case
+        if not feedback and ("strengths" in eval_result or "weaknesses" in eval_result):
             feedback = {
                 "strengths": eval_result.get("strengths", []),
                 "weaknesses": eval_result.get("weaknesses", []),
                 "ai_suggestions": eval_result.get("ai_suggestions", []),
                 "improvement_areas": eval_result.get("improvement_areas", [])
             }
-            raw_response = eval_result
-            db_type = "intro"
+            
+        raw_response = eval_result.get("raw_response", eval_result)
+        if isinstance(raw_response, dict):
+            raw_response["transcript"] = transcript
+            raw_response["corrected_transcript"] = corrected_text
+
+        db_type = "intro_jd" if intro_type == "jd-specific" else "intro"
 
         try:
             score = float(raw_score)
@@ -237,43 +267,52 @@ async def evaluate_text_intro(
             score = 0.0
 
         db_score = min(int(score), 100)
-        passed = db_score >= INTRO_PASS_SCORE
 
         conn = get_db_connection()
         try:
-            raw_response = {
-                "source": "text",
-                "transcript": transcript,
-                "evaluation": eval_result,
-            }
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    INSERT INTO aiprep_tool_evaluations
-                        (user_id, type, score, passed, feedback, raw_response, video_url)
+                    INSERT INTO aiprep_tool_evaluations (user_id, type, score, passed, feedback, raw_response, video_url)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """, (
                     session_id,
                     db_type,
                     db_score,
                     passed,
-                    json.dumps(feedback),
+                    json.dumps(_feedback_payload(eval_result)),
                     json.dumps(raw_response),
                     video_url
                 ))
+                eval_id = cursor.lastrowid
             conn.commit()
         finally:
             conn.close()
 
         return {
-            "evaluation": raw_response,
+            "id": eval_id,
+            "transcript": transcript,
+            "corrected_transcript": corrected_text,
+            "evaluation": eval_result,
             "score": db_score,
             "passed": passed,
-            "feedback": eval_result.get("feedback", [])
+            "video_url": video_url
         }
 
     except Exception as e:
-        print("Text Intro Error:", str(e))
-        raise HTTPException(status_code=500, detail="Evaluation failed")
+        err_name = type(e).__name__
+        err_msg = str(e)
+        print("Text Intro Error:", err_name, err_msg)
+        if "RateLimitError" in err_name or "insufficient_quota" in err_msg or "quota" in err_msg.lower():
+            raise HTTPException(
+                status_code=402,
+                detail="Your OpenAI API key has no credits or has exceeded its quota. Please check your OpenAI billing details."
+            )
+        elif "AuthenticationError" in err_name or "invalid_api_key" in err_msg.lower():
+            raise HTTPException(
+                status_code=401,
+                detail="Your OpenAI API key is invalid. Please check your API key settings."
+            )
+        raise HTTPException(status_code=500, detail=f"Evaluation failed: {err_msg}")
 
 
 # -----------------------------------
@@ -408,21 +447,32 @@ Generate the introduction.
 # 📜 HISTORY (FIXED)
 # -----------------------------------
 @router.get("/history")
-def get_intro_history(session_id: str):
+def get_intro_history(session_id: str, page: int = 1, limit: int = 20):
     conn = None
     try:
         conn = get_db_connection()
+        offset = (page - 1) * limit
 
         with conn.cursor() as cursor:
+            # Total count for pagination
+            cursor.execute("""
+                SELECT COUNT(*) as total
+                FROM aiprep_tool_evaluations
+                WHERE user_id = %s AND type IN ('intro', 'intro_jd', 'intro_eval', 'intro_eval_jd')
+            """, (session_id,))
+            total_count = cursor.fetchone()["total"]
+
             cursor.execute("""
                 SELECT id, score, feedback, raw_response, type, created_at, video_url
                 FROM aiprep_tool_evaluations
                 WHERE user_id = %s AND type IN ('intro', 'intro_jd', 'intro_eval', 'intro_eval_jd')
                 ORDER BY created_at DESC
-                LIMIT 20
-            """, (session_id,))
+                LIMIT %s OFFSET %s
+            """, (session_id, limit, offset))
 
             rows = [_serialize_intro_row(row) for row in cursor.fetchall()]
+
+        total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
 
         scores = [row.get("score") or 0 for row in rows]
         best_score = max(scores) if scores else 0
@@ -434,7 +484,13 @@ def get_intro_history(session_id: str):
             "history": rows or [],
             "best_score": best_score,
             "latest_score": latest_score,
-            "passed": passed
+            "passed": passed,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total_count": total_count,
+                "total_pages": total_pages
+            }
         }
 
     except Exception as e:
@@ -456,7 +512,7 @@ def get_intro_attempt(attempt_id: int, session_id: str):
                 SELECT id, user_id, type, score, passed, feedback,
                        raw_response, created_at, video_url
                 FROM aiprep_tool_evaluations
-                WHERE id = %s AND user_id = %s AND type = 'intro'
+                WHERE id = %s AND user_id = %s AND type IN ('intro', 'intro_jd', 'intro_eval', 'intro_eval_jd')
                 LIMIT 1
             """, (attempt_id, session_id))
             row = cursor.fetchone()
@@ -464,7 +520,7 @@ def get_intro_attempt(attempt_id: int, session_id: str):
         if not row:
             raise HTTPException(status_code=404, detail="Intro attempt not found")
 
-        return {"attempt": _serialize_intro_row(row)}
+        return _serialize_intro_row(row)
 
     except HTTPException:
         raise
