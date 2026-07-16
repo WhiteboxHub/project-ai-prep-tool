@@ -17,7 +17,7 @@ export function MainLayout({ children, readiness }: MainLayoutProps) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
-        className="ml-80 mt-16 p-6 min-h-[calc(100vh-4rem)] bg-gradient-to-br from-background via-background to-card/20"
+        className="ml-16 mt-16 p-6 min-h-[calc(100vh-4rem)] bg-gradient-to-br from-background via-background to-card/20"
       >
         {children}
       </motion.main>

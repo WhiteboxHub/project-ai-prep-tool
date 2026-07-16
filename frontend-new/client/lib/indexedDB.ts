@@ -47,7 +47,7 @@ export async function saveRecording(id: string, blob: Blob): Promise<void> {
  * Call this ONLY after evaluateIntroText() returns a successful result.
  * This is what triggers the service worker to pick it up.
  */
-export async function approveRecording(id: string): Promise<void> {
+export async function approveRecording(id: string, evalId?: number): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, "readwrite");
@@ -57,6 +57,7 @@ export async function approveRecording(id: string): Promise<void> {
       const record = getReq.result;
       if (!record) { resolve(); return; }
       record.approved = true;
+      if (evalId !== undefined) record.evalId = evalId;
       const putReq = store.put(record);
       putReq.onsuccess = () => resolve();
       putReq.onerror = () => reject(putReq.error);

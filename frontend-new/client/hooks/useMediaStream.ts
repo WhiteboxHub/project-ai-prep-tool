@@ -40,9 +40,9 @@ async function acquireMicStream(): Promise<MediaStream | null> {
     try {
       return await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: { ideal: true },
-          noiseSuppression: { ideal: true },
-          autoGainControl: { ideal: true },
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: true,
         },
       });
     } catch (firstErr: any) {
@@ -290,7 +290,7 @@ export function useMediaStream(requestOnMount = true) {
         const average = sum / dataArray.length;
 
         // Debounce thresholding
-        if (average > 25) { // 25 is a stricter threshold for ambient vs voice
+        if (average > 2) { // 2 is an ultra-low threshold to catch the quietest voices but ignore pure digital zero
           speakingFrames++;
           silenceFrames = 0;
           if (speakingFrames > 3) setIsSpeaking(true);

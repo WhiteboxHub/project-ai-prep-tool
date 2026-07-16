@@ -26,50 +26,40 @@ const navItems = [
 ];
 
 export function Sidebar() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { candidateName, initials } = useAuth();
 
-
-
   return (
     <motion.aside
       initial={false}
-      animate={{ width: isCollapsed ? 80 : 280 }}
-      className="fixed left-0 top-0 h-screen z-40 glass-card border-r border-border bg-gradient-to-b from-card/80 to-card/60 flex flex-col"
+      animate={{ width: isHovered ? 240 : 64 }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className="fixed left-0 top-0 h-screen z-50 glass-card border-r border-border bg-gradient-to-b from-card/95 to-card/75 flex flex-col shadow-2xl transition-shadow duration-300"
     >
       {/* Header */}
-      <div className="h-16 px-4 flex items-center justify-between border-b border-border/50">
-        {!isCollapsed && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-center gap-2"
-          >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-              <span className="text-xs font-bold text-white">WB</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-foreground">WBL</span>
-              <span className="text-xs text-muted-foreground">SmartPrep</span>
-            </div>
-          </motion.div>
-        )}
-        <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-1 hover:bg-white/10 rounded-lg transition-colors"
-        >
-          {isCollapsed ? (
-            <ChevronRight className="w-5 h-5" />
-          ) : (
-            <ChevronLeft className="w-5 h-5" />
+      <div className="h-16 px-4 flex items-center justify-start border-b border-border/50 overflow-hidden">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center flex-shrink-0 shadow-md shadow-primary/20">
+            <span className="text-xs font-bold text-white">WB</span>
+          </div>
+          {isHovered && (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex flex-col"
+            >
+              <span className="text-sm font-bold text-foreground leading-none">WBL</span>
+              <span className="text-[10px] text-muted-foreground mt-0.5 leading-none">SmartPrep</span>
+            </motion.div>
           )}
-        </button>
+        </div>
       </div>
 
       {/* Navigation Items */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-2">
+      <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.href;
@@ -80,10 +70,11 @@ export function Sidebar() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 className={cn(
-                  "relative px-3 py-2.5 rounded-lg flex items-center gap-3 cursor-pointer smooth-transition",
+                  "relative px-3 py-2.5 rounded-lg flex items-center gap-3 cursor-pointer smooth-transition overflow-hidden",
                   isActive
                     ? "bg-primary/20 text-primary glow-primary"
-                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                  isHovered ? "justify-start" : "justify-center"
                 )}
               >
                 {isActive && (
@@ -94,8 +85,14 @@ export function Sidebar() {
                   />
                 )}
                 <Icon className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && (
-                  <span className="text-sm font-medium">{item.label}</span>
+                {isHovered && (
+                  <motion.span
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="text-xs font-semibold whitespace-nowrap"
+                  >
+                    {item.label}
+                  </motion.span>
                 )}
               </motion.div>
             </Link>
@@ -104,7 +101,7 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-3 border-t border-border/50 space-y-2">
+      <div className="p-2 border-t border-border/50">
         {/* Logout button */}
         <button
           onClick={() => {
@@ -112,12 +109,20 @@ export function Sidebar() {
             window.location.href = "/";
           }}
           className={cn(
-            "w-full px-3 py-2 rounded-lg flex items-center gap-3 text-muted-foreground hover:bg-red-500/10 hover:text-red-400 smooth-transition",
-            isCollapsed ? "justify-center" : ""
+            "w-full px-3 py-2.5 rounded-lg flex items-center gap-3 text-muted-foreground hover:bg-red-500/10 hover:text-red-400 smooth-transition overflow-hidden",
+            isHovered ? "justify-start" : "justify-center"
           )}
         >
           <LogOut className="w-4 h-4 flex-shrink-0" />
-          {!isCollapsed && <span className="text-sm font-medium">Sign Out</span>}
+          {isHovered && (
+            <motion.span
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="text-xs font-semibold whitespace-nowrap"
+            >
+              Sign Out
+            </motion.span>
+          )}
         </button>
       </div>
     </motion.aside>

@@ -48,11 +48,15 @@ export default function Auth() {
           const hasApiKey = Boolean(summary?.has_api_key);
 
           // Update name from resume/DB if available
-          if (summary?.candidate_name) {
-            setCandidateName(summary.candidate_name);
-            if (summary.candidate_email) {
-              setSession(token, summary.candidate_name, summary.candidate_email);
+          if (summary?.candidate_name || summary?.candidate_email) {
+            if (summary?.candidate_name) {
+              setCandidateName(summary.candidate_name);
             }
+            setSession(
+              token, 
+              summary?.candidate_name || "Candidate", 
+              summary?.candidate_email || ""
+            );
             refresh();
           }
 
@@ -95,7 +99,7 @@ export default function Auth() {
           <>
             <div className="space-y-3">
               <Loader2 className="w-10 h-10 text-primary animate-spin mx-auto" />
-              <h2 className="text-xl font-bold text-foreground">Authenticating...</h2>
+              <h2 className="text-xl font-bold text-foreground">Loading...</h2>
               <p className="text-sm text-muted-foreground">
                 Syncing your profile from the WBL platform
               </p>

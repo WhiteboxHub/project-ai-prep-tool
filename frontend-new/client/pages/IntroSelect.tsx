@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { motion, AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
-import { FileText, Briefcase, ChevronRight, Lock, Loader2, Sparkles } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { FileText, Briefcase, ChevronRight, Lock, Loader2, Sparkles, ArrowRight } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { usePipeline } from "@/hooks/use-pipeline";
-import { getRecording } from "@/lib/indexedDB";
-import { Video, X } from "lucide-react";
 
 type IntroType = "general" | "jd-specific";
 
@@ -40,80 +38,19 @@ export default function IntroSelect() {
   const [jdText, setJdText] = useState("");
   const [history, setHistory] = useState<any[]>([]);
   
-  // Video Modal State
-  const [playingVideo, setPlayingVideo] = useState<{ url: string, isLocal: boolean } | null>(null);
-  const [videoSrc, setVideoSrc] = useState<string>("");
-
-  useEffect(() => {
-    return () => {
-      if (videoSrc && videoSrc.startsWith("blob:")) {
-        URL.revokeObjectURL(videoSrc);
-      }
-    };
-  }, [videoSrc]);
-
-  const handlePlayVideo = async (item: any) => {
-    let videoUrl = item.video_url;
-    
-    if (videoUrl.startsWith("local:")) {
-      const id = videoUrl.replace("local:", "");
-      const blob = await getRecording(id);
-      
-      if (blob) {
-        const url = URL.createObjectURL(blob);
-        setVideoSrc(url);
-        setPlayingVideo({ url: videoUrl, isLocal: true });
-      } else {
-        // If the local file is missing, the Service Worker may have uploaded it to YouTube and deleted the local copy.
-        // Let's refetch the history to see if the database was updated with the YouTube link!
-        try {
-          const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/intro/history?session_id=${sessionId}`);
-          if (res.ok) {
-            const data = await res.json();
-            const updatedHistory = data.history || [];
-            setHistory(updatedHistory);
-            
-            const updatedItem = updatedHistory.find((h: any) => h.id === item.id);
-            if (updatedItem && updatedItem.video_url && !updatedItem.video_url.startsWith("local:")) {
-              setVideoSrc(updatedItem.video_url);
-              setPlayingVideo({ url: updatedItem.video_url, isLocal: false });
-              return;
-            }
-          }
-        } catch (err) {
-          console.error("Failed to refetch history", err);
-        }
-        
-        alert("Video not found locally. It may have been deleted or recorded on another device.");
-      }
-    } else {
-      setVideoSrc(videoUrl);
-      setPlayingVideo({ url: videoUrl, isLocal: false });
-    }
-  };
-
-  const closeVideo = () => {
-    setPlayingVideo(null);
-    if (videoSrc.startsWith("blob:")) {
-      URL.revokeObjectURL(videoSrc);
-    }
-    setVideoSrc("");
-  };
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     if (!sessionId) return;
-    fetch(`${import.meta.env.VITE_API_URL || ""}/api/intro/history?session_id=${sessionId}`)
+    fetch(`${import.meta.env.VITE_API_URL || ""}/api/intro/history?session_id=${sessionId}&page=${currentPage}&limit=20`)
       .then(res => res.json())
-      .then(data => setHistory(data.history || []))
+      .then(data => {
+        setHistory(data.history || []);
+        if (data.pagination) setTotalPages(data.pagination.total_pages);
+      })
       .catch(console.error);
-  }, [sessionId]);
-
-  const getYouTubeId = (url: string) => {
-    if (!url) return null;
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-  };
+  }, [sessionId, currentPage]);
 
   if (loading) {
     return (
@@ -225,18 +162,42 @@ export default function IntroSelect() {
               <div className="space-y-4">
                 {history.map((item, i) => {
                   const parsedFeed = typeof item.feedback === "string" ? JSON.parse(item.feedback) : (item.feedback || {});
+                  const innerFeed = parsedFeed.feedback || parsedFeed;
                   const parsedResp = typeof item.raw_response === "string" ? JSON.parse(item.raw_response) : (item.raw_response || {});
                   const isJD = item.type === "intro_jd" || item.type === "intro_eval_jd";
                   
-                  const suggestionsList = parsedFeed.ai_suggestions || parsedResp.evaluation?.ai_suggestions || [];
-                  const scores = parsedResp.evaluation?.scores || {};
-                  const transcript = parsedResp.transcript || "";
-                  const strengthsList = parsedFeed.strengths || parsedResp.strengths || parsedResp.evaluation?.strengths || [];
-                  const improvementList = parsedFeed.improvement_areas || parsedResp.improvement_areas || parsedFeed.weaknesses || parsedResp.weaknesses || parsedResp.evaluation?.weaknesses || parsedResp.evaluation?.improvement_areas || [];
+                  const suggestionsList = innerFeed.ai_suggestions || parsedFeed.ai_suggestions || parsedResp.evaluation?.ai_suggestions || [];
+                  const strengthsList = innerFeed.strengths || parsedFeed.strengths || parsedResp.strengths || parsedResp.evaluation?.strengths || [];
+                  
+                  const techGapsRaw = innerFeed.technical_gaps || parsedFeed.technical_gaps || parsedResp.technical_gaps || parsedResp.evaluation?.technical_gaps;
+                  let techGapsList: string[] = [];
+                  if (techGapsRaw) {
+                    if (Array.isArray(techGapsRaw)) {
+                      techGapsList = techGapsRaw;
+                    } else if (typeof techGapsRaw === "object") {
+                      Object.values(techGapsRaw).forEach((val: any) => {
+                        if (Array.isArray(val)) techGapsList.push(...val);
+                      });
+                    }
+                  }
+                  const commNotesRaw = innerFeed.communication_notes || parsedFeed.communication_notes || parsedResp.communication_notes || parsedResp.evaluation?.communication_notes || [];
+                  const commNotesList = Array.isArray(commNotesRaw) ? commNotesRaw : [];
+                  const legacyWeak = innerFeed.improvement_areas || parsedFeed.improvement_areas || innerFeed.weaknesses || parsedFeed.weaknesses || parsedResp.improvement_areas || parsedResp.weaknesses || parsedResp.evaluation?.weaknesses || parsedResp.evaluation?.improvement_areas || [];
+                  
+                  const improvementList = [...legacyWeak, ...techGapsList, ...commNotesList];
+                  
+                  // Extract a high-level summary (e.g. the first suggestion or weakness)
+                  let summary = "No summary available.";
+                  if (suggestionsList.length > 0) summary = suggestionsList[0];
+                  else if (improvementList.length > 0) summary = improvementList[0];
+                  else if (strengthsList.length > 0) summary = strengthsList[0];
+                  
+                  // Truncate summary if it's too long
+                  if (summary.length > 120) summary = summary.substring(0, 120) + "...";
                   
                   return (
-                    <div key={item.id || i} className="bg-card/40 p-5 rounded-2xl border border-border/50 transition-all hover:bg-card/60">
-                      <div className="flex justify-between items-center mb-4">
+                    <div key={item.id || i} className="bg-card/40 rounded-2xl border border-border/50 transition-all hover:bg-card/60 p-5 flex flex-col gap-4">
+                      <div className="flex justify-between items-center">
                         <div className="flex flex-wrap items-center gap-3">
                           <span className={`px-3 py-1 text-xs font-bold rounded-full shadow-sm ${item.score >= 75 ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-amber-500/20 text-amber-400 border border-amber-500/30"}`}>
                             {item.score >= 75 ? "Passed" : "Needs Work"} ({item.score}/100)
@@ -244,118 +205,46 @@ export default function IntroSelect() {
                           <span className="text-xs font-semibold px-3 py-1 bg-primary/20 text-primary rounded-md uppercase tracking-wider border border-primary/30 shadow-sm">
                             {item.type ? item.type.replace(/_/g, ' ') : (isJD ? "JD Specific" : "General")}
                           </span>
-                          {item.video_url && (
-                            <button onClick={() => handlePlayVideo(item)} className="flex items-center gap-1.5 px-3 py-1 bg-white/10 hover:bg-white/20 transition-colors text-foreground rounded-md text-xs font-semibold border border-white/10 shadow-sm">
-                              <Video className="w-4 h-4 text-primary" /> Watch Recording
-                            </button>
-                          )}
                         </div>
                         <span className="text-xs text-muted-foreground font-medium">{new Date(item.created_at).toLocaleString()}</span>
                       </div>
                       
-                      {Object.keys(scores).length > 0 && (
-                        <div className="mb-6 flex flex-wrap gap-2">
-                          {Object.entries(scores).map(([key, value]) => (
-                            <span key={key} className="text-xs font-medium px-2.5 py-1 bg-white/5 border border-white/10 rounded-md text-muted-foreground capitalize">
-                              <span className="text-foreground">{key.replace(/_/g, " ")}:</span> {Math.round(Number(value))}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm mb-6">
-                        {strengthsList.length > 0 && (
-                          <div className="bg-green-500/5 p-4 rounded-xl border border-green-500/10">
-                            <h4 className="font-semibold text-green-400 mb-2 flex items-center gap-1.5 text-base">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                              Strengths
-                            </h4>
-                            <ul className="list-disc pl-5 space-y-1.5 text-foreground/90">
-                              {strengthsList.map((s: string, idx: number) => <li key={idx}>{s}</li>)}
-                            </ul>
-                          </div>
-                        )}
-                        {improvementList.length > 0 && (
-                          <div className="bg-amber-500/5 p-4 rounded-xl border border-amber-500/10">
-                            <h4 className="font-semibold text-amber-400 mb-2 flex items-center gap-1.5 text-base">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                              Areas for Improvement
-                            </h4>
-                            <ul className="list-disc pl-5 space-y-1.5 text-foreground/90">
-                              {improvementList.map((s: string, idx: number) => <li key={idx}>{s}</li>)}
-                            </ul>
-                          </div>
-                        )}
-                        {suggestionsList.length > 0 && (
-                          <div className="bg-blue-500/5 p-4 rounded-xl border border-blue-500/10">
-                            <h4 className="font-semibold text-blue-400 mb-2 flex items-center gap-1.5 text-base">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>
-                              AI Suggestions
-                            </h4>
-                            <ul className="list-disc pl-5 space-y-1.5 text-foreground/90">
-                              {suggestionsList.map((s: string, idx: number) => <li key={idx}>{s}</li>)}
-                            </ul>
-                          </div>
-                        )}
+                      <p className="text-sm text-foreground/80 italic">"{summary}"</p>
+                      
+                      <div className="flex justify-end pt-2 border-t border-border/30">
+                        <Link to={`/intro-detail/${item.id}`} className="text-sm font-semibold text-primary hover:text-primary/80 flex items-center gap-1">
+                          View Full Insights <ArrowRight className="w-4 h-4" />
+                        </Link>
                       </div>
-
-                      {transcript && (
-                        <div className="mt-2 bg-black/20 p-4 rounded-xl border border-border/50">
-                          <h4 className="font-semibold text-foreground mb-2 flex items-center gap-1.5 text-sm">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
-                            Transcript
-                          </h4>
-                          <p className="text-sm text-muted-foreground leading-relaxed max-h-32 overflow-y-auto pr-2 custom-scrollbar italic">
-                            "{transcript}"
-                          </p>
-                        </div>
-                      )}
                     </div>
                   );
                 })}
               </div>
-            </div>
-          )}
 
-      </div>
-
-      <AnimatePresence>
-        {playingVideo && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-card w-full max-w-4xl rounded-2xl overflow-hidden border border-border shadow-2xl">
-              <div className="flex justify-between items-center p-4 border-b border-border/50">
-                <h3 className="font-semibold text-foreground flex items-center gap-2">
-                  <Video className="w-5 h-5 text-primary" /> Practice Recording
-                </h3>
-                <button onClick={closeVideo} className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors text-muted-foreground hover:text-foreground">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="p-4 bg-black/50 flex justify-center">
-                {videoSrc && playingVideo.isLocal ? (
-                  <video src={videoSrc} controls autoPlay className="w-full h-auto max-h-[70vh] rounded-xl outline-none" />
-                ) : videoSrc && getYouTubeId(videoSrc) ? (
-                  <iframe
-                    className="w-full aspect-video max-h-[70vh] rounded-xl outline-none"
-                    src={`https://www.youtube.com/embed/${getYouTubeId(videoSrc)}`}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  ></iframe>
-                ) : videoSrc ? (
-                  <div className="p-8 text-center text-muted-foreground">
-                    Unsupported video format.
-                  </div>
-                ) : null}
-              </div>
-              {playingVideo.isLocal && (
-                <div className="p-3 text-xs text-center text-muted-foreground bg-primary/5 border-t border-primary/10">
-                  This video is stored locally in your browser.
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-6">
+                  <button 
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    className="px-4 py-2 bg-card/50 border border-border/50 rounded-lg text-sm font-semibold text-foreground hover:bg-card disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-muted-foreground font-medium">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button 
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage(prev => prev + 1)}
+                    className="px-4 py-2 bg-card/50 border border-border/50 rounded-lg text-sm font-semibold text-foreground hover:bg-card disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    Next
+                  </button>
                 </div>
               )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </div>
+          )}
+        </div>
     </MainLayout>
   );
 }

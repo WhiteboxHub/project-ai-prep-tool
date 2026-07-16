@@ -157,11 +157,17 @@ export function deleteLlmKey(keyId: number, sessionId: string) {
 
 // ─── Intro Evaluation ─────────────────────────────────────────────────────────
 
-export function evaluateIntro(sessionId: string, audioBlob: Blob, mimeType = "audio/webm") {
+export function evaluateIntro(sessionId: string, audioBlob: Blob, introType: string = "general", jdText: string = "", visionMetrics: any = null) {
   const form = new FormData();
   form.append("session_id", sessionId);
   form.append("audio", audioBlob, "recording.webm");
-  form.append("mime_type", mimeType);
+  form.append("intro_type", introType);
+  if (jdText) {
+    form.append("job_description", jdText);
+  }
+  if (visionMetrics) {
+    form.append("vision_metrics", JSON.stringify(visionMetrics));
+  }
   return postForm("/api/intro/evaluate", form);
 }
 

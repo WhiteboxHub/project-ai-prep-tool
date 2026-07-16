@@ -11,6 +11,8 @@ import InterviewSelect from "./pages/InterviewSelect";
 import InterviewRoom from "./pages/InterviewRoom";
 import IntroPracticeRoom from "./pages/IntroPracticeRoom";
 import IntroSelect from "./pages/IntroSelect";
+import IntroResult from "./pages/IntroResult";
+import IntroDetail from "./pages/IntroDetail";
 import Progress from "./pages/Progress";
 import MyHistory from "./pages/MyHistory";
 import Auth from "./pages/Auth";
@@ -38,13 +40,16 @@ if ('serviceWorker' in navigator) {
 }
 
 function SsoSync() {
-  const { sessionId, candidateEmail, refresh } = useAuth();
+  const { sessionId, candidateEmail, refresh, setIsSyncing } = useAuth();
   useEffect(() => {
     const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
     const hasToken = document.cookie.includes("wbl_access_token=");
     
     // In local dev without a cookie, /me will strictly return 401. Don't spam the network.
-    if (isLocal && !hasToken) return;
+    if (isLocal && !hasToken) {
+      setIsSyncing(false);
+      return;
+    }
 
     if (!sessionId || isNaN(Number(sessionId)) || !candidateEmail) {
       getCandidateMe().then((data) => {
@@ -54,16 +59,31 @@ function SsoSync() {
           // Replace URL cleanly without reloading page to clear ?token=
           window.history.replaceState({}, document.title, window.location.pathname);
         }
-      }).catch(() => {});
+      }).catch(() => {}).finally(() => {
+        setIsSyncing(false);
+      });
+    } else {
+      setIsSyncing(false);
     }
-  }, [sessionId, candidateEmail, refresh]);
+  }, [sessionId, candidateEmail, refresh, setIsSyncing]);
   return null;
 }
 
 // Guard: prompt to login from WBL if not authenticated
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, refresh } = useAuth();
+  const { isAuthenticated, isSyncing, refresh } = useAuth();
   const [manualToken, setManualToken] = useState("");
+
+  if (isSyncing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="animate-pulse flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
+          <p className="text-muted-foreground text-sm font-medium">Verifying Session...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
@@ -125,6 +145,8 @@ const App = () => (
               <Route path="/interview-room" element={<RequireAuth><InterviewRoom /></RequireAuth>} />
               <Route path="/intro-select" element={<RequireAuth><IntroSelect /></RequireAuth>} />
               <Route path="/intro-practice" element={<RequireAuth><IntroPracticeRoom /></RequireAuth>} />
+              <Route path="/intro-result" element={<RequireAuth><IntroResult /></RequireAuth>} />
+              <Route path="/intro-detail/:id" element={<RequireAuth><IntroDetail /></RequireAuth>} />
               <Route path="/history" element={<RequireAuth><MyHistory /></RequireAuth>} />
               <Route path="/progress" element={<RequireAuth><Progress /></RequireAuth>} />
               
