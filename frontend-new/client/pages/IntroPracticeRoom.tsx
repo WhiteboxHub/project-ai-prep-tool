@@ -5,7 +5,8 @@ import { useNavigate } from "react-router-dom";
 import { Mic, MicOff, Loader2, CheckCircle2, AlertCircle, ArrowRight, Volume2, Lock, Camera, VideoOff, RotateCcw, Zap, Sparkles } from "lucide-react";
 import { VideoPanel } from "@/components/interview/VideoPanel";
 import { ControlBar } from "@/components/interview/ControlBar";
-import { evaluateIntroText, getDynamicTemplate, getResumeSummary } from "@/lib/api";
+import { EvaluationLoadingScreen } from "@/components/interview/EvaluationLoadingScreen";
+import { evaluateIntro, evaluateIntroText, getDynamicTemplate, getResumeSummary } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { usePipeline } from "@/hooks/use-pipeline";
 import { useMediaStream } from "@/hooks/useMediaStream";
@@ -61,10 +62,14 @@ export default function IntroPracticeRoom() {
   showAutoSubmitModalRef.current = showAutoSubmitModal;
   const isFinalizingRef = useRef(false);
   isFinalizingRef.current = isFinalizing;
+  const recordingRef = useRef(false);
+  recordingRef.current = recording;
   const hasAskedScreenShareRef = useRef(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
+  const audioRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
   const recordingIdRef = useRef<string | null>(null);
   const recordingStartTimeRef = useRef<number>(0);
   const screenTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -77,6 +82,9 @@ export default function IntroPracticeRoom() {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
         mediaRecorderRef.current.stop();
+      }
+      if (audioRecorderRef.current && audioRecorderRef.current.state !== "inactive") {
+        audioRecorderRef.current.stop();
       }
       if (screenTrackRef.current) {
         try {
@@ -136,15 +144,252 @@ export default function IntroPracticeRoom() {
     }
   };
 
-  const triggerSilenceModal = () => {
-    setShowAutoSubmitModal(true);
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      try {
-        mediaRecorderRef.current.pause();
-      } catch (err) {
-        console.warn("Failed to pause MediaRecorder:", err);
-      }
+  // Hardware-based silence detection as a fallback
+  useEffect(() => {
+    if (!recording) {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      return;
     }
+
+    if (isCandidateSpeaking) {
+      // User is actively making noise, reset timer immediately.
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    } else {
+      // User stopped making noise. Start the countdown.
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = setTimeout(() => {
+        if (!showAutoSubmitModalRef.current && !isFinalizingRef.current) {
+          triggerSilenceModal();
+        }
+      }, 45000); // 45 seconds of pure hardware silence
+    }
+
+    return () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    };
+  }, [recording, isCandidateSpeaking]);
+
+  const triggerSilenceModal = () => {
+    if (isFinalizing) return;
+    // We intentionally DO NOT pause the MediaRecorder here to avoid WebM blob corruption or race conditions.
+    // The user can keep speaking (recorded in background) while deciding, ensuring no audio is lost.
+    setShowAutoSubmitModal(true);
+  };
+
+  const stopMediaRecording = (): Promise<{ videoBlob: Blob | null; audioBlob: Blob | null }> => {
+    return new Promise((resolve) => {
+      let videoBlob: Blob | null = null;
+      let audioBlob: Blob | null = null;
+
+      let videoStopped = false;
+      let audioStopped = false;
+
+      const checkDone = () => {
+        if (videoStopped && audioStopped) {
+          resolve({ videoBlob, audioBlob });
+        }
+      };
+
+      // 1. Stop video recorder
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        const id = recordingIdRef.current;
+        const duration = Date.now() - recordingStartTimeRef.current;
+        mediaRecorderRef.current.onstop = async () => {
+          if (!id) {
+            videoStopped = true;
+            checkDone();
+            return;
+          }
+          const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+          if (duration < 3000) {
+            // Skip fixing duration for short recordings to prevent corrupt WebM file metadata
+            await saveRecording(id, blob);
+            setRecordedVideoUrl(`local:${id}`);
+            videoBlob = blob;
+            videoStopped = true;
+            checkDone();
+            return;
+          }
+
+          let resolved = false;
+          const handleVideoResolved = (finalBlob: Blob) => {
+            if (resolved) return;
+            resolved = true;
+            videoBlob = finalBlob;
+            videoStopped = true;
+            checkDone();
+          };
+
+          // Safety timeout: if duration fixing takes > 2000ms, resolve with original blob
+          const safetyTimeout = setTimeout(() => {
+            console.warn("fixWebmDuration timed out, resolving with original blob");
+            saveRecording(id, blob).catch(e => console.error(e));
+            setRecordedVideoUrl(`local:${id}`);
+            handleVideoResolved(blob);
+          }, 2000);
+
+          try {
+            fixWebmDuration(blob, duration, async (fixedBlob: Blob) => {
+              clearTimeout(safetyTimeout);
+              if (!resolved) {
+                await saveRecording(id, fixedBlob);
+                setRecordedVideoUrl(`local:${id}`);
+                handleVideoResolved(fixedBlob);
+              }
+            });
+          } catch (err) {
+            clearTimeout(safetyTimeout);
+            console.error("Failed to fix blob duration", err);
+            handleVideoResolved(blob);
+          }
+        };
+        mediaRecorderRef.current.stop();
+      } else {
+        videoStopped = true;
+      }
+
+      // 2. Stop audio recorder
+      if (audioRecorderRef.current && audioRecorderRef.current.state !== "inactive") {
+        audioRecorderRef.current.onstop = () => {
+          audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          audioStopped = true;
+          checkDone();
+        };
+        audioRecorderRef.current.stop();
+      } else {
+        audioStopped = true;
+      }
+
+      checkDone();
+    });
+  };
+
+  const stopRecognition = (delaySeconds = 0, callback?: (videoBlob?: Blob | null, audioBlob?: Blob | null) => void) => {
+    if (isFinalizing) return;
+    
+    if (delaySeconds > 0) {
+      setIsFinalizing(true);
+      toast.info("Finalizing transcription... Please wait.", { id: "finalizing", duration: delaySeconds * 1000 });
+      setTimeout(() => {
+        setIsFinalizing(false);
+        toast.dismiss("finalizing");
+        executeStop(callback);
+      }, delaySeconds * 1000);
+    } else {
+      executeStop(callback);
+    }
+  };
+
+  const executeStop = async (callback?: (videoBlob?: Blob | null, audioBlob?: Blob | null) => void) => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) {}
+      recognitionRef.current = null;
+    }
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    setRecording(false);
+    const { videoBlob, audioBlob } = await stopMediaRecording();
+    if (callback) callback(videoBlob, audioBlob);
+  };
+
+  const submitAnswer = async (videoBlob?: Blob | null, audioBlob?: Blob | null) => {
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+    setLoading(true);
+    setError("");
+
+    try {
+      let finalBlob = videoBlob;
+      // Fallback: If for some reason videoBlob wasn't passed down, reconstruct it from chunks
+      if (!finalBlob && recordedChunksRef.current && recordedChunksRef.current.length > 0) {
+        finalBlob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+      }
+
+      if (!finalBlob) {
+        throw new Error("No audio/video recorded. Please check your microphone permissions and try again.");
+      }
+
+      const introType = sessionStorage.getItem("introType") || "general";
+      const jdText = sessionStorage.getItem("jobDescription") || "";
+      
+      // Submit the lightweight audio-only WebM blob to the backend Whisper evaluator
+      // fallback to the full videoWebm blob only if audio-only blob is not present
+      const uploadBlob = audioBlob || finalBlob;
+      const res = await evaluateIntro(sessionId, uploadBlob, introType, jdText);
+      setResult(res);
+
+      const localId = recordingIdRef.current;
+      if (localId && res && res.id) {
+        try {
+          await approveRecording(localId, res.id);
+          if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({ type: 'RECORDING_APPROVED' });
+          }
+        } catch (err) {
+          console.error("Failed to approve recording for background upload:", err);
+        }
+      }
+
+      const score = res.score !== undefined ? res.score : res.evaluation?.overall_score || 0;
+      let msg = score >= 75 ? `Excellent work! You scored ${score} out of 100.` : `You scored ${score} out of 100.`;
+      
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: "ai", text: msg }]);
+
+      if (res.transcript) {
+        setTranscript(res.transcript);
+        setInterimTranscript("");
+      }
+
+      navigate("/intro-result", { state: { result: res }, replace: true });
+    } catch (e: any) {
+      let errorMsg = "An unexpected error occurred.";
+      if (e instanceof Error) {
+        if (e.message === "Unauthorized") errorMsg = "Session expired. Please log in again.";
+        else errorMsg = e.message;
+      } else if (typeof e === "string") {
+        errorMsg = e;
+      }
+      setError(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRetry = () => {
+    // 1. Reset loading/finalizing states
+    setLoading(false);
+    setIsFinalizing(false);
+
+    // 2. Stop speech recognition if running
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) {}
+      recognitionRef.current = null;
+    }
+
+    // 3. Stop media recorders if running
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try { mediaRecorderRef.current.stop(); } catch (e) {}
+    }
+    if (audioRecorderRef.current && audioRecorderRef.current.state !== "inactive") {
+      try { audioRecorderRef.current.stop(); } catch (e) {}
+    }
+
+    // 4. Clear audio buffers
+    recordedChunksRef.current = [];
+    audioChunksRef.current = [];
+    recordingIdRef.current = null;
+
+    // 5. Reset recording/preview state
+    setRecording(false);
+    setResult(null);
+    setTranscript("");
+    setInterimTranscript("");
+    transcriptRef.current = "";
+    interimRef.current = "";
+    setRecordedVideoUrl(null);
+    setError("");
+
+    // 6. Reset welcome message
+    setMessages([{ role: "ai", id: "welcome", text: "Welcome back! Ready for another try?" }]);
   };
 
   const startRecognition = async () => {
@@ -152,13 +397,37 @@ export default function IntroPracticeRoom() {
 
     // ─────────────────────────────────────────────────────────────
     // STEP 1: Server reachability + LLM API key check
-    // Nothing starts until this passes.
     // ─────────────────────────────────────────────────────────────
     const ready = await checkSessionReady();
     if (!ready) return;
 
     // ─────────────────────────────────────────────────────────────
-    // STEP 2: Browser speech recognition support check
+    // STEP 2: Request screen share FIRST
+    // This removes the time delay between when SpeechRecognition starts
+    // and when MediaRecorder starts.
+    // ─────────────────────────────────────────────────────────────
+    let activeVideoTrack: MediaStreamTrack | null = null;
+    if (screenTrackRef.current && screenTrackRef.current.readyState === "live") {
+      activeVideoTrack = screenTrackRef.current;
+    } else if (!hasAskedScreenShareRef.current) {
+      hasAskedScreenShareRef.current = true;
+      try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser" } });
+        activeVideoTrack = screenStream.getVideoTracks()[0];
+        screenTrackRef.current = activeVideoTrack;
+        activeVideoTrack.addEventListener("ended", () => {
+          screenTrackRef.current = null;
+        });
+      } catch (err) {
+        console.warn("Screen share denied or failed, using black canvas fallback.", err);
+        toast.error("Screen recording is recommended. Falling back to black background.", { id: "screen-share-toast" });
+      }
+    } else {
+      activeVideoTrack = screenTrackRef.current;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // STEP 3: Browser speech recognition support check
     // ─────────────────────────────────────────────────────────────
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
@@ -182,64 +451,63 @@ export default function IntroPracticeRoom() {
       setMessages([{ role: "ai", id: "welcome", text: "Welcome back! Ready for another try?" }]);
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // STEP 3: Start speech recognition
-    // Screen share + MediaRecorder only start AFTER mic confirms live
-    // via rec.onstart — so if mic is denied we don't ask for screen share.
-    // ─────────────────────────────────────────────────────────────
     const rec = new SR();
-    // Using continuous = false with an auto-restart loop in onend is the industry standard 
-    // workaround for Chrome's webkitSpeechRecognition dropping words during long dictations.
-    rec.continuous = false;
+    rec.continuous = true;
     rec.interimResults = true;
     rec.lang = "en-US";
 
     rec.onstart = async () => {
       // ───────────────────────────────────────────────────────────
-      // STEP 4: Mic is confirmed live — now start screen share + recorder
+      // STEP 4: Mic is confirmed live — now start recorder immediately
       // ───────────────────────────────────────────────────────────
       setRecording(true);
+      
+      const currentVideoTrack = screenTrackRef.current;
 
-      // 4a. Request or reuse screen share
-      let fallbackVideoTrack: MediaStreamTrack | null = null;
-      if (screenTrackRef.current && screenTrackRef.current.readyState === "live") {
-        fallbackVideoTrack = screenTrackRef.current;
-      } else if (!hasAskedScreenShareRef.current) {
-        hasAskedScreenShareRef.current = true;
-        try {
-          const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser" } });
-          fallbackVideoTrack = screenStream.getVideoTracks()[0];
-          screenTrackRef.current = fallbackVideoTrack;
-          fallbackVideoTrack.addEventListener("ended", () => {
-            screenTrackRef.current = null;
-          });
-        } catch (err) {
-          console.warn("Screen share denied or failed, using black canvas fallback.", err);
-          toast.error("Screen recording is recommended. Falling back to black background.", { id: "screen-share-toast" });
-        }
-      }
-
-      // 4b. Start MediaRecorder
+      // Start MediaRecorder
       if (stream && (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive")) {
         recordedChunksRef.current = [];
         recordingIdRef.current = crypto.randomUUID();
         try {
           let finalStream = stream;
+          const webcamTrack = stream.getVideoTracks()[0];
 
-          if (fallbackVideoTrack) {
+          // Start parallel audio-only recorder for backend Whisper to avoid network lag
+          const audioStream = new MediaStream(stream.getAudioTracks());
+          const audioOptions = { mimeType: "audio/webm" };
+          try {
+            const audioRecorder = new MediaRecorder(audioStream, audioOptions);
+            audioChunksRef.current = [];
+            audioRecorder.ondataavailable = (e) => {
+              if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+            };
+            audioRecorder.start();
+            audioRecorderRef.current = audioRecorder;
+          } catch (audioErr) {
+            console.warn("Failed to start audio-only recorder, will fallback to extracting audio from video blob", audioErr);
+            audioRecorderRef.current = null;
+          }
+
+          if (currentVideoTrack) {
             finalStream = new MediaStream([
               ...stream.getAudioTracks(),
-              fallbackVideoTrack
+              currentVideoTrack
             ]);
             // Stop recording cleanly if the user stops screen sharing from the browser UI
             // @ts-ignore
-            if (!fallbackVideoTrack.stopRecognitionAttached) {
-              fallbackVideoTrack.addEventListener("ended", () => {
+            if (!currentVideoTrack.stopRecognitionAttached) {
+              currentVideoTrack.addEventListener("ended", () => {
                 stopRecognition();
               });
               // @ts-ignore
-              fallbackVideoTrack.stopRecognitionAttached = true;
+              currentVideoTrack.stopRecognitionAttached = true;
             }
+          } else if (webcamTrack && webcamTrack.readyState === "live") {
+            // Use hardware webcam video track directly — hardware stream, no CPU throttling!
+            finalStream = new MediaStream([
+              ...stream.getAudioTracks(),
+              webcamTrack
+            ]);
           } else {
             // Fallback: animated black canvas so YouTube gets real video frames
             const canvas = document.createElement("canvas");
@@ -282,7 +550,7 @@ export default function IntroPracticeRoom() {
             recorder.addEventListener("stop", (window as any).__stopCanvas);
             delete (window as any).__stopCanvas;
           }
-          recorder.start(1000);
+          recorder.start();
           recordingStartTimeRef.current = Date.now();
           mediaRecorderRef.current = recorder;
         } catch (err) {
@@ -290,17 +558,21 @@ export default function IntroPracticeRoom() {
           setError("Failed to start video recording. Please check your camera permissions.");
         }
       }
-
-      // 4c. Start silence/auto-submit timer (5 seconds)
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = setTimeout(() => {
-        triggerSilenceModal();
-      }, 5000);
     };
 
     rec.onresult = (e: any) => {
-      // Ignore results and do not reset timers if the silence modal is already visible
-      if (showAutoSubmitModalRef.current) return;
+      // If speech is detected while the silence warning is visible, automatically dismiss it
+      if (showAutoSubmitModalRef.current) {
+        setShowAutoSubmitModal(false);
+      }
+
+      // Reset the silence timer if the speech recognition engine detects speech
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = setTimeout(() => {
+        if (!showAutoSubmitModalRef.current && !isFinalizingRef.current) {
+          triggerSilenceModal();
+        }
+      }, 45000); // 45 seconds of silence before warning, giving the candidate ample time to think
 
       let final = "";
       let interim = "";
@@ -317,36 +589,35 @@ export default function IntroPracticeRoom() {
       }
       setInterimTranscript(interim);
       interimRef.current = interim;
-
-      // Reset silence timer on every speech result (5 seconds)
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = setTimeout(() => {
-        triggerSilenceModal();
-      }, 5000);
     };
 
     rec.onerror = (e: any) => {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      setRecording(false);
-      // Stop any MediaRecorder that may have started
-      stopMediaRecording();
-
-      if (e.error === "no-speech") {
-        // Non-fatal — user can stay silent, ignore
+      console.warn("Speech recognition error:", e.error);
+      
+      // We NEVER stop the MediaRecorder or end the user's practice session due to browser SpeechRecognition errors.
+      // SpeechRecognition is a local UI enhancement; the actual evaluation relies on backend Whisper transcribing the recorded audio.
+      if (e.error === "not-allowed") {
+        setError("Microphone access denied. Please allow it in the browser address bar.");
+        // True fatal microphone access error — stop everything
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        setRecording(false);
+        stopMediaRecording();
       } else if (e.error === "audio-capture") {
         setError("No microphone found. Please ensure your microphone is plugged in.");
-      } else if (e.error === "not-allowed") {
-        setError("Microphone access denied. Please allow it in the browser address bar.");
-      } else if (e.error === "network") {
-        setError("Network error: Speech recognition requires an internet connection.");
+        // True fatal microphone capture error — stop everything
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        setRecording(false);
+        stopMediaRecording();
       } else {
-        setError(`Speech recognition error: ${e.error}`);
+        // Other errors (e.g. aborted, no-speech, network) are non-fatal to the video recording.
+        // We do not stop the MediaRecorder. The user's audio is still being captured.
+        console.log(`Non-fatal Speech recognition error: ${e.error}`);
       }
     };
 
     rec.onend = () => {
-      // If we are finalizing the submission, let it die gracefully.
-      if (isFinalizingRef.current) {
+      // If we are finalizing the submission or recording has been stopped, let it die gracefully.
+      if (isFinalizingRef.current || !recordingRef.current) {
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         setRecording(false);
       } else {
@@ -360,12 +631,26 @@ export default function IntroPracticeRoom() {
            setInterimTranscript("");
            interimRef.current = "";
         }
-        try {
-          // Restart immediately to catch the next phrase
-          recognitionRef.current?.start();
-        } catch (e) {
-          console.error("Auto-restart failed", e);
-        }
+        
+        // Debounce restart by 50ms to let the browser release the mic lock, with a 500ms backup retry
+        setTimeout(() => {
+          try {
+            if (recordingRef.current && recognitionRef.current) {
+              recognitionRef.current.start();
+            }
+          } catch (e) {
+            console.warn("Speech recognition auto-restart failed, retrying in 500ms...", e);
+            setTimeout(() => {
+              try {
+                if (recordingRef.current && recognitionRef.current) {
+                  recognitionRef.current.start();
+                }
+              } catch (retryErr) {
+                console.error("Speech recognition backup auto-restart failed:", retryErr);
+              }
+            }, 500);
+          }
+        }, 50);
       }
     };
 
@@ -383,121 +668,7 @@ export default function IntroPracticeRoom() {
   };
 
 
-  const stopMediaRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      const id = recordingIdRef.current;
-      const duration = Date.now() - recordingStartTimeRef.current;
-      mediaRecorderRef.current.onstop = async () => {
-        if (!id) return;
-        // The blob is guaranteed to be a video since we inject a canvas track if missing
-        const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-        try {
-          // Fix WebM duration metadata (missing in Chrome MediaRecorder) which causes YouTube to abandon processing
-          fixWebmDuration(blob, duration, async (fixedBlob: Blob) => {
-            await saveRecording(id, fixedBlob);
-            setRecordedVideoUrl(`local:${id}`);
-            // Service Worker is NOT notified here; we wait for a successful LLM evaluation before approving the upload.
-          });
-        } catch (err) {
-          console.error("Failed to save recording", err);
-        }
-      };
-      mediaRecorderRef.current.stop();
-    }
-  };
 
-  const stopRecognition = (delaySeconds = 0, callback?: () => void) => {
-    if (isFinalizing) return;
-    
-    if (delaySeconds > 0) {
-      setIsFinalizing(true);
-      toast.info("Finalizing transcription... Please wait.", { id: "finalizing", duration: delaySeconds * 1000 });
-      setTimeout(() => {
-        setIsFinalizing(false);
-        toast.dismiss("finalizing");
-        executeStop(callback);
-      }, delaySeconds * 1000);
-    } else {
-      executeStop(callback);
-    }
-  };
-
-  const executeStop = (callback?: () => void) => {
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch (e) {}
-      recognitionRef.current = null;
-    }
-    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    setRecording(false);
-    stopMediaRecording();
-    if (callback) callback();
-  };
-
-  const submitAnswer = async (textToSubmit?: string) => {
-    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    
-    // Append any unfinalized interim text to ensure we don't drop the last sentence
-    const finalTranscript = textToSubmit || (transcriptRef.current + " " + interimRef.current).trim();
-    
-    if (!finalTranscript) {
-      setError("Please record your answer using the microphone."); return; }
-    if (!sessionId) return;
-
-    // Save user's transcript to chat history
-    setMessages(prev => [...prev, { id: Date.now().toString(), role: "user", text: finalTranscript.trim() }]);
-    setTranscript("");
-    setInterimTranscript("");
-    transcriptRef.current = "";
-
-    setLoading(true);
-    setError("");
-    const userText = finalTranscript.trim();
-
-    try {
-      const introType = sessionStorage.getItem("introType") || "general";
-      const jdText = sessionStorage.getItem("jobDescription") || "";
-      
-      // Determine the final video URL. Prioritize the synchronously generated ID if recording was active.
-      const localId = recordingIdRef.current;
-      const finalVideoUrl = localId ? `local:${localId}` : recordedVideoUrl;
-      
-      const res = await evaluateIntroText(sessionId, userText, introType, jdText, finalVideoUrl);
-      setResult(res);
-
-      // Now that the evaluation was successful, approve the recording and trigger the Service Worker upload
-      if (localId) {
-        try {
-          await approveRecording(localId);
-          if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.controller.postMessage({ type: 'RECORDING_APPROVED' });
-          }
-        } catch (err) {
-          console.error("Failed to approve recording for background upload:", err);
-        }
-      }
-
-      const score = res.score !== undefined ? res.score : res.evaluation?.overall_score || 0;
-      let msg = "";
-      if (score >= 75) {
-        msg = `Excellent work! You scored ${score} out of 100. Your introduction practice is complete, and technical interviews are now unlocked!`;
-      } else {
-        msg = `You scored ${score} out of 100. Check the feedback panel for tips on how to improve your delivery and content.`;
-      }
-      
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: "ai", text: msg }]);
-    } catch (e: any) {
-      let errorMsg = "Evaluation failed. Please try again.";
-      if (e?.message && typeof e.message === "string") {
-        if (e.message.includes("[object Object]")) errorMsg = "Server evaluation error. Please check your transcript and try again.";
-        else errorMsg = e.message;
-      } else if (typeof e === "string") {
-        errorMsg = e;
-      }
-      setError(errorMsg);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleExit = () => {
     if ((transcript || interimTranscript) && !result) {
@@ -591,22 +762,6 @@ export default function IntroPracticeRoom() {
               </div>
             </motion.div>
           )}
-
-          {loading && !transcript && !interimTranscript && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="flex gap-3 max-w-[90%] mr-auto"
-            >
-              <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-primary text-primary-foreground shadow-lg">
-                <Loader2 className="w-4 h-4 animate-spin" />
-              </div>
-              <div className="px-4 py-2.5 rounded-2xl text-sm leading-relaxed bg-card/95 shadow-lg border border-border/50 rounded-tl-none text-muted-foreground flex items-center gap-2">
-                Evaluating introduction delivery...
-              </div>
-            </motion.div>
-          )}
         </AnimatePresence>
       </div>
     </div>
@@ -617,7 +772,7 @@ export default function IntroPracticeRoom() {
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-card to-secondary/5" />
       <div className="relative z-20 flex items-center justify-between px-4 py-3 border-b border-border/30 bg-background/50 backdrop-blur-md">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-foreground">AI Coach</span>
+          <span className="font-semibold text-foreground">Interviewer</span>
           {isAISpeaking && (
             <div className="flex gap-1 ml-2">
               {[0, 1, 2].map((idx) => (
@@ -655,76 +810,16 @@ export default function IntroPracticeRoom() {
   return (
     <div className="w-screen h-screen bg-gradient-to-br from-background via-card/30 to-background overflow-hidden flex">
 
-      {/* ── Auto-Submit Modal ── */}
-      <AnimatePresence>
-        {showAutoSubmitModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm"
-          >
-            <motion.div
-              initial={{ scale: 0.85, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.85, opacity: 0 }}
-              transition={{ type: "spring", damping: 20, stiffness: 300 }}
-              className="glass-card p-8 rounded-2xl border border-border/50 shadow-2xl max-w-sm w-full mx-4 text-center"
-            >
-              <div className="w-14 h-14 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl"> 🔇 </span>
-              </div>
-              <h3 className="text-lg font-bold text-foreground mb-2">Silence Detected</h3>
-              <p className="text-sm text-muted-foreground mb-6">It looks like you've stopped speaking. Would you like to submit your answer for evaluation?</p>
-              <div className="flex gap-3">
-                <motion.button
-                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    setShowAutoSubmitModal(false);
-                    // Resume MediaRecorder to continue recording
-                    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "paused") {
-                      try {
-                        mediaRecorderRef.current.resume();
-                      } catch (err) {
-                        console.warn("Failed to resume MediaRecorder:", err);
-                      }
-                    }
-                    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-                    // Give 5 more seconds before showing silence warning again
-                    silenceTimerRef.current = setTimeout(() => triggerSilenceModal(), 5000);
-                  }}
-                  className="flex-1 py-2.5 rounded-xl border border-border/50 text-muted-foreground hover:text-foreground hover:bg-white/5 text-sm font-semibold transition-all"
-                >
-                  Keep Going
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    setShowAutoSubmitModal(false);
-                    // Resume MediaRecorder so it has a clean state to stop
-                    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "paused") {
-                      try {
-                        mediaRecorderRef.current.resume();
-                      } catch (err) {
-                        console.warn("Failed to resume MediaRecorder before submission:", err);
-                      }
-                    }
-                    if (recording) stopRecognition(0, () => submitAnswer());
-                    else submitAnswer();
-                  }}
-                  className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-[0_0_15px_rgba(124,58,237,0.4)] hover:shadow-[0_0_20px_rgba(124,58,237,0.6)] transition-all"
-                >
-                  Submit Answer
-                </motion.button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <EvaluationLoadingScreen isVisible={loading || isFinalizing} />
+
+      {/* Title */}
+      <h3 className="absolute top-6 left-6 font-semibold text-foreground text-lg z-50">
+        Intro Practice
+      </h3>
 
       {/* Left side: Video Panels */}
-      <div className="flex-1 p-6 flex flex-col items-center justify-center relative transition-all mr-80">
-        <div className="hidden md:flex gap-4 w-full max-w-5xl h-full max-h-[calc(100vh-180px)]">
+      <div className="flex-1 p-6 flex flex-col items-center justify-center relative transition-all w-full mt-8">
+        <div className="hidden md:flex gap-6 w-full h-full max-h-[calc(100vh-180px)]">
           <div className={`transition-all duration-500 ease-in-out ${focusedPanel === "candidate" ? "flex-1" : focusedPanel === "ai" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>
             <VideoPanel 
               title={candidateName} 
@@ -755,6 +850,48 @@ export default function IntroPracticeRoom() {
           )}
 
           {/* Chat Interface removed from here - now inside AI Coach Panel */}
+
+          {/* ── Small Silence Popup ── */}
+          <AnimatePresence>
+            {showAutoSubmitModal && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                className="flex items-center gap-4 px-4 py-3 rounded-full bg-card/90 border border-amber-500/20 backdrop-blur-md shadow-xl"
+              >
+                <div className="flex items-center gap-2 text-sm text-foreground font-medium">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                  </span>
+                  Silence detected. Still there?
+                </div>
+                <div className="flex items-center gap-1.5 pl-3 border-l border-border/50">
+                  <button
+                    onClick={() => {
+                      setShowAutoSubmitModal(false);
+                      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+                      silenceTimerRef.current = setTimeout(() => triggerSilenceModal(), 15000);
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-full hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Keep Going
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAutoSubmitModal(false);
+                      if (recording) stopRecognition(0, (blob) => submitAnswer(blob));
+                      else submitAnswer();
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold rounded-full bg-primary/90 hover:bg-primary text-primary-foreground shadow-sm hover:shadow-md transition-all"
+                  >
+                    Submit
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Device status chips — above ControlBar */}
           {(audioState === "denied" || videoState === "denied") && (
@@ -795,196 +932,23 @@ export default function IntroPracticeRoom() {
               setIsCameraOn(enabled);
               toggleVideo(enabled);
             }}
-            onRecordToggle={() => {
-              if (isFinalizing) return;
-              if (recording) stopRecognition(6);
+            onRecordToggle={(!result && !loading && !isFinalizing) ? () => {
+              if (recording) stopRecognition();
               else startRecognition();
-            }}
+            } : undefined}
+            onSubmit={(!result && !loading && !isFinalizing && recording) ? () => {
+              stopRecognition(0, (blob) => submitAnswer(blob));
+            } : undefined}
             isRecording={recording || isFinalizing}
             isAudioDenied={audioState === "denied"}
             isVideoDenied={videoState === "denied"}
             onRetryAudio={requestAudio}
             onRetryVideo={requestVideo}
             wrapperClassName="relative"
-            onSubmit={(!result && !loading && !isFinalizing) ? () => {
-              if (recording) stopRecognition(0, () => submitAnswer());
-              else submitAnswer();
-            } : undefined}
-            onRetry={(!result && !loading) ? startRecognition : undefined}
+            onRetry={(!loading && !isFinalizing) ? handleRetry : undefined}
             hasTranscript={!!transcript}
+            mediaStream={stream}
           />
-        </div>
-      </div>
-
-      {/* Right panel — flex column, no scroll on outer, inner template scrolls */}
-      <div className="fixed right-0 top-0 bottom-0 w-80 bg-card/80 backdrop-blur-xl border-l border-border/50 p-6 flex flex-col z-30 shadow-2xl overflow-hidden">
-        <h3 className="font-semibold text-foreground mb-4 text-lg flex-shrink-0">Intro Practice</h3>
-
-        {/* Template card: fills all space between heading and Exit button */}
-        {template && !result && (
-          <div className="glass-card p-4 rounded-xl border border-border/50 flex flex-col flex-1 min-h-0 mb-4">
-            <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2 flex-shrink-0">Recommended Structure</p>
-            <div className="flex-1 overflow-y-auto pr-1">
-              <p className="text-sm text-muted-foreground leading-relaxed">{template}</p>
-            </div>
-          </div>
-        )}
-        {/* Result card: scrollable, takes all space when template hidden */}
-        {result && (() => {
-            const scoreNum = result?.score !== undefined ? result.score : result?.total_score !== undefined ? result.total_score : result?.evaluation?.overall_score || 0;
-            const hasPassed = scoreNum >= 75;
-            const evalData = result?.feedback || result?.evaluation || result?.raw_response || {};
-            const strengths = evalData.strengths || result?.strengths || [];
-            const weaknesses = evalData.weaknesses || result?.weaknesses || [];
-            const suggestions = evalData.ai_suggestions || result?.ai_suggestions || [];
-            const improvement = evalData.improvement_areas || result?.improvement_areas || [];
-            const dimensions = evalData.scores || result?.raw_response?.scores || result?.evaluation?.scores;
-
-          return (
-            <div className="flex-1 overflow-y-auto min-h-0 mb-4 scrollbar-hide">
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 pr-1">
-                <div className={`glass-card p-5 rounded-2xl border ${hasPassed ? "border-green-500/30 bg-gradient-to-b from-green-500/10 to-transparent shadow-[0_0_20px_rgba(34,197,94,0.15)]" : "border-amber-500/30 bg-gradient-to-b from-amber-500/10 to-transparent shadow-[0_0_20px_rgba(245,158,11,0.15)]"}`}>
-                  
-                  {/* Status Badge */}
-                  <div className="mb-5 flex items-center justify-between">
-                    <span className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-widest flex items-center gap-1.5 border shadow-sm ${
-                      hasPassed ? "bg-green-500/20 text-green-400 border-green-500/40" : "bg-amber-500/20 text-amber-400 border-amber-500/40"
-                    }`}>
-                      {hasPassed ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
-                      {hasPassed ? "COMPLETED & UNLOCKED" : "NEEDS IMPROVEMENT (<75)"}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-col mb-6 pb-4 border-b border-border/50">
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Overall Score</span>
-                    <div className="flex items-baseline gap-1">
-                      <span className={`text-4xl font-black tracking-tighter ${hasPassed ? "text-green-400 drop-shadow-[0_0_10px_rgba(34,197,94,0.4)]" : "text-amber-400 drop-shadow-[0_0_10px_rgba(245,158,11,0.4)]"}`}>{scoreNum}</span>
-                      <span className="text-sm font-semibold text-muted-foreground">/100</span>
-                    </div>
-                  </div>
-
-                  {/* Individual Dimension Scores */}
-                  {dimensions && Object.keys(dimensions).length > 0 && (
-                    <div className="space-y-3 mb-6">
-                      <p className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground">Assessment Dimensions</p>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        {Object.entries(dimensions).map(([k, v]) => (
-                          <div key={k} className="p-2.5 rounded-xl bg-white/5 border border-white/5 flex flex-col justify-center gap-1 hover:bg-white/10 transition-colors">
-                            <span className="text-muted-foreground text-[10px] capitalize truncate">{k.replace(/_/g, " ")}</span>
-                            <span className="font-bold text-foreground text-sm">{Math.round(Number(v))}%</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Feedback Sections */}
-                  <div className="space-y-5 mt-4">
-                    {strengths.length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="text-[11px] font-bold text-green-400 flex items-center gap-1.5 uppercase tracking-wider">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Key Strengths
-                        </h4>
-                        <div className="space-y-1.5">
-                          {strengths.map((s: string, i: number) => (
-                            <div key={i} className="flex gap-2 items-start p-2.5 rounded-xl bg-green-500/5 border border-green-500/10 hover:bg-green-500/10 transition-colors">
-                              <span className="text-green-500/50 text-[10px] mt-0.5">✦</span>
-                              <p className="text-[12px] text-foreground/90 leading-snug">{s}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {weaknesses.length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5 uppercase tracking-wider">
-                          <AlertCircle className="w-3.5 h-3.5" /> Areas for Growth
-                        </h4>
-                        <div className="space-y-1.5">
-                          {weaknesses.map((w: string, i: number) => (
-                            <div key={i} className="flex gap-2 items-start p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/10 hover:bg-amber-500/10 transition-colors">
-                              <span className="text-amber-500/50 text-[10px] mt-0.5">✦</span>
-                              <p className="text-[12px] text-foreground/90 leading-snug">{w}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {improvement.length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="text-[11px] font-bold text-blue-400 flex items-center gap-1.5 uppercase tracking-wider">
-                          <Zap className="w-3.5 h-3.5" /> Next Steps to Polish
-                        </h4>
-                        <div className="space-y-1.5">
-                          {improvement.map((imp: string, i: number) => (
-                            <div key={i} className="flex gap-2 items-start p-2.5 rounded-xl bg-blue-500/5 border border-blue-500/10 hover:bg-blue-500/10 transition-colors">
-                              <span className="text-blue-500/50 text-[10px] mt-0.5">✦</span>
-                              <p className="text-[12px] text-foreground/90 leading-snug">{imp}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {suggestions.length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="text-[11px] font-bold text-primary flex items-center gap-1.5 uppercase tracking-wider">
-                          <Sparkles className="w-3.5 h-3.5" /> AI Coach Suggestions
-                        </h4>
-                        <div className="space-y-1.5">
-                          {suggestions.map((s: string, i: number) => (
-                            <div key={i} className="flex gap-2 items-start p-2.5 rounded-xl bg-primary/5 border border-primary/10 hover:bg-primary/10 transition-colors">
-                              <span className="text-primary/50 text-[10px] mt-0.5">✦</span>
-                              <p className="text-[12px] text-foreground/90 leading-snug">{s}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Primary CTA Button */}
-                  <div className="mt-6 pt-4 border-t border-border/50">
-                    {hasPassed ? (
-                      <motion.button
-                        whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                        onClick={() => navigate("/interview-select")}
-                        className="w-full py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg transition-all"
-                      >
-                        Start Interviews <ArrowRight className="w-4 h-4" />
-                      </motion.button>
-                    ) : (
-                      <motion.button
-                        whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                        onClick={startRecognition}
-                        className="w-full py-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all"
-                      >
-                        Practice Introduction Again <RotateCcw className="w-4 h-4" />
-                      </motion.button>
-                    )}
-                  </div>
-
-                </div>
-              </motion.div>
-            </div>
-          );
-        })()}
-
-        {/* Empty state */}
-        {!result && !template && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center space-y-3">
-            <Volume2 className="w-8 h-8 text-muted-foreground opacity-50" />
-            <p className="text-sm text-muted-foreground">Start recording your introduction to receive AI feedback on your structure, clarity, and delivery.</p>
-          </div>
-        )}
-
-        {/* Exit Practice — always pinned to bottom */}
-        <div className="pt-4 border-t border-border/50 flex-shrink-0">
-          <motion.button onClick={handleExit} className="w-full py-2.5 rounded-lg bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10 text-sm font-semibold smooth-transition">
-            Exit Practice
-          </motion.button>
         </div>
       </div>
     </div>

@@ -54,7 +54,8 @@ async function getAllRecordings() {
             blob: dataReq.result[i].blob,
             timestamp: dataReq.result[i].timestamp,
             uploaded: dataReq.result[i].uploaded || false,
-            approved: dataReq.result[i].approved || false
+            approved: dataReq.result[i].approved || false,
+            evalId: dataReq.result[i].evalId
           });
         }
         resolve(blobs);
@@ -177,7 +178,7 @@ async function processUploads() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          local_id: record.id,
+          eval_id: record.evalId,
           video_id: videoId
         })
       });

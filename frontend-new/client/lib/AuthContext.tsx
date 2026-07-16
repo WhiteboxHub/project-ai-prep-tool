@@ -8,6 +8,8 @@ interface AuthContextValue {
   candidateEmail: string;
   initials: string;
   isAuthenticated: boolean;
+  isSyncing: boolean;
+  setIsSyncing: (val: boolean) => void;
   refresh: () => void;
 }
 
@@ -17,6 +19,8 @@ const AuthContext = createContext<AuthContextValue>({
   candidateEmail: "",
   initials: "C",
   isAuthenticated: false,
+  isSyncing: true,
+  setIsSyncing: () => {},
   refresh: () => {},
 });
 
@@ -24,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionId, setSessionId] = useState<string | null>(() => getSessionId());
   const [candidateName, setCandidateName] = useState(() => getCandidateName() || "Candidate");
   const [candidateEmail, setCandidateEmail] = useState(() => getCandidateEmail() || "");
+  const [isSyncing, setIsSyncing] = useState(true);
 
   const refresh = () => {
     const sid = getSessionId();
@@ -49,6 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         candidateEmail,
         initials: getInitials(candidateName),
         isAuthenticated: Boolean(sessionId),
+        isSyncing,
+        setIsSyncing,
         refresh,
       }}
     >

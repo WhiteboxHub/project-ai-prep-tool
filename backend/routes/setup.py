@@ -351,10 +351,15 @@ def get_resume_summary(session_id: str):
         with conn.cursor() as cursor:
             cid = int(session_id)
 
+            # Get true candidate_id from candidate_marketing
+            cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (cid,))
+            cm_row = cursor.fetchone()
+            real_candidate_id = cm_row["candidate_id"] if cm_row else cid
+
             # Get candidate name and email
             cursor.execute(
                 "SELECT full_name AS name, email FROM candidate WHERE id = %s",
-                (cid,),
+                (real_candidate_id,),
             )
             cand_row = cursor.fetchone()
             if not cand_row:
@@ -367,10 +372,10 @@ def get_resume_summary(session_id: str):
 
             llm_keys = []
             has_api_key = False
-            if cid:
+            if real_candidate_id:
                 cursor.execute(
                     "SELECT id, provider_name, model_name, voice_enabled, created_at FROM candidate_llm_api_keys WHERE candidate_id = %s ORDER BY id ASC",
-                    (cid,),
+                    (real_candidate_id,),
                 )
                 llm_keys = list(cursor.fetchall() or [])
                 has_api_key = len(llm_keys) > 0
@@ -431,15 +436,20 @@ async def sync_from_wbl(data: SyncFromWblRequest):
     try:
         with conn.cursor() as cursor:
             candidate_id = int(session_id)
+            # Get true candidate_id from candidate_marketing
+            cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (candidate_id,))
+            cm_row = cursor.fetchone()
+            real_candidate_id = cm_row["candidate_id"] if cm_row else candidate_id
+
             cursor.execute(
                 "SELECT id FROM aiprep_tool_project_context WHERE candidate_id = %s",
-                (candidate_id,),
+                (real_candidate_id,),
             )
             needs_extraction = not cursor.fetchone()
 
             cursor.execute(
                 "SELECT full_name AS name, email FROM candidate WHERE id = %s",
-                (candidate_id,),
+                (real_candidate_id,),
             )
             row = cursor.fetchone()
             if row:
@@ -473,10 +483,14 @@ def init_and_summary(data: SetupInit):
         session_id = str(marketing_id)
 
         with conn.cursor() as cursor:
-            cid = marketing_id  # now marketing_id is actually candidate_id
+            # Get true candidate_id from candidate_marketing
+            cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (marketing_id,))
+            cm_row = cursor.fetchone()
+            real_candidate_id = cm_row["candidate_id"] if cm_row else marketing_id
+
             cursor.execute(
                 "SELECT full_name AS name FROM candidate WHERE id = %s",
-                (cid,),
+                (real_candidate_id,),
             )
             cand_row = cursor.fetchone()
             candidate_name = cand_row["name"] if cand_row and cand_row.get("name") else ""
@@ -486,10 +500,10 @@ def init_and_summary(data: SetupInit):
 
             llm_keys = []
             has_api_key = False
-            if cid:
+            if real_candidate_id:
                 cursor.execute(
                     "SELECT id, provider_name, model_name, voice_enabled, created_at FROM candidate_llm_api_keys WHERE candidate_id = %s ORDER BY id ASC",
-                    (cid,),
+                    (real_candidate_id,),
                 )
                 llm_keys = list(cursor.fetchall() or [])
                 has_api_key = len(llm_keys) > 0

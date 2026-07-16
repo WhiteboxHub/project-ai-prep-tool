@@ -456,6 +456,7 @@ export default function InterviewRoom() {
             onRetryAudio={requestAudio}
             onRetryVideo={requestVideo}
             wrapperClassName="relative"
+            mediaStream={stream}
           />
       </div>
 
