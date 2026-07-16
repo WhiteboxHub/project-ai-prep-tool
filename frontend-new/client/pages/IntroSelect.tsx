@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
@@ -40,10 +40,23 @@ export default function IntroSelect() {
   
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [showScrollButton, setShowScrollButton] = useState(true);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 150) {
+        setShowScrollButton(false);
+      } else {
+        setShowScrollButton(true);
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   useEffect(() => {
     if (!sessionId) return;
-    fetch(`${import.meta.env.VITE_API_URL || ""}/api/intro/history?session_id=${sessionId}&page=${currentPage}&limit=20`)
+    fetch(`${import.meta.env.VITE_API_URL || ""}/api/intro/history?session_id=${sessionId}&page=${currentPage}&limit=10`)
       .then(res => res.json())
       .then(data => {
         setHistory(data.history || []);
@@ -92,69 +105,88 @@ export default function IntroSelect() {
   return (
     <MainLayout>
       <div className="max-w-6xl mx-auto space-y-8">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-2 text-center max-w-2xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-4">
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-sm text-primary font-semibold">Intro Practice</span>
-          </div>
-          <h2 className="text-3xl md:text-4xl font-bold text-foreground">Select Introduction Type</h2>
-          <p className="text-muted-foreground text-lg">Choose between a general introduction or tailor it to a specific job description.</p>
-        </motion.div>
+        {/* Top Selection Section - Viewport Sized to keep history below fold */}
+        {currentPage === 1 && (
+          <div className="min-h-[calc(100vh-8.5rem)] flex flex-col justify-center pb-12">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-2 text-center max-w-2xl mx-auto">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-4">
+                <Sparkles className="w-4 h-4 text-primary" />
+                <span className="text-sm text-primary font-semibold">Intro Practice</span>
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold text-foreground">Select Introduction Type</h2>
+              <p className="text-muted-foreground text-lg">Choose between a general introduction or tailor it to a specific job description.</p>
+            </motion.div>
 
-        <div className="max-w-2xl mx-auto space-y-4">
-          <div className="grid sm:grid-cols-2 gap-4">
-            {INTRO_TYPES.map((type) => {
-              const Icon = type.icon;
-              const isSelected = selectedType === type.id;
-              return (
-                <motion.button key={type.id} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                  onClick={() => setSelectedType(type.id)}
-                  className={`p-6 rounded-2xl border-2 text-left transition-all duration-300 flex flex-col items-center text-center ${isSelected ? `bg-gradient-to-br ${type.color} ${type.border}` : "bg-card/40 border-border/50 hover:border-border"}`}>
-                  <div className={`p-4 rounded-xl inline-block mb-4 ${isSelected ? "bg-background/50" : "bg-white/5"}`}>
-                    <Icon className={`w-8 h-8 ${isSelected ? type.iconColor : "text-muted-foreground"}`} />
-                  </div>
-                  <h4 className="font-semibold text-foreground mb-2 text-lg">{type.title}</h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{type.description}</p>
-                  <AnimatePresence>
-                    {isSelected && (
-                      <motion.div initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0 }}
-                        className={`absolute top-4 right-4 w-6 h-6 rounded-full flex items-center justify-center bg-background/50 ${type.border} border`}>
-                        <div className={`w-2.5 h-2.5 rounded-full bg-current ${type.iconColor}`} />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+            <div className="max-w-2xl mx-auto space-y-4 w-full">
+              <div className="grid sm:grid-cols-2 gap-4">
+                {INTRO_TYPES.map((type) => {
+                  const Icon = type.icon;
+                  const isSelected = selectedType === type.id;
+                  return (
+                    <motion.button key={type.id} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                      onClick={() => setSelectedType(type.id)}
+                      className={`p-6 rounded-2xl border-2 text-left transition-all duration-300 flex flex-col items-center text-center ${isSelected ? `bg-gradient-to-br ${type.color} ${type.border}` : "bg-card/40 border-border/50 hover:border-border"}`}>
+                      <div className={`p-4 rounded-xl inline-block mb-4 ${isSelected ? "bg-background/50" : "bg-white/5"}`}>
+                        <Icon className={`w-8 h-8 ${isSelected ? type.iconColor : "text-muted-foreground"}`} />
+                      </div>
+                      <h4 className="font-semibold text-foreground mb-2 text-lg">{type.title}</h4>
+                      <p className="text-sm text-muted-foreground leading-relaxed">{type.description}</p>
+                      <AnimatePresence>
+                        {isSelected && (
+                          <motion.div initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0 }}
+                            className={`absolute top-4 right-4 w-6 h-6 rounded-full flex items-center justify-center bg-background/50 ${type.border} border`}>
+                            <div className={`w-2.5 h-2.5 rounded-full bg-current ${type.iconColor}`} />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.button>
+                  );
+                })}
+              </div>
+
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: selectedType ? 1 : 0.5 }} className="pt-8 mt-4 border-t border-border/50">
+                <AnimatePresence>
+                  {selectedType === "jd-specific" && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mb-6 overflow-hidden">
+                      <label className="block text-sm font-semibold text-foreground mb-2">Paste the Job Description</label>
+                      <textarea 
+                        value={jdText}
+                        onChange={(e) => setJdText(e.target.value)}
+                        placeholder="Paste the full job description here..."
+                        className="w-full h-32 p-4 rounded-xl bg-background/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none shadow-inner"
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <motion.button whileHover={selectedType ? { scale: 1.02 } : {}} whileTap={selectedType ? { scale: 0.98 } : {}}
+                  onClick={handleStart} disabled={!selectedType || (selectedType === "jd-specific" && !jdText.trim())}
+                  className={`w-full py-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all ${selectedType && (selectedType !== "jd-specific" || jdText.trim()) ? "bg-gradient-to-r from-primary to-secondary text-white shadow-lg glow-primary" : "bg-white/5 text-muted-foreground cursor-not-allowed"}`}>
+                  Enter Intro Practice <ChevronRight className="w-5 h-5" />
                 </motion.button>
-              );
-            })}
+                <p className="text-center text-xs text-muted-foreground mt-4">Make sure your camera and microphone are ready</p>
+              </motion.div>
+            </div>
           </div>
-
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: selectedType ? 1 : 0.5 }} className="pt-8 mt-4 border-t border-border/50">
-            <AnimatePresence>
-              {selectedType === "jd-specific" && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mb-6 overflow-hidden">
-                  <label className="block text-sm font-semibold text-foreground mb-2">Paste the Job Description</label>
-                  <textarea 
-                    value={jdText}
-                    onChange={(e) => setJdText(e.target.value)}
-                    placeholder="Paste the full job description here..."
-                    className="w-full h-32 p-4 rounded-xl bg-background/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none shadow-inner"
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <motion.button whileHover={selectedType ? { scale: 1.02 } : {}} whileTap={selectedType ? { scale: 0.98 } : {}}
-              onClick={handleStart} disabled={!selectedType || (selectedType === "jd-specific" && !jdText.trim())}
-              className={`w-full py-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all ${selectedType && (selectedType !== "jd-specific" || jdText.trim()) ? "bg-gradient-to-r from-primary to-secondary text-white shadow-lg glow-primary" : "bg-white/5 text-muted-foreground cursor-not-allowed"}`}>
-              Enter Intro Practice <ChevronRight className="w-5 h-5" />
-            </motion.button>
-            <p className="text-center text-xs text-muted-foreground mt-4">Make sure your camera and microphone are ready</p>
-          </motion.div>
-        </div>
+        )}
 
         {/* History Section */}
           {history.length > 0 && (
-            <div className="pt-12 mt-8 border-t border-border/50">
+            <div id="previous-attempts-section" className="pt-12 mt-8 border-t border-border/50 scroll-mt-24">
+              {currentPage > 1 && (
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setCurrentPage(1);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-xs font-bold text-primary mb-6 transition-colors cursor-pointer"
+                >
+                  <ChevronRight className="w-4 h-4 rotate-180 text-primary" />
+                  <span>Start New Practice Session</span>
+                </motion.button>
+              )}
               <h3 className="text-xl font-bold mb-6 text-foreground flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
                 Previous Attempts
@@ -225,7 +257,15 @@ export default function IntroSelect() {
                 <div className="flex items-center justify-between mt-6">
                   <button 
                     disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    onClick={() => {
+                      setCurrentPage(prev => Math.max(1, prev - 1));
+                      const historyEl = document.getElementById("previous-attempts-section");
+                      if (historyEl) {
+                        setTimeout(() => {
+                          historyEl.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }, 50);
+                      }
+                    }}
                     className="px-4 py-2 bg-card/50 border border-border/50 rounded-lg text-sm font-semibold text-foreground hover:bg-card disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
                     Previous
@@ -235,7 +275,15 @@ export default function IntroSelect() {
                   </span>
                   <button 
                     disabled={currentPage >= totalPages}
-                    onClick={() => setCurrentPage(prev => prev + 1)}
+                    onClick={() => {
+                      setCurrentPage(prev => prev + 1);
+                      const historyEl = document.getElementById("previous-attempts-section");
+                      if (historyEl) {
+                        setTimeout(() => {
+                          historyEl.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }, 50);
+                      }
+                    }}
                     className="px-4 py-2 bg-card/50 border border-border/50 rounded-lg text-sm font-semibold text-foreground hover:bg-card disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
                     Next
@@ -245,6 +293,33 @@ export default function IntroSelect() {
             </div>
           )}
         </div>
+
+      {/* Floating Bottom Navigation Button */}
+      {history.length > 0 && currentPage === 1 && (
+        <AnimatePresence>
+          {showScrollButton && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20, x: "-50%" }} 
+              animate={{ opacity: 1, y: 0, x: "-50%" }} 
+              exit={{ opacity: 0, y: 20, x: "-50%" }}
+              className="fixed bottom-6 left-[calc(50%+32px)] z-20"
+            >
+              <button
+                onClick={() => {
+                  const historyEl = document.getElementById("previous-attempts-section");
+                  if (historyEl) {
+                    historyEl.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }
+                }}
+                className="flex items-center gap-2.5 px-5 py-3 rounded-full bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/30 hover:shadow-primary/40 border border-primary/20 hover:scale-105 active:scale-95 transition-all duration-300 text-xs font-bold cursor-pointer"
+              >
+                <span>View Previous Feedback</span>
+                <ChevronRight className="w-4 h-4 rotate-90 text-white animate-bounce mt-0.5" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
     </MainLayout>
   );
 }
