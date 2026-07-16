@@ -70,7 +70,8 @@ async def evaluate_audio_intro(
     audio: UploadFile = File(...),
     vision_metrics: str = Form(None),
     intro_type: str = Form("general"),
-    job_description: str = Form("")
+    job_description: str = Form(""),
+    recording_id: str = Form(None)
 ):
     conn = None
     file_path = None
@@ -85,14 +86,21 @@ async def evaluate_audio_intro(
         if not filename.endswith(".webm") and not filename.endswith(".mp4"):
             filename += ".webm"
         file_path = f"uploads/{filename}"
-        video_url = f"/uploads/{filename}"
+        video_url = f"local:{recording_id}" if recording_id else ""
 
         with open(file_path, "wb") as f:
             f.write(await audio.read())
 
-        transcript_data = transcribe_audio(file_path, api_key=api_key)
-        raw_text = transcript_data["raw_text"]
-        corrected_text = transcript_data["corrected_text"]
+        try:
+            transcript_data = transcribe_audio(file_path, api_key=api_key)
+            raw_text = transcript_data["raw_text"]
+            corrected_text = transcript_data["corrected_text"]
+        finally:
+            if file_path and os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as ex:
+                    print("Warning: Failed to clean up temp upload file:", ex)
         
         resume_data = fetch_resume_dict(session_id)
 

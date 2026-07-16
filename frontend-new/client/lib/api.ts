@@ -157,7 +157,7 @@ export function deleteLlmKey(keyId: number, sessionId: string) {
 
 // ─── Intro Evaluation ─────────────────────────────────────────────────────────
 
-export function evaluateIntro(sessionId: string, audioBlob: Blob, introType: string = "general", jdText: string = "", visionMetrics: any = null) {
+export function evaluateIntro(sessionId: string, audioBlob: Blob, introType: string = "general", jdText: string = "", visionMetrics: any = null, recordingId: string = "") {
   const form = new FormData();
   form.append("session_id", sessionId);
   form.append("audio", audioBlob, "recording.webm");
@@ -167,6 +167,9 @@ export function evaluateIntro(sessionId: string, audioBlob: Blob, introType: str
   }
   if (visionMetrics) {
     form.append("vision_metrics", JSON.stringify(visionMetrics));
+  }
+  if (recordingId) {
+    form.append("recording_id", recordingId);
   }
   return postForm("/api/intro/evaluate", form);
 }
