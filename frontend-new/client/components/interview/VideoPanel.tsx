@@ -1,6 +1,8 @@
 import React, { useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Mic, MicOff, Camera, Volume2, Bot } from "lucide-react";
+import { VisionOverlay } from "@/components/interview/VisionOverlay";
+import { useHuggingFaceVision } from "@/hooks/useHuggingFaceVision";
 
 interface VideoPanelProps {
   title: string;
@@ -12,6 +14,7 @@ interface VideoPanelProps {
   isExpanded?: boolean;
   onExpand?: () => void;
   mediaStream?: MediaStream | null;
+  enableVision?: boolean;
 }
 
 export function VideoPanel({
@@ -24,12 +27,23 @@ export function VideoPanel({
   isExpanded,
   onExpand,
   mediaStream,
+  enableVision,
 }: VideoPanelProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const shouldTrackVision = !!enableVision && !!mediaStream && !isCameraOff;
+  const { results: visionResults, status: visionStatus, error: visionError } = useHuggingFaceVision({
+    enabled: shouldTrackVision,
+    videoRef,
+  });
 
   useEffect(() => {
-    if (videoRef.current && mediaStream) {
-      videoRef.current.srcObject = mediaStream;
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (mediaStream) {
+      video.srcObject = mediaStream;
+    } else {
+      video.srcObject = null;
     }
   }, [mediaStream]);
 
@@ -51,6 +65,14 @@ export function VideoPanel({
           playsInline
           muted // Mute local playback to avoid echo
           className="absolute inset-0 w-full h-full object-cover"
+        />
+      )}
+      {shouldTrackVision && (
+        <VisionOverlay
+          results={visionResults}
+          status={visionStatus}
+          error={visionError}
+          videoRef={videoRef}
         />
       )}
 
