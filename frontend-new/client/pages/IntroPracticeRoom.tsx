@@ -314,10 +314,10 @@ export default function IntroPracticeRoom() {
       // Submit the lightweight audio-only WebM blob to the backend Whisper evaluator
       // fallback to the full videoWebm blob only if audio-only blob is not present
       const uploadBlob = audioBlob || finalBlob;
-      const res = await evaluateIntro(sessionId, uploadBlob, introType, jdText);
+      const localId = recordingIdRef.current || "";
+      const res = await evaluateIntro(sessionId, uploadBlob, introType, jdText, null, localId);
       setResult(res);
 
-      const localId = recordingIdRef.current;
       if (localId && res && res.id) {
         try {
           await approveRecording(localId, res.id);
