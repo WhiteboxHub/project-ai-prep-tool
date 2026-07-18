@@ -100,7 +100,14 @@ def load_prompt(filename: str) -> str:
 # ---------------------------
 # INTRO EVALUATION
 # ---------------------------
-async def evaluate_intro(user_id: str, transcript_raw: str, transcript_corrected: str, resume_data: dict = None, api_key: str = None) -> dict:
+async def evaluate_intro(
+    user_id: str,
+    transcript_raw: str,
+    transcript_corrected: str,
+    resume_data: dict = None,
+    api_key: str = None,
+    vision_metrics: dict = None
+) -> dict:
     system_prompt = load_prompt("intro_eval.txt")
 
     prompt = f"""
@@ -114,6 +121,9 @@ RAW_TRANSCRIPT:
 
 CORRECTED_TRANSCRIPT:
 {transcript_corrected}
+
+VISION_PERFORMANCE:
+{json.dumps(vision_metrics) if vision_metrics else "No camera vision metrics available."}
 """
 
     res_str = await call_llm_with_context(
@@ -130,7 +140,15 @@ CORRECTED_TRANSCRIPT:
 # ---------------------------
 # JD SPECIFIC INTRO EVALUATION
 # ---------------------------
-async def evaluate_intro_jd(user_id: str, transcript_raw: str, transcript_corrected: str, resume_data: dict, job_description: str, api_key: str = None) -> dict:
+async def evaluate_intro_jd(
+    user_id: str,
+    transcript_raw: str,
+    transcript_corrected: str,
+    resume_data: dict,
+    job_description: str,
+    api_key: str = None,
+    vision_metrics: dict = None
+) -> dict:
     system_prompt = load_prompt("jd_specific_intro.txt")
 
     prompt = f"""
@@ -145,6 +163,9 @@ RAW_TRANSCRIPT:
 
 CORRECTED_TRANSCRIPT:
 {transcript_corrected}
+
+VISION_PERFORMANCE:
+{json.dumps(vision_metrics) if vision_metrics else "No camera vision metrics available."}
 """
 
     res_str = await call_llm_with_context(

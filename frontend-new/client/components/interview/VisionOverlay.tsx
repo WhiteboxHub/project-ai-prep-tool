@@ -34,20 +34,16 @@ export function VisionOverlay({ results, status, error, videoRef }: VisionOverla
     if (status !== "tracking") return;
 
     const viewport = getObjectCoverViewport(video.videoWidth, video.videoHeight, rect.width, rect.height);
-    ctx.lineWidth = 2;
-    ctx.font = "12px system-ui";
+    
+    // Make the box thicker as requested
+    ctx.lineWidth = 4;
+    ctx.font = "bold 14px system-ui";
     ctx.textBaseline = "bottom";
 
-    results.objects.forEach((object) => {
-      const [x, y, width, height] = object.bbox;
-      const box = mapVideoBox({ x, y, width, height }, viewport);
-      const label = `${object.class ?? object.label ?? "object"} ${formatScore(object.score)}`;
-      drawBox(ctx, box, OBJECT_COLOR, label);
-    });
-
+    // ONLY draw face tracking boxes, NOT object boxes
     results.faces.forEach(({ bounds, eye }) => {
-      const paddingX = bounds.width * 0.16;
-      const paddingY = bounds.height * 0.22;
+      const paddingX = bounds.width * 0.2;
+      const paddingY = bounds.height * 0.25;
       const box = mapVideoBox(
         {
           x: Math.max(bounds.x - paddingX, 0),
@@ -58,7 +54,18 @@ export function VisionOverlay({ results, status, error, videoRef }: VisionOverla
         viewport,
       );
       const isLookingAtScreen = eye && !eye.lookingAway;
-      drawBox(ctx, box, isLookingAtScreen ? FACE_LOOKING : FACE_WARNING);
+      
+      ctx.shadowColor = isLookingAtScreen ? 'rgba(34,197,94,0.4)' : 'rgba(255,48,69,0.4)';
+      ctx.shadowBlur = 15;
+      
+      drawBox(
+        ctx, 
+        box, 
+        isLookingAtScreen ? FACE_LOOKING : FACE_WARNING, 
+        isLookingAtScreen ? "CENTERED" : "PLEASE LOOK INTO THE CAMERA"
+      );
+      
+      ctx.shadowBlur = 0; // reset
     });
   }, [results, status, videoRef]);
 
@@ -69,7 +76,6 @@ export function VisionOverlay({ results, status, error, videoRef }: VisionOverla
   return (
     <>
       <canvas ref={canvasRef} className="absolute inset-0 z-10 h-full w-full pointer-events-none" />
-
       <div className="absolute left-4 bottom-14 z-20 flex max-w-[calc(100%-2rem)] flex-wrap items-center gap-2">
         <div className="glass-card flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-foreground">
           <ScanFace className="h-3.5 w-3.5 text-primary" />
@@ -79,13 +85,6 @@ export function VisionOverlay({ results, status, error, videoRef }: VisionOverla
           <div className="glass-card flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-foreground">
             <Eye className="h-3.5 w-3.5 text-primary" />
             <span>{primaryEye?.calibrated ? primaryEye.direction : "calibrating"}</span>
-          </div>
-        )}
-        {status === "tracking" && (
-          <div className="glass-card rounded-lg px-2.5 py-1 text-[11px] font-semibold text-foreground">
-            {results.objectError
-              ? "Objects unavailable"
-              : `${objectCount} object${objectCount === 1 ? "" : "s"}`}
           </div>
         )}
         {status === "unavailable" && (

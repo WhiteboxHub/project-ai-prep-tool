@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Mic, MicOff, Camera, Volume2, Bot } from "lucide-react";
 import { VisionOverlay } from "@/components/interview/VisionOverlay";
 import { useHuggingFaceVision } from "@/hooks/useHuggingFaceVision";
+import type { VisionResults } from "@/lib/huggingFaceVision";
 
 interface VideoPanelProps {
   title: string;
@@ -15,6 +16,7 @@ interface VideoPanelProps {
   onExpand?: () => void;
   mediaStream?: MediaStream | null;
   enableVision?: boolean;
+  onVisionResults?: (results: VisionResults) => void;
 }
 
 export function VideoPanel({
@@ -28,6 +30,7 @@ export function VideoPanel({
   onExpand,
   mediaStream,
   enableVision,
+  onVisionResults,
 }: VideoPanelProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const shouldTrackVision = !!enableVision && !!mediaStream && !isCameraOff;
@@ -46,6 +49,10 @@ export function VideoPanel({
       video.srcObject = null;
     }
   }, [mediaStream]);
+
+  useEffect(() => {
+    if (shouldTrackVision) onVisionResults?.(visionResults);
+  }, [onVisionResults, shouldTrackVision, visionResults]);
 
   return (
     <motion.div

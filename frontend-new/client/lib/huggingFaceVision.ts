@@ -95,6 +95,13 @@ export class HuggingFaceVisionTracker {
 
   async start() {
     if (this.running) return;
+    
+    // Performance Check: Ensure system has at least a 4-core logical CPU
+    if (typeof navigator !== 'undefined' && navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4) {
+      this.setStatus("unavailable", "System hardware (less than 4 CPU cores) does not meet the minimum performance requirements for AI vision tracking.");
+      return;
+    }
+
     this.setStatus("loading");
     await this.loadFaceModel();
     this.running = true;
