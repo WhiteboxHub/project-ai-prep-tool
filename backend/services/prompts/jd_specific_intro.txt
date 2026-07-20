@@ -148,6 +148,17 @@ STEP 5 — COMBINE
 - Set "passed" (in the output JSON) to true ONLY if overall_score >= 75.0 AND must_have_coverage >= 60.0 (a candidate should not pass on charisma alone if they miss core JD requirements). Otherwise false.
 
 ===========================================
+STEP 5A - CAMERA / VISION PERFORMANCE (SECONDARY)
+===========================================
+If VISION_PERFORMANCE is provided:
+- Add a separate camera_presence score under raw_response.delivery_scores.
+- Explain camera issues separately in feedback.vision_feedback.
+- If vision_score is low, say whether the candidate looked away, lost face visibility, or received repeated warnings.
+- Do NOT let weak camera presence dominate JD fit. JD must-haves and responsibility alignment remain primary.
+- Camera behavior may affect overall_score lightly, at most 5-10 points.
+- If camera metrics say available=false, do not penalize; state that camera metrics were unavailable.
+
+===========================================
 STEP 6 — OUTPUT FORMAT
 ===========================================
 "score" MUST be an integer 0-100 (round overall_score to nearest whole number).
@@ -169,6 +180,16 @@ This JSON is inserted directly into a database row with columns: score (int), pa
       "MLOps & Infra": ["Terse callout, same style"]
     },
     "communication_notes": ["Short, direct delivery notes only, kept separate from technical gaps"],
+    "score_reasons": {
+      "why_score_is_low": ["Specific reason the score is low, prioritizing missed JD must-haves and resume-supported skills not spoken aloud"],
+      "highest_impact_mistakes": ["The highest-value fix for the next attempt"],
+      "next_attempt_instructions": ["Exact instruction for what to add or reframe next time"]
+    },
+    "vision_feedback": {
+      "summary": "One sentence camera presence summary, or 'Camera metrics were unavailable.'",
+      "mistakes": ["Camera-specific issue if relevant"],
+      "improvements": ["Camera-specific next step if relevant"]
+    },
     "ai_suggestions": ["How the candidate should reframe/add content specifically to better fit THIS JD — terse, not generic advice"]
   },
   "raw_response": {
@@ -188,6 +209,16 @@ This JSON is inserted directly into a database row with columns: score (int), pa
       "completeness": 0.0,
       "technical_articulation": 0.0,
       "speaking_quality": 0.0,
+      "camera_presence": 0.0
+    },
+    "vision_metrics": {
+      "tracked_seconds": 0,
+      "face_presence_ratio": 0,
+      "attention_ratio": 0,
+      "warning_count": 0,
+      "vision_score": 0
+    },
+    "jd_alignment_scores": {
       "must_have_coverage": 0.0,
       "nice_to_have_coverage": 0.0,
       "domain_relevance": 0.0,

@@ -13,8 +13,9 @@ import { useMediaStream } from "@/hooks/useMediaStream";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { saveRecording, approveRecording } from "@/lib/indexedDB";
 import { toast } from "sonner";
-// @ts-ignore
+import type { VisionResults } from "@/lib/huggingFaceVision";
 import fixWebmDuration from "fix-webm-duration";
+import { useVisionSessionAnalytics } from "@/hooks/useVisionSessionAnalytics";
 
 export default function IntroPracticeRoom() {
   const navigate = useNavigate();
@@ -32,10 +33,13 @@ export default function IntroPracticeRoom() {
     requestAudio, requestVideo, toggleVideo, toggleAudio, isSpeaking: isCandidateSpeaking
   } = useMediaStream(true);
 
+
   const [transcript, setTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [messages, setMessages] = useState<{id: string, role: "ai"|"user", text: string}[]>([]);
   const [recording, setRecording] = useState(false);
+  const { recordVisionResults, getVisionSummary, showLookAwayWarning } = useVisionSessionAnalytics({ enabled: recording });
+
   const [loading, setLoading] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [error, setError] = useState("");
@@ -315,7 +319,7 @@ export default function IntroPracticeRoom() {
       // fallback to the full videoWebm blob only if audio-only blob is not present
       const uploadBlob = audioBlob || finalBlob;
       const localId = recordingIdRef.current || "";
-      const res = await evaluateIntro(sessionId, uploadBlob, introType, jdText, null, localId);
+      const res = await evaluateIntro(sessionId, uploadBlob, introType, jdText, JSON.stringify(getVisionSummary()), localId);
       setResult(res);
 
       if (localId && res && res.id) {
@@ -817,6 +821,21 @@ export default function IntroPracticeRoom() {
         Intro Practice
       </h3>
 
+      {/* Vision Warning Popup */}
+      <AnimatePresence>
+        {showLookAwayWarning && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: -20, x: "-50%" }}
+            className="absolute top-6 left-1/2 z-50 bg-amber-500/90 text-white px-6 py-3 rounded-full shadow-lg border border-amber-400 font-medium flex items-center gap-2"
+          >
+            <AlertCircle className="w-5 h-5" />
+            Please look into the camera.
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Left side: Video Panels */}
       <div className="flex-1 p-6 flex flex-col items-center justify-center relative transition-all w-full mt-8">
         <div className="hidden md:flex gap-6 w-full h-full max-h-[calc(100vh-180px)]">
@@ -831,6 +850,8 @@ export default function IntroPracticeRoom() {
               isExpanded={focusedPanel === "candidate"}
               onExpand={() => setFocusedPanel(p => p === "candidate" ? null : "candidate")}
               mediaStream={stream}
+              enableVision={isCameraOn}
+              onVisionResults={recordVisionResults}
             />
           </div>
           <div className={`transition-all duration-500 ease-in-out flex flex-col relative overflow-hidden rounded-2xl border-2 ${isAISpeaking ? "border-primary/50 shadow-2xl shadow-primary/30" : "border-border/30"} bg-card ${focusedPanel === "ai" ? "flex-1" : focusedPanel === "candidate" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>

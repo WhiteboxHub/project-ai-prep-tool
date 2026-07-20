@@ -145,7 +145,7 @@ export function ControlBar({
         )}
 
         {/* Submit */}
-        {onSubmit && isRecording && (
+         {onSubmit && isRecording && (
           <motion.button
             initial={{ opacity: 0, scale: 0.8, x: -10 }}
             animate={{ opacity: 1, scale: 1, x: 0 }}
