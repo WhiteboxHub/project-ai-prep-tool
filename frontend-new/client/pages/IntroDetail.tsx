@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { getIntroAttempt } from "@/lib/api";
 import { getRecording } from "@/lib/indexedDB";
@@ -10,11 +10,22 @@ import { Loader2, ArrowLeft, CheckCircle2, Target, Lightbulb, TrendingUp } from 
 export default function IntroDetail() {
   const { id } = useParams<{ id: string }>();
   const { sessionId } = useAuth();
+  const location = useLocation();
+  const isFromHistory = location.pathname.startsWith("/history/");
+  const backPath = isFromHistory ? "/history" : "/intro-select";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState<any>(null);
   const [videoSrc, setVideoSrc] = useState<string>("");
   const [isLocalVideo, setIsLocalVideo] = useState(false);
+
+  const handleBack = (e: React.MouseEvent) => {
+    // If the page has an opener or was opened as a single history entry in a new tab, close it
+    if (window.opener || window.history.length === 1) {
+      e.preventDefault();
+      window.close();
+    }
+  };
 
   useEffect(() => {
     if (!sessionId || !id) return;
@@ -73,7 +84,7 @@ export default function IntroDetail() {
       <MainLayout>
         <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
           <p className="text-red-400">{error || "Data not found"}</p>
-          <Link to="/intro-select" className="px-4 py-2 bg-primary/20 text-primary rounded-xl font-bold">
+          <Link to={backPath} onClick={handleBack} className="px-4 py-2 bg-primary/20 text-primary rounded-xl font-bold">
             Back to History
           </Link>
         </div>
@@ -113,7 +124,7 @@ export default function IntroDetail() {
           
           {/* Header & Back Navigation */}
           <div className="flex items-center justify-between">
-            <Link to="/intro-select" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+            <Link to={backPath} onClick={handleBack} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
               <ArrowLeft className="w-5 h-5" />
               <span className="font-semibold text-sm">Back to History</span>
             </Link>
