@@ -147,6 +147,7 @@ const App = () => (
               <Route path="/intro-practice" element={<RequireAuth><IntroPracticeRoom /></RequireAuth>} />
               <Route path="/intro-result" element={<RequireAuth><IntroResult /></RequireAuth>} />
               <Route path="/intro-detail/:id" element={<RequireAuth><IntroDetail /></RequireAuth>} />
+              <Route path="/history/intro-detail/:id" element={<RequireAuth><IntroDetail /></RequireAuth>} />
               <Route path="/history" element={<RequireAuth><MyHistory /></RequireAuth>} />
               <Route path="/progress" element={<RequireAuth><Progress /></RequireAuth>} />
               
