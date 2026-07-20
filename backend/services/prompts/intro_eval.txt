@@ -260,6 +260,12 @@ This JSON is inserted directly into a database row with columns: score (int), pa
       "chunking_strategy": {"status": "shallow", "evidence": "exact quote or null"},
       "retrieval_evaluation": {"status": "missing", "evidence": null}
     },
+    "topic_checklist": {
+      "_instructions": "One entry per relevant Part B topic. status must be 'covered', 'shallow', or 'missing'. evidence must be an exact or near-exact quote from CORRECTED_TRANSCRIPT when status is covered/shallow, or null when missing. This is the audit trail — technical_gaps must be derivable entirely from entries marked shallow/missing here.",
+      "guardrails": {"status": "covered", "evidence": "exact quote or null"},
+      "chunking_strategy": {"status": "shallow", "evidence": "exact quote or null"},
+      "retrieval_evaluation": {"status": "missing", "evidence": null}
+    },
     "resume_match": {
       "mentioned_well": ["..."],
       "named_but_shallow": ["..."],
