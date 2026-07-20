@@ -113,7 +113,7 @@ async def evaluate_intro(
     prompt = f"""
 You MUST return valid JSON.
 
-Candidate Resume Data:
+RESUME_CONTEXT:
 {json.dumps(resume_data) if resume_data else "No resume provided."}
 
 RAW_TRANSCRIPT:
@@ -155,7 +155,7 @@ async def evaluate_intro_jd(
 JOB_DESCRIPTION:
 {job_description}
 
-CANDIDATE_RESUME:
+RESUME_CONTEXT:
 {json.dumps(resume_data) if resume_data else "No resume provided."}
 
 RAW_TRANSCRIPT:
