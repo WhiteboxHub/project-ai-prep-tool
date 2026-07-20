@@ -36,12 +36,18 @@ def _normalize_score(eval_result: dict) -> int:
 
 
 def _feedback_payload(eval_result: dict) -> dict:
+    feedback = eval_result.get("feedback", {})
+    if not isinstance(feedback, dict):
+        feedback = {"feedback": feedback}
+
     return {
-        "feedback": eval_result.get("feedback", []),
-        "strengths": eval_result.get("strengths", []),
-        "weaknesses": eval_result.get("weaknesses", []),
-        "improvement_areas": eval_result.get("improvement_areas", []),
-        "ai_suggestions": eval_result.get("ai_suggestions", []),
+        **feedback,
+        "strengths": feedback.get("strengths", eval_result.get("strengths", [])),
+        "weaknesses": feedback.get("weaknesses", eval_result.get("weaknesses", [])),
+        "improvement_areas": feedback.get("improvement_areas", eval_result.get("improvement_areas", [])),
+        "ai_suggestions": feedback.get("ai_suggestions", eval_result.get("ai_suggestions", [])),
+        "score_reasons": feedback.get("score_reasons", eval_result.get("score_reasons", {})),
+        "vision_feedback": feedback.get("vision_feedback", eval_result.get("vision_feedback", {})),
     }
 
 
@@ -104,6 +110,13 @@ async def evaluate_audio_intro(
         
         resume_data = fetch_resume_dict(session_id)
 
+        parsed_vision_metrics = None
+        if vision_metrics:
+            try:
+                parsed_vision_metrics = json.loads(vision_metrics)
+            except Exception:
+                parsed_vision_metrics = None
+
         if intro_type == "jd-specific":
             eval_result = await evaluate_intro_jd(
                 user_id=session_id,
@@ -111,7 +124,8 @@ async def evaluate_audio_intro(
                 transcript_corrected=corrected_text,
                 resume_data=resume_data,
                 job_description=job_description,
-                api_key=api_key
+                api_key=api_key,
+                vision_metrics=parsed_vision_metrics
             )
         else:
             eval_result = await evaluate_intro(
@@ -119,18 +133,16 @@ async def evaluate_audio_intro(
                 transcript_raw=raw_text,
                 transcript_corrected=corrected_text,
                 resume_data=resume_data,
-                api_key=api_key
+                api_key=api_key,
+                vision_metrics=parsed_vision_metrics
             )
 
-        if vision_metrics:
-            try:
-                vm = json.loads(vision_metrics)
-                if "scores" not in eval_result:
-                    eval_result["scores"] = {}
-                eval_result["scores"]["Eye Contact (Phase 3)"] = vm.get("eye_contact_score", 0) / 10
-                eval_result["scores"]["Head Stability (Phase 3)"] = vm.get("head_movement_stability", 0) / 10
-            except:
-                pass
+        if parsed_vision_metrics:
+            raw_payload = eval_result.get("raw_response")
+            if not isinstance(raw_payload, dict):
+                raw_payload = dict(eval_result)
+            raw_payload["visionAnalytics"] = parsed_vision_metrics.get("visionAnalytics", {})
+            eval_result["raw_response"] = raw_payload
 
         conn = get_db_connection()
 
@@ -237,7 +249,8 @@ async def evaluate_text_intro(
                 transcript_corrected=corrected_text,
                 resume_data=resume_data,
                 job_description=job_description,
-                api_key=api_key
+                api_key=api_key,
+                vision_metrics=None
             )
         else:
             eval_result = await evaluate_intro(
@@ -245,7 +258,8 @@ async def evaluate_text_intro(
                 transcript_raw=transcript,
                 transcript_corrected=corrected_text,
                 resume_data=resume_data,
-                api_key=api_key
+                api_key=api_key,
+                vision_metrics=None
             )
             
         # The LLM now returns the exact db-friendly format for both general and jd-specific intros

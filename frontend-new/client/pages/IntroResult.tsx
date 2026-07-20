@@ -1,7 +1,14 @@
 import React from "react";
 import { useLocation, Link, Navigate } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Target, Lightbulb, TrendingUp } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Target, Lightbulb, TrendingUp, Eye, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
+
+const asList = (value: any): string[] => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean).map(String);
+  if (typeof value === "string") return [value];
+  return [];
+};
 
 export default function IntroResult() {
   const location = useLocation();
@@ -39,7 +46,16 @@ export default function IntroResult() {
   const weaknesses = [...legacyWeaknesses, ...improvement, ...technicalGapsList, ...commNotesList];
   
   const suggestions = innerFeedback.ai_suggestions || evalData.ai_suggestions || result.ai_suggestions || [];
-  const dimensions = innerFeedback.scores || evalData.scores || result.raw_response?.scores || result.evaluation?.scores || {};
+  const rawResponse = result.raw_response || result.evaluation?.raw_response || evalData.raw_response || {};
+  const rawScores = rawResponse.scores || rawResponse.delivery_scores || {};
+  const dimensions = innerFeedback.scores || evalData.scores || rawScores || result.evaluation?.scores || {};
+  const scoreReasons = innerFeedback.score_reasons || evalData.score_reasons || {};
+  const whyScoreIsLow = asList(scoreReasons.why_score_is_low);
+  const highestImpactMistakes = asList(scoreReasons.highest_impact_mistakes);
+  const nextAttemptInstructions = asList(scoreReasons.next_attempt_instructions);
+  const visionFeedback = innerFeedback.vision_feedback || evalData.vision_feedback || {};
+  const visionAnalytics = rawResponse.visionAnalytics || result.evaluation?.visionAnalytics || null;
+  const hasVisionFeedback = !!visionAnalytics || !!visionFeedback.summary || asList(visionFeedback.mistakes).length > 0 || asList(visionFeedback.improvements).length > 0;
 
   return (
     <div className="min-h-screen bg-background p-6 md:p-8 overflow-y-auto">
@@ -76,6 +92,21 @@ export default function IntroResult() {
               </div>
             </motion.div>
 
+            {/* Camera Presence */}
+            {hasVisionFeedback && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="glass-card p-5 rounded-2xl border border-border/50">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2 text-primary">
+                    <Eye className="w-5 h-5" />
+                    <h3 className="font-bold text-sm">Camera Presence</h3>
+                  </div>
+                </div>
+                {visionFeedback.summary && (
+                  <p className="text-xs text-muted-foreground leading-relaxed mt-3">{visionFeedback.summary}</p>
+                )}
+              </motion.div>
+            )}
+
             {/* Evaluation Breakdown */}
             {Object.keys(dimensions).length > 0 && (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-card p-6 rounded-2xl border border-border/50">
@@ -98,6 +129,32 @@ export default function IntroResult() {
 
           {/* Right Column: Insights */}
           <div className="space-y-6">
+            {(whyScoreIsLow.length > 0 || highestImpactMistakes.length > 0 || nextAttemptInstructions.length > 0) && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 rounded-2xl border border-border/50">
+                <div className="flex items-center gap-2 mb-4 text-amber-500">
+                  <AlertCircle className="w-5 h-5" />
+                  <h3 className="font-bold text-base">Score Diagnosis</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <InsightList title="Why Score Is Low" items={whyScoreIsLow} />
+                  <InsightList title="Highest Impact Mistakes" items={highestImpactMistakes} />
+                  <InsightList title="Next Attempt Instructions" items={nextAttemptInstructions} />
+                </div>
+              </motion.div>
+            )}
+
+            {hasVisionFeedback && (asList(visionFeedback.mistakes).length > 0 || asList(visionFeedback.improvements).length > 0) && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 rounded-2xl border border-border/50">
+                <div className="flex items-center gap-2 mb-4 text-primary">
+                  <Eye className="w-5 h-5" />
+                  <h3 className="font-bold text-base">Camera Coaching</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <InsightList title="Mistakes" items={asList(visionFeedback.mistakes)} />
+                  <InsightList title="Improvements" items={asList(visionFeedback.improvements)} />
+                </div>
+              </motion.div>
+            )}
             
             {/* Strengths & Improvements Side-by-Side */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -168,6 +225,25 @@ export default function IntroResult() {
 
         </div>
       </div>
+    </div>
+  );
+}
+
+function InsightList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="bg-card/30 border border-border/50 rounded-xl p-4">
+      <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">{title}</h4>
+      {items.length > 0 ? (
+        <ul className="space-y-2">
+          {items.map((item, index) => (
+            <li key={index} className="text-xs text-muted-foreground leading-relaxed">
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground italic">No notes.</p>
+      )}
     </div>
   );
 }

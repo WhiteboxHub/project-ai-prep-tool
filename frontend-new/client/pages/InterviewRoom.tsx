@@ -375,6 +375,7 @@ export default function InterviewRoom() {
               isExpanded={focusedPanel === "candidate"}
               onExpand={() => setFocusedPanel(p => p === "candidate" ? null : "candidate")}
               mediaStream={stream}
+              enableVision={true}
             />
           </div>
           <div className={`transition-all duration-500 ease-in-out ${focusedPanel === "ai" ? "flex-1" : focusedPanel === "candidate" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>
