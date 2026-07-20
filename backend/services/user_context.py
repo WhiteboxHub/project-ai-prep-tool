@@ -15,6 +15,8 @@ def get_user_api_context(user_id: str) -> dict:
     try:
         api_key = None
         provider = None
+        key_id = None
+        model_name = None
 
         with conn.cursor() as cursor:
             marketing_id = int(user_id)
@@ -27,17 +29,32 @@ def get_user_api_context(user_id: str) -> dict:
                 cm_row = cursor.fetchone()
                 real_candidate_id = cm_row["candidate_id"] if cm_row else marketing_id
 
+                # First try default key
                 cursor.execute(
                     """
-                    SELECT api_key, provider_name FROM candidate_llm_api_keys
-                    WHERE candidate_id = %s
-                    ORDER BY updated_at DESC, id DESC
+                    SELECT id, api_key, provider_name, model_name FROM candidate_llm_api_keys
+                    WHERE candidate_id = %s AND is_default = 1
                     LIMIT 1
                     """,
                     (real_candidate_id,),
                 )
                 res = cursor.fetchone()
+                if not res:
+                    # Fallback to latest
+                    cursor.execute(
+                        """
+                        SELECT id, api_key, provider_name, model_name FROM candidate_llm_api_keys
+                        WHERE candidate_id = %s
+                        ORDER BY updated_at DESC, id DESC
+                        LIMIT 1
+                        """,
+                        (real_candidate_id,),
+                    )
+                    res = cursor.fetchone()
+
                 if res and res.get("api_key"):
+                    key_id = res.get("id")
+                    model_name = res.get("model_name")
                     api_key = decrypt(res["api_key"])
                     p_name = (res.get("provider_name") or "").lower()
                     if "openai" in p_name:
@@ -50,8 +67,10 @@ def get_user_api_context(user_id: str) -> dict:
                         provider = p_name
 
         return {
+            "id": key_id,
             "api_key": api_key,
-            "provider": provider
+            "provider": provider,
+            "model_name": model_name
         }
     except Exception as e:
         print(f"[user_context] get_user_api_context error for user_id={user_id}: {e}")
