@@ -2,11 +2,25 @@ import React, { useState, useEffect, useRef } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
-import { FileText, Briefcase, ChevronRight, Lock, Loader2, Sparkles, ArrowRight } from "lucide-react";
+import { FileText, Briefcase, ChevronRight, Lock, Loader2, Sparkles, ArrowRight, Play, Video, Filter } from "lucide-react";
+import { createPortal } from "react-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { usePipeline } from "@/hooks/use-pipeline";
 
 type IntroType = "general" | "jd-specific";
+
+function fmtDate(value?: string) {
+  if (!value) return "Unknown date";
+  try {
+    const d = new Date(value);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  } catch {
+    return "Unknown date";
+  }
+}
 
 const INTRO_TYPES = [
   { 
@@ -41,6 +55,91 @@ export default function IntroSelect() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showScrollButton, setShowScrollButton] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasInitialHistory, setHasInitialHistory] = useState(false);
+
+  // Filters State
+  const [filterSessionType, setFilterSessionType] = useState("");
+  const [filterDate, setFilterDate] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+
+  const [showTypeFilter, setShowTypeFilter] = useState(false);
+  const [showDateFilter, setShowDateFilter] = useState(false);
+  const [showStatusFilter, setShowStatusFilter] = useState(false);
+
+  const typeFilterRef = useRef<HTMLDivElement>(null);
+  const dateFilterRef = useRef<HTMLDivElement>(null);
+  const statusFilterRef = useRef<HTMLDivElement>(null);
+
+  const [typeFilterPos, setTypeFilterPos] = useState({ top: 0, left: 0 });
+  const [dateFilterPos, setDateFilterPos] = useState({ top: 0, left: 0 });
+  const [statusFilterPos, setStatusFilterPos] = useState({ top: 0, left: 0 });
+
+  const toggleTypeFilter = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (typeFilterRef.current) {
+      const rect = typeFilterRef.current.getBoundingClientRect();
+      setTypeFilterPos({
+        top: rect.bottom + 6,
+        left: rect.left
+      });
+    }
+    setShowTypeFilter(!showTypeFilter);
+    setShowDateFilter(false);
+    setShowStatusFilter(false);
+  };
+
+  const toggleDateFilter = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (dateFilterRef.current) {
+      const rect = dateFilterRef.current.getBoundingClientRect();
+      setDateFilterPos({
+        top: rect.bottom + 6,
+        left: rect.left
+      });
+    }
+    setShowDateFilter(!showDateFilter);
+    setShowTypeFilter(false);
+    setShowStatusFilter(false);
+  };
+
+  const toggleStatusFilter = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (statusFilterRef.current) {
+      const rect = statusFilterRef.current.getBoundingClientRect();
+      setStatusFilterPos({
+        top: rect.bottom + 6,
+        left: rect.left - 40
+      });
+    }
+    setShowStatusFilter(!showStatusFilter);
+    setShowTypeFilter(false);
+    setShowDateFilter(false);
+  };
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".th-filter-trigger") && !target.closest(".filter-popover-menu")) {
+        setShowTypeFilter(false);
+        setShowDateFilter(false);
+        setShowStatusFilter(false);
+      }
+    };
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, []);
+
+  const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
+
+  useEffect(() => {
+    setSelectedRowId(null);
+    setCurrentPage(1);
+  }, [filterSessionType, filterDate, filterStatus]);
+
+  useEffect(() => {
+    setSelectedRowId(null);
+  }, [currentPage]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -56,14 +155,40 @@ export default function IntroSelect() {
 
   useEffect(() => {
     if (!sessionId) return;
-    fetch(`${import.meta.env.VITE_API_URL || ""}/api/intro/history?session_id=${sessionId}&page=${currentPage}&limit=10`)
+    const queryParams = new URLSearchParams({
+      session_id: sessionId,
+      page: String(currentPage),
+      limit: "30"
+    });
+    if (filterSessionType) queryParams.append("session_type", filterSessionType);
+    if (filterDate) queryParams.append("date", filterDate);
+    if (filterStatus) queryParams.append("status", filterStatus);
+
+    fetch(`${import.meta.env.VITE_API_URL || ""}/api/intro/history?${queryParams.toString()}`)
       .then(res => res.json())
       .then(data => {
         setHistory(data.history || []);
-        if (data.pagination) setTotalPages(data.pagination.total_pages);
+        if (data.pagination) {
+          setTotalPages(data.pagination.total_pages);
+          setTotalCount(data.pagination.total_count || 0);
+          if (!filterSessionType && !filterDate && !filterStatus && data.pagination.total_count > 0) {
+            setHasInitialHistory(true);
+          }
+        }
       })
       .catch(console.error);
-  }, [sessionId, currentPage]);
+  }, [sessionId, currentPage, filterSessionType, filterDate, filterStatus]);
+
+  useEffect(() => {
+    if (window.location.hash === "#previous-attempts-section" && history.length > 0) {
+      const el = document.getElementById("previous-attempts-section");
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 150);
+      }
+    }
+  }, [history]);
 
   if (loading) {
     return (
@@ -104,7 +229,7 @@ export default function IntroSelect() {
 
   return (
     <MainLayout>
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="space-y-8">
         {/* Top Selection Section - Viewport Sized to keep history below fold */}
         {currentPage === 1 && (
           <div className="min-h-[calc(100vh-8.5rem)] flex flex-col justify-center pb-12">
@@ -171,7 +296,7 @@ export default function IntroSelect() {
         )}
 
         {/* History Section */}
-          {history.length > 0 && (
+          {(history.length > 0 || hasInitialHistory || filterSessionType || filterDate || filterStatus) && (
             <div id="previous-attempts-section" className="pt-12 mt-8 border-t border-border/50 scroll-mt-24">
               {currentPage > 1 && (
                 <motion.button
@@ -187,74 +312,243 @@ export default function IntroSelect() {
                   <span>Start New Practice Session</span>
                 </motion.button>
               )}
-              <h3 className="text-xl font-bold mb-6 text-foreground flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
-                Previous Attempts
-              </h3>
-              <div className="space-y-4">
-                {history.map((item, i) => {
-                  const parsedFeed = typeof item.feedback === "string" ? JSON.parse(item.feedback) : (item.feedback || {});
-                  const innerFeed = parsedFeed.feedback || parsedFeed;
-                  const parsedResp = typeof item.raw_response === "string" ? JSON.parse(item.raw_response) : (item.raw_response || {});
-                  const isJD = item.type === "intro_jd" || item.type === "intro_eval_jd";
-                  
-                  const suggestionsList = innerFeed.ai_suggestions || parsedFeed.ai_suggestions || parsedResp.evaluation?.ai_suggestions || [];
-                  const strengthsList = innerFeed.strengths || parsedFeed.strengths || parsedResp.strengths || parsedResp.evaluation?.strengths || [];
-                  
-                  const techGapsRaw = innerFeed.technical_gaps || parsedFeed.technical_gaps || parsedResp.technical_gaps || parsedResp.evaluation?.technical_gaps;
-                  let techGapsList: string[] = [];
-                  if (techGapsRaw) {
-                    if (Array.isArray(techGapsRaw)) {
-                      techGapsList = techGapsRaw;
-                    } else if (typeof techGapsRaw === "object") {
-                      Object.values(techGapsRaw).forEach((val: any) => {
-                        if (Array.isArray(val)) techGapsList.push(...val);
-                      });
-                    }
-                  }
-                  const commNotesRaw = innerFeed.communication_notes || parsedFeed.communication_notes || parsedResp.communication_notes || parsedResp.evaluation?.communication_notes || [];
-                  const commNotesList = Array.isArray(commNotesRaw) ? commNotesRaw : [];
-                  const legacyWeak = innerFeed.improvement_areas || parsedFeed.improvement_areas || innerFeed.weaknesses || parsedFeed.weaknesses || parsedResp.improvement_areas || parsedResp.weaknesses || parsedResp.evaluation?.weaknesses || parsedResp.evaluation?.improvement_areas || [];
-                  
-                  const improvementList = [...legacyWeak, ...techGapsList, ...commNotesList];
-                  
-                  // Extract a high-level summary (e.g. the first suggestion or weakness)
-                  let summary = "No summary available.";
-                  if (suggestionsList.length > 0) summary = suggestionsList[0];
-                  else if (improvementList.length > 0) summary = improvementList[0];
-                  else if (strengthsList.length > 0) summary = strengthsList[0];
-                  
-                  // Truncate summary if it's too long
-                  if (summary.length > 120) summary = summary.substring(0, 120) + "...";
-                  
-                  return (
-                    <div key={item.id || i} className="bg-card/40 rounded-2xl border border-border/50 transition-all hover:bg-card/60 p-5 flex flex-col gap-4">
-                      <div className="flex justify-between items-center">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <span className={`px-3 py-1 text-xs font-bold rounded-full shadow-sm ${item.score >= 75 ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-amber-500/20 text-amber-400 border border-amber-500/30"}`}>
-                            {item.score >= 75 ? "Passed" : "Needs Work"} ({item.score}/100)
-                          </span>
-                          <span className="text-xs font-semibold px-3 py-1 bg-primary/20 text-primary rounded-md uppercase tracking-wider border border-primary/30 shadow-sm">
-                            {item.type ? item.type.replace(/_/g, ' ') : (isJD ? "JD Specific" : "General")}
-                          </span>
-                        </div>
-                        <span className="text-xs text-muted-foreground font-medium">{new Date(item.created_at).toLocaleString()}</span>
-                      </div>
-                      
-                      <p className="text-sm text-foreground/80 italic">"{summary}"</p>
-                      
-                      <div className="flex justify-end pt-2 border-t border-border/30">
-                        <Link to={`/intro-detail/${item.id}`} className="text-sm font-semibold text-primary hover:text-primary/80 flex items-center gap-1">
-                          View Full Insights <ArrowRight className="w-4 h-4" />
-                        </Link>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
+                  My Sessions ({totalCount})
+                </h3>
               </div>
+              <div className="rounded-lg border border-border/50 bg-card/60 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border/50 bg-muted/20 text-xs font-bold tracking-wider text-foreground">
+                        <th className="px-6 py-3.5">S.No</th>
+                        
+                        {/* Date Column Header with Popover Filter */}
+                        <th className="px-6 py-3.5 relative">
+                          <div 
+                            ref={dateFilterRef}
+                            className="th-filter-trigger inline-flex items-center gap-1.5 cursor-pointer select-none hover:text-foreground transition-colors" 
+                            onClick={toggleDateFilter}
+                          >
+                            <span>Date</span>
+                            <Filter className={`h-3 w-3 ${filterDate ? "text-primary fill-primary/10" : "text-muted-foreground"}`} />
+                          </div>
+                          {showDateFilter && createPortal(
+                            <div 
+                              className="filter-popover-menu fixed z-50 w-52 rounded-xl border border-border bg-card p-3 shadow-2xl text-left normal-case font-normal text-foreground animate-in fade-in slide-in-from-top-1 duration-150" 
+                              style={{ top: `${dateFilterPos.top}px`, left: `${dateFilterPos.left}px` }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="flex flex-col gap-2">
+                                <span className="text-[10px] font-bold text-muted-foreground uppercase">Search Date:</span>
+                                <input
+                                  type="date"
+                                  value={filterDate}
+                                  onChange={(e) => setFilterDate(e.target.value)}
+                                  className="bg-background border border-border/50 rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary w-full cursor-pointer [color-scheme:dark]"
+                                />
+                                <div className="flex justify-between items-center mt-1 pt-1 border-t border-border/30">
+                                  <button
+                                    onClick={() => { setFilterDate(""); setShowDateFilter(false); }}
+                                    className="text-[10px] text-muted-foreground hover:text-foreground font-bold"
+                                  >
+                                    Clear
+                                  </button>
+                                  <button
+                                    onClick={() => setShowDateFilter(false)}
+                                    className="text-[10px] text-primary hover:underline font-bold"
+                                  >
+                                    Apply
+                                  </button>
+                                </div>
+                              </div>
+                            </div>,
+                            document.body
+                          )}
+                        </th>
 
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-6">
+                        {/* Session Type Column Header with Popover Filter */}
+                        <th className="px-6 py-3.5 relative">
+                          <div 
+                            ref={typeFilterRef}
+                            className="th-filter-trigger inline-flex items-center gap-1.5 cursor-pointer select-none hover:text-foreground transition-colors" 
+                            onClick={toggleTypeFilter}
+                          >
+                            <span>Session Type</span>
+                            <Filter className={`h-3 w-3 ${filterSessionType ? "text-primary fill-primary/10" : "text-muted-foreground"}`} />
+                          </div>
+                          {showTypeFilter && createPortal(
+                            <div 
+                              className="filter-popover-menu fixed z-50 w-36 rounded-xl border border-border bg-card p-1.5 shadow-2xl text-left normal-case font-normal text-foreground animate-in fade-in slide-in-from-top-1 duration-150" 
+                              style={{ top: `${typeFilterPos.top}px`, left: `${typeFilterPos.left}px` }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="flex flex-col gap-0.5">
+                                <div 
+                                  onClick={() => { setFilterSessionType(""); setShowTypeFilter(false); }}
+                                  className={`px-2.5 py-1.5 rounded-lg text-xs cursor-pointer hover:bg-muted transition-colors ${!filterSessionType ? "text-primary font-bold bg-primary/5" : "text-muted-foreground"}`}
+                                >
+                                  All Types
+                                </div>
+                                <div 
+                                  onClick={() => { setFilterSessionType("audio"); setShowTypeFilter(false); }}
+                                  className={`px-2.5 py-1.5 rounded-lg text-xs cursor-pointer hover:bg-muted transition-colors ${filterSessionType === "audio" ? "text-primary font-bold bg-primary/5" : "text-muted-foreground"}`}
+                                >
+                                  Audio
+                                </div>
+                                <div 
+                                  onClick={() => { setFilterSessionType("video"); setShowTypeFilter(false); }}
+                                  className={`px-2.5 py-1.5 rounded-lg text-xs cursor-pointer hover:bg-muted transition-colors ${filterSessionType === "video" ? "text-primary font-bold bg-primary/5" : "text-muted-foreground"}`}
+                                >
+                                  Video
+                                </div>
+                              </div>
+                            </div>,
+                            document.body
+                          )}
+                        </th>
+
+                        <th className="px-6 py-3.5 text-center">Score</th>
+
+                        {/* Status Column Header with Popover Filter */}
+                        <th className="px-6 py-3.5 relative text-center">
+                          <div 
+                            ref={statusFilterRef}
+                            className="th-filter-trigger inline-flex items-center justify-center gap-1.5 cursor-pointer select-none hover:text-foreground transition-colors" 
+                            onClick={toggleStatusFilter}
+                          >
+                            <span>Status</span>
+                            <Filter className={`h-3 w-3 ${filterStatus ? "text-primary fill-primary/10" : "text-muted-foreground"}`} />
+                          </div>
+                          {showStatusFilter && createPortal(
+                            <div 
+                              className="filter-popover-menu fixed z-50 w-36 rounded-xl border border-border bg-card p-1.5 shadow-2xl text-left normal-case font-normal text-foreground animate-in fade-in slide-in-from-top-1 duration-150" 
+                              style={{ top: `${statusFilterPos.top}px`, left: `${statusFilterPos.left}px` }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="flex flex-col gap-0.5">
+                                <div 
+                                  onClick={() => { setFilterStatus(""); setShowStatusFilter(false); }}
+                                  className={`px-2.5 py-1.5 rounded-lg text-xs cursor-pointer hover:bg-muted transition-colors ${!filterStatus ? "text-primary font-bold bg-primary/5" : "text-muted-foreground"}`}
+                                >
+                                  All Statuses
+                                </div>
+                                <div 
+                                  onClick={() => { setFilterStatus("pass"); setShowStatusFilter(false); }}
+                                  className={`px-2.5 py-1.5 rounded-lg text-xs cursor-pointer hover:bg-muted transition-colors ${filterStatus === "pass" ? "text-primary font-bold bg-primary/5" : "text-muted-foreground"}`}
+                                >
+                                  Pass
+                                </div>
+                                <div 
+                                  onClick={() => { setFilterStatus("fail"); setShowStatusFilter(false); }}
+                                  className={`px-2.5 py-1.5 rounded-lg text-xs cursor-pointer hover:bg-muted transition-colors ${filterStatus === "fail" ? "text-primary font-bold bg-primary/5" : "text-muted-foreground"}`}
+                                >
+                                  Fail
+                                </div>
+                              </div>
+                            </div>,
+                            document.body
+                          )}
+                        </th>
+
+                        <th className="px-6 py-3.5 text-center font-bold">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50 bg-card/30">
+                      {history.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground bg-card/10">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <svg xmlns="http://www.w3.org/2000/svg"
+width="32"
+                                height="32"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className="text-red-500"
+                              >
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="m15 9-6 6" />
+                                <path d="m9 9 6 6" />
+                              </svg>
+                              <span className="font-semibold text-foreground">No records found</span>
+                              <p className="text-xs text-muted-foreground">Try adjusting your filters or date selection.</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        history.map((item, i) => (
+                          <tr 
+                            key={item.id || i} 
+                            onClick={() => setSelectedRowId(item.id)}
+                            className={`transition-colors cursor-pointer ${
+                              selectedRowId === item.id 
+                                ? "bg-primary/15 hover:bg-primary/20" 
+                                : "hover:bg-primary/5"
+                            }`}
+                          >
+                            <td className="px-6 py-2 font-semibold text-foreground whitespace-nowrap">
+                              {(currentPage - 1) * 30 + i + 1}
+                            </td>
+                            <td className="px-6 py-2 text-muted-foreground whitespace-nowrap">
+                              {fmtDate(item.created_at)}
+                            </td>
+                            <td className="px-6 py-2 text-muted-foreground whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                {item.video_url ? (
+                                  <>
+                                    <Video className="h-4 w-4 text-primary" />
+                                    <span>Video Recording</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <FileText className="h-4 w-4 text-muted-foreground" />
+                                    <span>Text Attempt</span>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-2 text-center whitespace-nowrap">
+                              <span
+                                className={`rounded-full px-2.5 py-0.5 text-xs font-bold inline-block ${
+                                  item.score >= 75
+                                    ? "bg-green-500/15 text-green-400"
+                                    : "bg-amber-500/15 text-amber-400"
+                                }`}
+                              >
+                                {item.score ?? 0}/100
+                              </span>
+                            </td>
+                            <td className="px-6 py-2 text-center whitespace-nowrap">
+                              <span
+                                className={`text-xs font-semibold ${
+                                  item.score >= 75 ? "text-green-400" : "text-amber-400"
+                                }`}
+                              >
+                                {item.score >= 75 ? "Passed" : "Retry"}
+                              </span>
+                            </td>
+                            <td className="px-6 py-2 text-center whitespace-nowrap text-xs">
+                              <Link
+                                to={`/intro-detail/${item.id}`}
+                                className="inline-flex items-center gap-1.5 rounded-full bg-primary hover:bg-primary/90 px-5 py-1.5 font-bold text-white shadow-md shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                              >
+                                View
+                              </Link>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Pagination Footer */}
+                <div className="flex items-center justify-between border-t border-border/50 bg-card/40 px-6 py-4">
                   <button 
                     disabled={currentPage === 1}
                     onClick={() => {
@@ -266,12 +560,12 @@ export default function IntroSelect() {
                         }, 50);
                       }
                     }}
-                    className="px-4 py-2 bg-card/50 border border-border/50 rounded-lg text-sm font-semibold text-foreground hover:bg-card disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    className="px-3.5 py-1.5 rounded-lg border border-border/50 bg-card hover:bg-card/80 text-xs font-semibold text-foreground disabled:opacity-40 disabled:pointer-events-none transition-colors"
                   >
                     Previous
                   </button>
-                  <span className="text-sm text-muted-foreground font-medium">
-                    Page {currentPage} of {totalPages}
+                  <span className="text-xs text-muted-foreground font-medium">
+                    Page {currentPage} of {totalPages || 1}
                   </span>
                   <button 
                     disabled={currentPage >= totalPages}
@@ -284,12 +578,12 @@ export default function IntroSelect() {
                         }, 50);
                       }
                     }}
-                    className="px-4 py-2 bg-card/50 border border-border/50 rounded-lg text-sm font-semibold text-foreground hover:bg-card disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    className="px-3.5 py-1.5 rounded-lg border border-border/50 bg-card hover:bg-card/80 text-xs font-semibold text-foreground disabled:opacity-40 disabled:pointer-events-none transition-colors"
                   >
                     Next
                   </button>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>
