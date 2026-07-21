@@ -157,11 +157,12 @@ export function deleteLlmKey(keyId: number, sessionId: string) {
 
 // ─── Intro Evaluation ─────────────────────────────────────────────────────────
 
-export function evaluateIntro(sessionId: string, audioBlob: Blob, introType: string = "general", jdText: string = "", visionMetrics: any = null, recordingId: string = "") {
+export function evaluateIntro(sessionId: string, audioBlob: Blob, introType: string = "general", jdText: string = "", visionMetrics: any = null, recordingId: string = "", interviewMode: string = "video") {
   const form = new FormData();
   form.append("session_id", sessionId);
   form.append("audio", audioBlob, "recording.webm");
   form.append("intro_type", introType);
+  form.append("interview_mode", interviewMode);
   if (jdText) {
     form.append("job_description", jdText);
   }

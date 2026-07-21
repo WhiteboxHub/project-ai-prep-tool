@@ -140,7 +140,7 @@ function classifyError(err: any): { state: "denied" | "unavailable"; message: st
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
-export function useMediaStream(requestOnMount = true) {
+export function useMediaStream(requestOnMount = true, initialAudioEnabled = true) {
   const mountedRef = useRef(false);
 
   // Combined stream exposed to VideoPanel
@@ -150,7 +150,7 @@ export function useMediaStream(requestOnMount = true) {
   // Per-device independent state
   const [micPermission, setMicPermission] = useState<PermissionState>("idle");
   const [cameraPermission, setCameraPermission] = useState<PermissionState>("idle");
-  const [micEnabled, setMicEnabled] = useState(false);
+  const [micEnabled, setMicEnabled] = useState(initialAudioEnabled);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [audioError, setAudioError] = useState("");
   const [videoError, setVideoError] = useState("");
@@ -196,10 +196,23 @@ export function useMediaStream(requestOnMount = true) {
     setMicPermission("requesting");
     setAudioError("");
     try {
-      await acquireMicStream();
+      const audioStream = await acquireMicStream();
       if (!mountedRef.current) return;
       setMicPermission("granted");
-      setMicEnabled(true);
+      if (audioStream) {
+        audioStream.getAudioTracks().forEach(t => {
+          t.enabled = initialAudioEnabled;
+          t.onended = () => {
+            if (mountedRef.current) {
+              setMicPermission("denied");
+              setAudioError("Microphone connection was lost or permission was revoked.");
+              _audioStreamCache = null;
+              rebuildStream();
+            }
+          };
+        });
+      }
+      setMicEnabled(initialAudioEnabled);
       rebuildStream();
     } catch (err: any) {
       if (!mountedRef.current) return;
@@ -209,7 +222,7 @@ export function useMediaStream(requestOnMount = true) {
       // Log as warn-level — this is expected when no mic is connected
       console.warn("[useMediaStream] Microphone:", err?.name, err?.message);
     }
-  }, [rebuildStream]);
+  }, [rebuildStream, initialAudioEnabled]);
 
   // ── Camera ─────────────────────────────────────────────────────────────
   const requestVideo = useCallback(async () => {
