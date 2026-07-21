@@ -77,13 +77,22 @@ export default function MyHistory() {
     setCurrentPage(1);
   }, [filterType]);
 
+  const getAttemptMode = (attempt: IntroAttempt): "audio" | "video" => {
+    const raw = typeof attempt.raw_response === "string" ? JSON.parse(attempt.raw_response || "{}") : (attempt.raw_response || {});
+    if (raw.interview_mode === "audio") return "audio";
+    if (raw.interview_mode === "video") return "video";
+    // Fallback based on video_url if interview_mode was recorded prior
+    return attempt.video_url ? "video" : "audio";
+  };
+
   const filteredAttempts = useMemo(() => {
     return attempts.filter((attempt) => {
+      const mode = getAttemptMode(attempt);
       if (filterType === "video") {
-        return !!attempt.video_url;
+        return mode === "video";
       }
       if (filterType === "audio") {
-        return !attempt.video_url;
+        return mode === "audio";
       }
       return true;
     });
@@ -180,29 +189,31 @@ export default function MyHistory() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50 bg-card/30">
-                  {paginatedAttempts.map((attempt) => (
-                    <tr key={attempt.id} className="hover:bg-card/50 transition-colors">
-                      <td className="px-6 py-4 font-semibold text-foreground whitespace-nowrap">
-                        Interview #{attempt.id}
-                      </td>
-                      <td className="px-6 py-4 text-muted-foreground whitespace-nowrap">
-                        {fmtDate(attempt.created_at)}
-                      </td>
-                      <td className="px-6 py-4 text-muted-foreground whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          {attempt.video_url ? (
-                            <>
-                              <Video className="h-4 w-4 text-primary" />
-                              <span>Video Recording</span>
-                            </>
-                          ) : (
-                            <>
-                              <FileText className="h-4 w-4 text-muted-foreground" />
-                              <span>Text Attempt</span>
-                            </>
-                          )}
-                        </div>
-                      </td>
+                  {paginatedAttempts.map((attempt) => {
+                    const mode = getAttemptMode(attempt);
+                    return (
+                      <tr key={attempt.id} className="hover:bg-card/50 transition-colors">
+                        <td className="px-6 py-4 font-semibold text-foreground whitespace-nowrap">
+                          Interview #{attempt.id}
+                        </td>
+                        <td className="px-6 py-4 text-muted-foreground whitespace-nowrap">
+                          {fmtDate(attempt.created_at)}
+                        </td>
+                        <td className="px-6 py-4 text-muted-foreground whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            {mode === "video" ? (
+                              <>
+                                <Video className="h-4 w-4 text-primary" />
+                                <span>Video Interview</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                                <span>Audio Interview</span>
+                              </>
+                            )}
+                          </div>
+                        </td>
                       <td className="px-6 py-4 text-center whitespace-nowrap">
                         <span
                           className={cn(
@@ -237,8 +248,9 @@ export default function MyHistory() {
                         </Link>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
+                  );
+                })}
+              </tbody>
               </table>
             </div>
             <div className="flex items-center justify-between border-t border-border/50 bg-card/40 px-6 py-4">
