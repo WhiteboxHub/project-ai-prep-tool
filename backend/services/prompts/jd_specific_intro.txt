@@ -7,10 +7,13 @@ You will be given four inputs:
 
 Your evaluation must judge the candidate not against a generic ideal introduction, but against HOW WELL THIS SPECIFIC INTRO POSITIONS THEM FOR THIS SPECIFIC JD.
 
-When RESUME_CONTEXT is provided, use it to distinguish two very different kinds of gaps:
+When RESUME_CONTEXT is provided, use it to distinguish THREE kinds of gaps/discrepancies:
 - A COMMUNICATION gap: the candidate has the JD-relevant skill on their resume but didn't say it out loud. This is fixable with better delivery — flag it clearly and specifically.
 - A REAL gap: the JD requires something that appears nowhere in the resume either. This is not a delivery problem, don't imply the candidate should "just mention" a skill they may not actually have — instead note it factually as a genuine mismatch.
+- A CONFLICT: the transcript and resume DISAGREE on a factual detail for what is clearly the same project (e.g. transcript says "fine-tuned RoBERTa," resume says "fine-tuned BERT" for the same task). Do not silently pick one as correct or classify as a gap — state both versions factually: "Your intro says RoBERTa, resume says BERT, for the same intent-classification project — worth clarifying which is accurate."
 Never invent skills the candidate hasn't claimed anywhere (not in transcript, not in resume).
+
+When checking JD requirements against RESUME_CONTEXT, check at the SUB-ITEM level, not just the category level — e.g. if the JD cares about observability and the resume lists Datadog, CloudWatch, Prometheus, and Grafana individually, check each tool the candidate mentioned against the FULL resume list, not just whether "observability" as a category came up at all. Naming 1 of 4 resume-listed tools in a category is a partial match, not a full pass. The same applies to CI/CD tooling (don't credit from "I worked on deployment" alone — requires explicit tool naming), IaC tools (Terraform/Helm/ArgoCD checked individually), and reranking (mechanism, e.g. cross-encoder, not just the word "reranking").
 
 ===========================================
 ANTI-GENERIC-FEEDBACK RULE (STRICT — READ CAREFULLY)
@@ -139,6 +142,7 @@ Cross-reference JOB_DESCRIPTION requirements against both RESUME_CONTEXT and CAN
 2. "communication_gap" — required by JD, present in resume, but MISSING or only shallow/name-dropped in the transcript. This is your highest-value feedback: something the candidate could fix immediately just by saying it next time.
 3. "genuine_gap" — required by JD, NOT found anywhere in resume or transcript. State this factually; do not suggest the candidate "mention" something they don't appear to have.
 4. "irrelevant_to_jd" — present in resume/transcript but not something this JD cares about. Do not penalize for this, just don't count it toward JD fit.
+5. "conflict" — transcript and resume disagree on a factual detail for what is clearly the same project. State both versions factually, do not guess which is correct.
 
 Each "communication_gap" entry must be specific and actionable, in this format:
 "[Skill/requirement from JD] — your resume shows [specific project/experience], but you didn't mention it — this is a must-have for this role, so bring it up explicitly next time."
@@ -218,7 +222,8 @@ This JSON is inserted directly into a database row with columns: score (int), pa
       "communicated": ["..."],
       "communication_gap": ["..."],
       "genuine_gap": ["..."],
-      "irrelevant_to_jd": ["..."]
+      "irrelevant_to_jd": ["..."],
+      "conflict": ["e.g. 'Transcript says RoBERTa fine-tuning, resume says BERT, same project — flagged to verify.'"]
     },
     "delivery_score": 0.0,
     "overall_jd_fit_score": 0.0,

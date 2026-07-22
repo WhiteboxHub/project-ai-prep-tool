@@ -116,54 +116,71 @@ Evaluate across these specific criteria (score each strictly from 0.0 to 100.0):
 If the transcript is less than 3 complete sentences, CAP the overall_score at 40.0.
 
 ===========================================
-PART B — TECHNICAL COVERAGE CHECKLIST
+PART B — TECHNICAL COVERAGE CHECKLIST (FULL GENAI LIFECYCLE)
 ===========================================
 
-Compare what the candidate mentioned against this reference checklist of topics an AI/Gen-AI Engineer's introduction SHOULD touch on (not all are mandatory — relevance depends on their stated project scope — but flag notable gaps).
+This checklist represents the full lifecycle of a production GenAI/Agentic engineer's work, structured the way a complete ideal introduction would walk through it. Each category has specific named sub-items — checking only the category label is NOT sufficient; each sub-item must be checked individually against the transcript AND resume. A candidate naming ONE tool in a category does not automatically clear the whole category if the resume shows more.
 
-1. RAG / Retrieval Pipeline
-   - Data ingestion & preprocessing (parsers, cleaning, unstructured data handling)
-   - Chunking strategy
-   - Embedding model / technique
-   - Vector database
-   - Retrieval strategy (semantic, keyword, hybrid, reranking)
-   - Orchestration framework (LangChain, LlamaIndex, etc.)
-   - Generation / LLM provider & model
-   - Query optimization, conversation history / context handling
-   - Evaluation (retriever eval, generation eval, metrics used — e.g. RAGAS, faithfulness, recall@k)
-   - Guardrails / safety filtering
+1. RAG — Ingestion
+   - Data type handled (structured/unstructured, documents, etc.)
+   - Preprocessing / cleaning tool or method (e.g. Docling, custom parsers)
+   - Chunking strategy (tool AND method — fixed-size, semantic, recursive, overlap %)
+   - Embedding model (e.g. Sentence Transformers, OpenAI embeddings, etc.)
 
-2. Agentic AI Systems
-   - Agent framework (LangGraph, CrewAI, AutoGen, etc.)
-   - Orchestrator/supervisor pattern or multi-agent architecture
-   - Intent detection / routing
-   - Domain-specific / specialized agents
-   - Memory management (short-term, long-term)
-   - Tool calling / function calling mechanism (MCP, native tool use, etc.)
+2. RAG — Databases
+   - Vector database (e.g. Milvus, Pinecone, Weaviate, FAISS)
+   - Any additional storage layers (e.g. Redis for caching/session, Neo4j for graph/relational memory) — check resume explicitly for multi-database architectures, don't assume vector DB alone covers this category
 
-3. MLOps & Model Lifecycle
-   - Experiment tracking (MLflow, Weights & Biases)
-   - Training/serving platform (Databricks, SageMaker, Vertex AI)
-   - Fine-tuning experience (base model, task type, method — full FT, LoRA, PEFT)
-   - Model deployment & serving strategy
+3. RAG — Query & Retrieval Pattern
+   - Retrieval strategy (semantic-only, keyword-only, hybrid)
+   - Reranking — and specifically the reranking MECHANISM if resume specifies one (e.g. cross-encoder), not just the word "reranking"
+   - Query optimization / rewriting
+   - Conversation history / multi-turn context handling
 
-4. Full-Stack & Infrastructure
-   - Frontend/backend stack (e.g. React, FastAPI, Node)
-   - CI/CD tooling (GitHub Actions, Jenkins, etc.)
+4. RAG — Generation
+   - LLM provider and specific model (e.g. AWS Bedrock with Claude Sonnet)
+   - Orchestration framework (e.g. LangChain) and what it's used for (prompt templating, chaining, Q&A)
+
+5. RAG — Evaluation & Safety
+   - Retriever evaluation — specific metric or method (e.g. Precision@K, Recall@K, RAGAS), not just "we did evaluation"
+   - Generation evaluation — specific metric or method (e.g. faithfulness, LLM-as-judge, relevance score)
+   - Guardrails — and specifically what they guard (safety, PII protection, jailbreak resistance) if resume specifies more than one function
+
+6. Agentic AI — Framework & Orchestration Pattern
+   - Agent framework (e.g. LangGraph, CrewAI, AutoGen)
+   - Orchestration pattern by name (e.g. supervisor pattern, hierarchical, sequential)
+   - Router / intent detection mechanism
+   - Domain-specific / specialized agents — named individually if the candidate lists specific domains
+
+7. Agentic AI — Memory & Tooling
+   - Memory management — short-term AND long-term explicitly, not just "memory"
+   - Tool calling mechanism (e.g. MCP, native function calling) and any mention of tool-use safety/security
+   - Any additional distributed memory/state architecture (e.g. shared context objects, persistent state)
+
+8. MLOps & Model Lifecycle
+   - Experiment tracking (e.g. MLflow)
+   - Training/serving platform (e.g. Databricks, SageMaker)
+   - Fine-tuning — specific base model AND task (e.g. "fine-tuned RoBERTa for intent classification") — flag a MODEL NAME MISMATCH as a "conflict" (see Part C) if transcript names a different base model than the resume for what appears to be the same project
+
+9. Full-Stack & Infrastructure
+   - Frontend/backend stack (e.g. React, FastAPI)
+   - CI/CD tooling by name (e.g. GitHub Actions) — do not credit this category from "I worked on deployment" alone, CI/CD requires explicit tooling mention
    - Containerization & orchestration (Docker, Kubernetes)
-   - IaC / GitOps (Terraform, Helm, ArgoCD)
-   - Cloud platform & services (AWS/GCP/Azure — compute, storage, serverless)
-   - Monitoring & observability (Datadog, Prometheus, Grafana, CloudWatch)
+   - IaC / GitOps (e.g. Terraform, Helm, ArgoCD) — check ALL tools resume lists in this category individually, don't stop at the first one mentioned
+   - Cloud platform & specific services (e.g. AWS EKS, ECS, S3, Lambda)
 
-5. Narrative & Impact (often missed even by technically strong candidates)
+10. Observability
+   - List EVERY monitoring/observability tool the resume names individually (e.g. Datadog, CloudWatch, Prometheus, Grafana) and check each one against the transcript separately — naming 2 of 4 resume-listed tools is a PARTIAL category, not a full pass
+
+11. Narrative & Impact (often missed even by technically strong candidates)
    - Quantified impact/metrics (latency reduced, accuracy improved, cost saved, users served)
    - Business context (what problem this solved, who used it)
    - Career trajectory / progression narrative (why they moved from role to role)
    - Forward-looking statement (what they want to work on next / career goal)
 
-For each category, determine what the candidate explicitly mentioned vs. what was notably absent. Do NOT penalize absence of items irrelevant to their stated project (e.g., don't ding a pure-MLOps candidate for missing agentic framework details) — but DO flag gaps within the scope they themselves opened up (e.g., if they mention "domain agents" but never name any, or mention "evaluation" but give zero metric/method, that's a gap).
+For each sub-item, determine what the candidate explicitly mentioned vs. what was notably absent. Do NOT penalize absence of items irrelevant to their stated project (e.g., don't ding a pure-MLOps candidate for missing agentic framework details) — but DO flag gaps within the scope they themselves opened up, AND flag any sub-item explicitly present in RESUME_CONTEXT within a category the candidate did partially address (e.g. if they named Terraform but resume also lists Helm and ArgoCD, that's a partial-category gap, not a free pass).
 
-Pay special attention to Category 5 — most technically strong candidates lose points here, not on tooling.
+Pay special attention to Category 11 — most technically strong candidates lose points here, not on tooling.
 
 ===========================================
 PART C — RESUME-GROUNDED GAP ANALYSIS (only if RESUME_CONTEXT provided)
@@ -182,10 +199,13 @@ Bad example (too vague, do not do this):
 
 Also flag the reverse case: if the candidate mentioned something in TRANSCRIPT that ISN'T supported anywhere in RESUME_CONTEXT, don't penalize them for it (people gain experience between resume updates), but do not count it as a "resume-verified" strength either — treat it as transcript-only.
 
-Distinguish clearly between three tiers in your feedback:
+CONFLICT CASE — distinct from a gap: if the transcript states something that DIRECTLY CONTRADICTS the resume for what is clearly the same project/task (e.g. transcript says "fine-tuned RoBERTa for intent classification," resume says "fine-tuned BERT" for the same task), do NOT classify this as "missed" or silently pick one as correct. Flag it as "conflict" — state both versions factually and note the discrepancy without guessing which is accurate: "Your intro says RoBERTa, your resume says BERT, for what looks like the same intent-classification project — worth double-checking which one you actually used before your next interview."
+
+Distinguish clearly between four tiers in your feedback:
 1. "Mentioned well" — present in transcript AND resume, explained with some substance (not just named)
 2. "Named but shallow" — present in transcript but only name-dropped with no context/why
 3. "Missed entirely" — present in resume, absent from transcript
+4. "Conflict" — transcript and resume disagree on a factual detail for the same project
 
 ===========================================
 OUTPUT FORMAT
@@ -245,7 +265,8 @@ This JSON is inserted directly into a database row with columns: score (int), pa
     "resume_match": {
       "mentioned_well": ["..."],
       "named_but_shallow": ["..."],
-      "missed_entirely": ["..."]
+      "missed_entirely": ["..."],
+      "conflicts": ["e.g. 'Transcript says RoBERTa fine-tuning, resume says BERT fine-tuning, same project — flagged for candidate to verify.'"]
     }
   }
 }
