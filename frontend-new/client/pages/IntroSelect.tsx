@@ -115,7 +115,7 @@ export default function IntroSelect() {
               <Sparkles className="w-4 h-4 text-primary" />
               <span className="text-sm text-primary font-semibold">Intro Practice</span>
             </div>
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground">Choose Your Introduction Style</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground">Choose Your Introduction Format</h2>
             <p className="text-muted-foreground text-lg">Choose between a general introduction or tailor it to a specific job description.</p>
           </motion.div>
 
