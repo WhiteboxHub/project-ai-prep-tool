@@ -266,14 +266,149 @@ Return JSON.
 
 
 # ---------------------------
+# PROGRAMMATIC CONSISTENCY VALIDATOR & NORMALIZER
+# ---------------------------
+def validate_and_correct_consistency(eval_result: dict) -> dict:
+    if not isinstance(eval_result, dict):
+        return {"error": "Invalid result from model", "raw": str(eval_result)}
+
+    feedback = eval_result.get("feedback")
+    if not isinstance(feedback, dict):
+        feedback = {"feedback": str(feedback)} if feedback is not None else {}
+        eval_result["feedback"] = feedback
+
+    raw_response = eval_result.get("raw_response")
+    if not isinstance(raw_response, dict):
+        raw_response = {"raw": str(raw_response)} if raw_response is not None else {}
+        eval_result["raw_response"] = raw_response
+
+    # 1. Normalize and merge scores for frontend breakdown cards
+    scores = None
+    if "scores" in feedback:
+        scores = feedback["scores"]
+    elif "scores" in raw_response:
+        scores = raw_response["scores"]
+    else:
+        # Combine delivery_scores and jd_alignment_scores if present
+        merged_scores = {}
+        if "delivery_scores" in raw_response and isinstance(raw_response["delivery_scores"], dict):
+            merged_scores.update(raw_response["delivery_scores"])
+        if "jd_alignment_scores" in raw_response and isinstance(raw_response["jd_alignment_scores"], dict):
+            merged_scores.update(raw_response["jd_alignment_scores"])
+        if merged_scores:
+            scores = merged_scores
+            raw_response["scores"] = merged_scores
+    
+    if scores:
+        feedback["scores"] = scores
+        raw_response["scores"] = scores
+
+    # 2. Get the topic checklist (the Evidence-First source of truth)
+    topic_checklist = raw_response.get("topic_checklist", {})
+    if not isinstance(topic_checklist, dict) or not topic_checklist:
+        return eval_result
+
+    # Clean the topic checklist by removing instructions key
+    checklist_clean = {k: v for k, v in topic_checklist.items() if not k.startswith("_")}
+
+    # Helper to fuzzy match names
+    def normalize_name(s: str) -> str:
+        return "".join(c for c in s.lower() if c.isalnum())
+
+    normalized_checklist = {}
+    for topic_key, topic_val in checklist_clean.items():
+        if isinstance(topic_val, dict) and "status" in topic_val:
+            normalized_checklist[normalize_name(topic_key)] = {
+                "key": topic_key,
+                "status": topic_val["status"],
+                "evidence": topic_val.get("evidence")
+            }
+
+    # Map checklist status to verdict
+    status_to_verdict = {
+        "covered": "correct",
+        "shallow": "partial",
+        "missing": "missing"
+    }
+
+    # 3. Validate and enforce consistency in corrections list
+    corrections = feedback.get("corrections", [])
+    if isinstance(corrections, list):
+        for corr in corrections:
+            if not isinstance(corr, dict) or "topic" not in corr:
+                continue
+            
+            corr_topic = corr["topic"]
+            if not isinstance(corr_topic, str):
+                continue
+            norm_corr_topic = normalize_name(corr_topic)
+            
+            # Find matching checklist item
+            checklist_match = None
+            if norm_corr_topic in normalized_checklist:
+                checklist_match = normalized_checklist[norm_corr_topic]
+            else:
+                # Try finding substring match
+                for norm_check_key, check_val in normalized_checklist.items():
+                    if norm_corr_topic in norm_check_key or norm_check_key in norm_corr_topic:
+                        checklist_match = check_val
+                        break
+            
+            if checklist_match:
+                status = checklist_match["status"]
+                expected_verdict = status_to_verdict.get(status)
+                actual_verdict = corr.get("verdict")
+                
+                if expected_verdict and actual_verdict != expected_verdict:
+                    print(f"[WARNING] Consistency Violation: Topic '{corr_topic}' has status '{status}' in checklist but verdict is '{actual_verdict}'. Overriding to '{expected_verdict}'.")
+                    corr["verdict"] = expected_verdict
+                    # If it was marked correct but now missing, clear disingenuous note/add placeholder
+                    if expected_verdict == "missing" and actual_verdict == "correct":
+                        corr["note"] = f"Missing — no mention of {corr_topic} was found in the transcript."
+
+    # 4. Enforce consistency in curated technical_gaps by pruning hallucinated gaps
+    # If any item in technical_gaps corresponds to a 'covered' checklist item, we must prune/remove it.
+    technical_gaps = feedback.get("technical_gaps", {})
+    if isinstance(technical_gaps, dict):
+        pruned_gaps = {}
+        for category, gaps_list in technical_gaps.items():
+            if not isinstance(gaps_list, list):
+                pruned_gaps[category] = gaps_list
+                continue
+            
+            new_gaps_list = []
+            for gap_text in gaps_list:
+                if not isinstance(gap_text, str):
+                    continue
+                # Check if this gap text refers to any 'covered' topic in the checklist
+                is_hallucinated = False
+                for norm_check_key, check_val in normalized_checklist.items():
+                    if check_val["status"] == "covered":
+                        check_key_lower = check_val["key"].lower().replace("_", " ")
+                        if check_key_lower in gap_text.lower() or check_key_lower.replace(" ", "") in gap_text.lower():
+                            is_hallucinated = True
+                            print(f"[WARNING] Hallucination Pruned: Removed '{gap_text}' from '{category}' because '{check_val['key']}' is marked 'covered' in the checklist.")
+                            break
+                
+                if not is_hallucinated:
+                    new_gaps_list.append(gap_text)
+            
+            pruned_gaps[category] = new_gaps_list
+        feedback["technical_gaps"] = pruned_gaps
+
+    return eval_result
+
+
+# ---------------------------
 # SAFE JSON PARSER (IMPROVED)
 # ---------------------------
 def safe_parse_json(text: str) -> dict:
     if not text:
         return {"error": "Empty response"}
 
+    parsed = None
     try:
-        return json.loads(text)
+        parsed = json.loads(text)
 
     except Exception:
         text = text.strip()
@@ -289,10 +424,29 @@ def safe_parse_json(text: str) -> dict:
         text = text.strip()
 
         try:
-            return json.loads(text)
+            parsed = json.loads(text)
         except Exception as e:
-            print("⚠️ JSON Parse Failed:", text)
-            return {
+            print("[WARNING] JSON Parse Failed:", text)
+            parsed = {
                 "error": "Invalid JSON from LLM",
                 "raw": text
             }
+
+    # Handle double-encoded JSON strings
+    if isinstance(parsed, str):
+        try:
+            parsed = json.loads(parsed)
+        except Exception:
+            parsed = {
+                "error": "LLM returned raw string instead of JSON object",
+                "raw": parsed
+            }
+
+    # Ensure it's a dictionary
+    if not isinstance(parsed, dict):
+        parsed = {
+            "error": "LLM returned non-object response",
+            "raw": str(parsed)
+        }
+
+    return validate_and_correct_consistency(parsed)

@@ -267,10 +267,14 @@ async def extract_latest_company_bg(session_id: str, resume_json: dict):
                 with conn.cursor() as cursor:
                     # session_id is str(candidate_marketing.id)
                     marketing_id = int(session_id)
+                    cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (marketing_id,))
+                    cm_row = cursor.fetchone()
+                    real_candidate_id = cm_row["candidate_id"] if cm_row else marketing_id
+
                     cursor.execute(
                         """
                         INSERT INTO aiprep_tool_project_context (
-                            user_id, company_name, domain, product, business_problem, previous_system,
+                            candidate_id, company_name, domain, product, business_problem, previous_system,
                             key_problems, ai_techniques, agent_usage, impact, evaluation_approach,
                             challenges_learnings, learnings, future_roadmap,
                             background, skills, architecture, business_value, role
@@ -297,7 +301,7 @@ async def extract_latest_company_bg(session_id: str, resume_json: dict):
                             role = COALESCE(VALUES(role), role)
                     """,
                         (
-                            marketing_id,
+                            real_candidate_id,
                             company_name, domain, product, business_problem, previous_system,
                             key_problems, ai_techniques, agent_usage, impact, evaluation_approach,
                             challenges_learnings, learnings, future_roadmap,
