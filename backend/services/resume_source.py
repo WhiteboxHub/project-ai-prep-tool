@@ -21,7 +21,10 @@ def _parse_json_field(raw: Any) -> Optional[dict]:
         return raw
     if isinstance(raw, str):
         try:
-            return json.loads(raw)
+            res = json.loads(raw)
+            if isinstance(res, dict):
+                return res
+            return None
         except Exception:
             return None
     return None

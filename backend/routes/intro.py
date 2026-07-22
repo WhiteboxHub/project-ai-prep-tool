@@ -21,13 +21,18 @@ def _json_or_empty(value):
     if isinstance(value, (dict, list)):
         return value
     try:
-        return json.loads(value)
+        res = json.loads(value)
+        if isinstance(res, (dict, list)):
+            return res
+        return {}
     except Exception:
         return {}
 
 
-def _normalize_score(eval_result: dict) -> int:
-    raw_score = eval_result.get("overall_score", 0)
+def _normalize_score(eval_result) -> int:
+    if not isinstance(eval_result, dict):
+        return 0
+    raw_score = eval_result.get("overall_score", eval_result.get("score", 0))
     try:
         score = float(raw_score)
     except (ValueError, TypeError):
@@ -35,23 +40,51 @@ def _normalize_score(eval_result: dict) -> int:
     return max(0, min(100, int(score)))
 
 
-def _feedback_payload(eval_result: dict) -> dict:
+def _feedback_payload(eval_result) -> dict:
+    if not isinstance(eval_result, dict):
+        return {}
     feedback = eval_result.get("feedback", {})
     if not isinstance(feedback, dict):
-        feedback = {"feedback": feedback}
+        feedback = {"feedback": str(feedback)}
+
+    strengths = feedback.get("strengths") if isinstance(feedback, dict) else None
+    if not strengths and isinstance(eval_result, dict):
+        strengths = eval_result.get("strengths", [])
+
+    weaknesses = feedback.get("weaknesses") if isinstance(feedback, dict) else None
+    if not weaknesses and isinstance(eval_result, dict):
+        weaknesses = eval_result.get("weaknesses", [])
+
+    improvement_areas = feedback.get("improvement_areas") if isinstance(feedback, dict) else None
+    if not improvement_areas and isinstance(eval_result, dict):
+        improvement_areas = eval_result.get("improvement_areas", [])
+
+    ai_suggestions = feedback.get("ai_suggestions") if isinstance(feedback, dict) else None
+    if not ai_suggestions and isinstance(eval_result, dict):
+        ai_suggestions = eval_result.get("ai_suggestions", [])
+
+    score_reasons = feedback.get("score_reasons") if isinstance(feedback, dict) else None
+    if not score_reasons and isinstance(eval_result, dict):
+        score_reasons = eval_result.get("score_reasons", {})
+
+    vision_feedback = feedback.get("vision_feedback") if isinstance(feedback, dict) else None
+    if not vision_feedback and isinstance(eval_result, dict):
+        vision_feedback = eval_result.get("vision_feedback", {})
 
     return {
         **feedback,
-        "strengths": feedback.get("strengths", eval_result.get("strengths", [])),
-        "weaknesses": feedback.get("weaknesses", eval_result.get("weaknesses", [])),
-        "improvement_areas": feedback.get("improvement_areas", eval_result.get("improvement_areas", [])),
-        "ai_suggestions": feedback.get("ai_suggestions", eval_result.get("ai_suggestions", [])),
-        "score_reasons": feedback.get("score_reasons", eval_result.get("score_reasons", {})),
-        "vision_feedback": feedback.get("vision_feedback", eval_result.get("vision_feedback", {})),
+        "strengths": strengths or [],
+        "weaknesses": weaknesses or [],
+        "improvement_areas": improvement_areas or [],
+        "ai_suggestions": ai_suggestions or [],
+        "score_reasons": score_reasons or {},
+        "vision_feedback": vision_feedback or {},
     }
 
 
-def _serialize_intro_row(row: dict) -> dict:
+def _serialize_intro_row(row) -> dict:
+    if not isinstance(row, dict):
+        return {}
     return {
         "id": row.get("id"),
         "user_id": row.get("user_id"),
@@ -114,7 +147,13 @@ async def evaluate_audio_intro(
         parsed_vision_metrics = None
         if vision_metrics:
             try:
-                parsed_vision_metrics = json.loads(vision_metrics)
+                res = json.loads(vision_metrics)
+                if isinstance(res, dict):
+                    parsed_vision_metrics = res
+                elif isinstance(res, str):
+                    res2 = json.loads(res)
+                    if isinstance(res2, dict):
+                        parsed_vision_metrics = res2
             except Exception:
                 parsed_vision_metrics = None
 
@@ -138,10 +177,13 @@ async def evaluate_audio_intro(
                 vision_metrics=parsed_vision_metrics
             )
 
-        if parsed_vision_metrics:
+        if not isinstance(eval_result, dict):
+            eval_result = {"error": "Invalid evaluation result from model", "raw": str(eval_result)}
+
+        if parsed_vision_metrics and isinstance(parsed_vision_metrics, dict):
             raw_payload = eval_result.get("raw_response")
             if not isinstance(raw_payload, dict):
-                raw_payload = dict(eval_result)
+                raw_payload = dict(eval_result) if isinstance(eval_result, dict) else {}
             raw_payload["visionAnalytics"] = parsed_vision_metrics.get("visionAnalytics", {})
             eval_result["raw_response"] = raw_payload
 
@@ -149,8 +191,10 @@ async def evaluate_audio_intro(
 
         # The LLM now returns the exact db-friendly format for both general and jd-specific intros
         raw_score = eval_result.get("score", eval_result.get("overall_score", 0))
-        passed = eval_result.get("passed", False)
+        passed = bool(eval_result.get("passed", False))
         feedback = eval_result.get("feedback", {})
+        if not isinstance(feedback, dict):
+            feedback = {"feedback": str(feedback)}
         
         # Legacy fallback just in case
         if not feedback and ("strengths" in eval_result or "weaknesses" in eval_result):
@@ -163,7 +207,7 @@ async def evaluate_audio_intro(
             
         raw_response = eval_result.get("raw_response", eval_result)
         if not isinstance(raw_response, dict):
-            raw_response = dict(eval_result)
+            raw_response = dict(eval_result) if isinstance(eval_result, dict) else {"raw": str(raw_response)}
         raw_response["transcript"] = raw_text
         raw_response["corrected_transcript"] = corrected_text
         raw_response["interview_mode"] = interview_mode
@@ -218,6 +262,11 @@ async def evaluate_audio_intro(
                 status_code=401,
                 detail="Your OpenAI API key is invalid. Please check your API key settings."
             )
+        elif "413" in err_msg or "Maximum content size limit" in err_msg or "size limit" in err_msg.lower():
+            raise HTTPException(
+                status_code=413,
+                detail="The recorded video/audio file exceeds the 25MB maximum size limit for transcription. Please keep your response under 2 minutes."
+            )
         raise HTTPException(status_code=500, detail=f"Evaluation failed: {err_msg}")
 
     finally:
@@ -265,10 +314,15 @@ async def evaluate_text_intro(
                 vision_metrics=None
             )
             
+        if not isinstance(eval_result, dict):
+            eval_result = {"error": "Invalid evaluation result from model", "raw": str(eval_result)}
+            
         # The LLM now returns the exact db-friendly format for both general and jd-specific intros
         raw_score = eval_result.get("score", eval_result.get("overall_score", 0))
-        passed = eval_result.get("passed", False)
+        passed = bool(eval_result.get("passed", False))
         feedback = eval_result.get("feedback", {})
+        if not isinstance(feedback, dict):
+            feedback = {"feedback": str(feedback)}
         
         # Legacy fallback just in case
         if not feedback and ("strengths" in eval_result or "weaknesses" in eval_result):
@@ -280,9 +334,10 @@ async def evaluate_text_intro(
             }
             
         raw_response = eval_result.get("raw_response", eval_result)
-        if isinstance(raw_response, dict):
-            raw_response["transcript"] = transcript
-            raw_response["corrected_transcript"] = corrected_text
+        if not isinstance(raw_response, dict):
+            raw_response = dict(eval_result) if isinstance(eval_result, dict) else {"raw": str(raw_response)}
+        raw_response["transcript"] = transcript
+        raw_response["corrected_transcript"] = corrected_text
 
         db_type = "intro_jd" if intro_type == "jd-specific" else "intro"
 

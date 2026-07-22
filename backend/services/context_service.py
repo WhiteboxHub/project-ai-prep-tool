@@ -22,7 +22,13 @@ def get_candidate_context(user_id: str):
                 context["resume"] = resume_obj
 
             # 2. Fetch Project Context
-            cursor.execute("SELECT product, architecture, business_value, role, impact FROM aiprep_tool_project_context WHERE user_id = %s", (user_id,))
+            # Resolve real_candidate_id from user_id (which is marketing_id)
+            marketing_id = int(user_id)
+            cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (marketing_id,))
+            cm_row = cursor.fetchone()
+            real_candidate_id = cm_row["candidate_id"] if cm_row else marketing_id
+
+            cursor.execute("SELECT product, architecture, business_value, role, impact FROM aiprep_tool_project_context WHERE candidate_id = %s", (real_candidate_id,))
             proj = cursor.fetchone()
             if proj:
                 context["project"] = proj

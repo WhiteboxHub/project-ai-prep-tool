@@ -211,12 +211,17 @@ async def generate_typed_case_study(req: GenerateTypedRequest):
 
         conn = get_db_connection()
         with conn.cursor() as cursor:
+            marketing_id = int(req.session_id)
+            cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (marketing_id,))
+            cm_row = cursor.fetchone()
+            real_candidate_id = cm_row["candidate_id"] if cm_row else marketing_id
+
             cursor.execute("""
                 SELECT company_name, domain, product, business_problem, key_problems,
                        ai_techniques, agent_usage, role, challenges_learnings, impact,
                        future_roadmap, architecture, tech_stack
-                FROM aiprep_tool_project_context WHERE user_id = %s
-            """, (req.session_id,))
+                FROM aiprep_tool_project_context WHERE candidate_id = %s
+            """, (real_candidate_id,))
             ctx = cursor.fetchone()
 
         if not ctx:

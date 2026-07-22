@@ -12,12 +12,18 @@ def get_final_report(session_id: str):
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
+            # Resolve real_candidate_id from session_id (which is marketing_id)
+            marketing_id = int(session_id)
+            cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (marketing_id,))
+            cm_row = cursor.fetchone()
+            real_candidate_id = cm_row["candidate_id"] if cm_row else marketing_id
+
             # Aggregate setup/resume (WBL or legacy)
             resume_raw = fetch_resume_raw(session_id)
             resume = {"resume_json": resume_raw} if resume_raw else None
 
             # Aggregate project
-            cursor.execute("SELECT domain, background, skills, product, architecture, role, impact FROM aiprep_tool_project_context WHERE candidate_id = %s", (int(session_id),))
+            cursor.execute("SELECT domain, background, skills, product, architecture, role, impact FROM aiprep_tool_project_context WHERE candidate_id = %s", (real_candidate_id,))
             project = cursor.fetchone()
 
             # Aggregate latest intro evaluation for this candidate/session.
@@ -35,7 +41,7 @@ def get_final_report(session_id: str):
             interview_evals = []
             
             # Check if all completed
-            cursor.execute("SELECT attempt_count FROM aiprep_tool_attempts WHERE candidate_id = %s AND attempt_type = 'interview_complete'", (int(session_id),))
+            cursor.execute("SELECT attempt_count FROM aiprep_tool_attempts WHERE candidate_id = %s AND attempt_type = 'interview_complete'", (real_candidate_id,))
             comp_row = cursor.fetchone()
             interview_complete = comp_row is not None
             final_analysis = None

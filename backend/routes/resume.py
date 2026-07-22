@@ -26,7 +26,12 @@ async def extract_project(req: ExtractRequest):
 
         # Check if already extracted
         with conn.cursor() as cursor:
-            cursor.execute("SELECT company_name, domain, background, skills, product, architecture, business_value, role, impact, business_problem, key_problems, tech_stack, ai_techniques, challenges_learnings, future_roadmap, agent_usage FROM aiprep_tool_project_context WHERE user_id = %s", (req.session_id,))
+            marketing_id = int(req.session_id)
+            cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (marketing_id,))
+            cm_row = cursor.fetchone()
+            real_candidate_id = cm_row["candidate_id"] if cm_row else marketing_id
+
+            cursor.execute("SELECT company_name, domain, background, skills, product, architecture, business_value, role, impact, business_problem, key_problems, tech_stack, ai_techniques, challenges_learnings, future_roadmap, agent_usage FROM aiprep_tool_project_context WHERE candidate_id = %s", (real_candidate_id,))
             existing = cursor.fetchone()
             
             invalid_domains = ["genai", "rag", "llm", "ai", "machine learning", "langchain", "platform", "system", "enterprise"]
@@ -107,11 +112,16 @@ async def extract_project(req: ExtractRequest):
             
         # Store extracted project in aiprep_tool_project_context so it can be evaluated/generated later
         with conn.cursor() as cursor:
+            marketing_id = int(req.session_id)
+            cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (marketing_id,))
+            cm_row = cursor.fetchone()
+            real_candidate_id = cm_row["candidate_id"] if cm_row else marketing_id
+
             proj = extracted.get("core_project", {})
             skills_dump = json.dumps(extracted.get("skills", []))
             cursor.execute("""
                 INSERT INTO aiprep_tool_project_context (
-                    user_id, product, architecture, business_value, role, impact, 
+                    candidate_id, product, architecture, business_value, role, impact, 
                     company_name, domain, business_problem, key_problems, tech_stack, ai_techniques, challenges_learnings, skills, future_roadmap, agent_usage
                 )
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -132,7 +142,7 @@ async def extract_project(req: ExtractRequest):
                     future_roadmap = VALUES(future_roadmap),
                     agent_usage = VALUES(agent_usage)
             """, (
-                req.session_id,
+                real_candidate_id,
                 proj.get("product", ""),
                 proj.get("architecture", proj.get("tech_stack", "")),
                 proj.get("business_problem", ""),
@@ -195,13 +205,18 @@ def get_latest_project(session_id: str):
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
+            marketing_id = int(session_id)
+            cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (marketing_id,))
+            cm_row = cursor.fetchone()
+            real_candidate_id = cm_row["candidate_id"] if cm_row else marketing_id
+
             cursor.execute("""
                 SELECT 
                     company_name, domain, product, business_problem, previous_system,
                     key_problems, ai_techniques, agent_usage, impact, evaluation_approach,
                     challenges_learnings, learnings, future_roadmap, background, skills, architecture, role, business_value, tech_stack
-                FROM aiprep_tool_project_context WHERE user_id = %s
-            """, (session_id,))
+                FROM aiprep_tool_project_context WHERE candidate_id = %s
+            """, (real_candidate_id,))
             res = cursor.fetchone()
             if res:
                 if res.get("skills"):
