@@ -131,6 +131,66 @@ export default function IntroDetail() {
             </Link>
           </div>
 
+          {/* Corrections Pipeline Answer Sheet */}
+          {innerFeedback.corrections && Array.isArray(innerFeedback.corrections) && innerFeedback.corrections.length > 0 && (
+            <div className="glass-card p-6 rounded-2xl border border-border/50 space-y-4 bg-card/10">
+              <div className="flex items-center justify-between pb-3 border-b border-border/10">
+                <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
+                  <Target className="w-5 h-5 text-primary" />
+                  Pipeline Verification & Corrections
+                </h3>
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
+                  
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {innerFeedback.corrections.map((item: any, i: number) => {
+                  const verdict = item.verdict?.toLowerCase();
+                  const isCorrect = verdict === "correct";
+                  const isPartial = verdict === "partial";
+                  const isMissing = verdict === "missing";
+                  
+                  let badgeColor = "bg-green-500/10 text-green-400 border-green-500/20";
+                  let icon = "✓";
+                  if (isPartial) {
+                    badgeColor = "bg-amber-500/10 text-amber-500 border-amber-500/20";
+                    icon = "△";
+                  } else if (isMissing) {
+                    badgeColor = "bg-red-500/10 text-red-400 border-red-500/20";
+                    icon = "✗";
+                  }
+
+                  return (
+                    <div key={i} className="flex gap-4 p-4 bg-card/20 rounded-xl border border-border/30 hover:border-border transition-colors">
+                      <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-bold text-sm shrink-0 ${badgeColor}`}>
+                        {icon}
+                      </div>
+                      <div className="space-y-1 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="text-xs font-bold text-foreground">{item.topic}</h4>
+                          {item.pipeline_stage && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase font-medium">
+                              {item.pipeline_stage}
+                            </span>
+                          )}
+                          {item.priority === "must_have" && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 uppercase font-bold tracking-wider">
+                              Must Have
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {item.note}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* YouTube-like Grid Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             

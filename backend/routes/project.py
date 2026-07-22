@@ -101,9 +101,15 @@ async def save_and_evaluate_project(data: ProjectContextData):
 
         # 1. Atomic UPSERT Project Context
         with conn.cursor() as cursor:
+            # Resolve real_candidate_id from data.user_id
+            marketing_id = int(data.user_id)
+            cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (marketing_id,))
+            cm_row = cursor.fetchone()
+            real_candidate_id = cm_row["candidate_id"] if cm_row else marketing_id
+
             cursor.execute("""
                 INSERT INTO aiprep_tool_project_context (
-                    user_id, product, architecture, business_value, role, impact,
+                    candidate_id, product, architecture, business_value, role, impact,
                     business_problem, previous_system, key_objectives, users_scale,
                     agents_components, key_workflows, tools_integrations, tech_stack,
                     ai_techniques, evaluation_approach, challenges_learnings,
@@ -135,7 +141,7 @@ async def save_and_evaluate_project(data: ProjectContextData):
                     agent_usage = VALUES(agent_usage),
                     learnings = VALUES(learnings)
             """, (
-                data.user_id, data.product, data.architecture, data.business_value, data.role, data.impact,
+                real_candidate_id, data.product, data.architecture, data.business_value, data.role, data.impact,
                 data.business_problem, data.previous_system, data.key_objectives, data.users_scale,
                 data.agents_components, data.key_workflows, data.tools_integrations, data.tech_stack,
                 data.ai_techniques, data.evaluation_approach, data.challenges_learnings,
@@ -214,20 +220,26 @@ def get_project_history(session_id: str):
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
+            # Resolve real_candidate_id from session_id
+            marketing_id = int(session_id)
+            cursor.execute("SELECT candidate_id FROM candidate_marketing WHERE id = %s", (marketing_id,))
+            cm_row = cursor.fetchone()
+            real_candidate_id = cm_row["candidate_id"] if cm_row else marketing_id
+
             # 1. Fetch attempts for project
             cursor.execute("""
                 SELECT attempt_count FROM aiprep_tool_attempts 
-                WHERE user_id = %s AND attempt_type = 'project'
-            """, (session_id,))
+                WHERE candidate_id = %s AND attempt_type = 'project'
+            """, (real_candidate_id,))
             row = cursor.fetchone()
             is_completed = (row["attempt_count"] > 0) if row else False
 
             # 2. Check if project context exists
-            cursor.execute("SELECT id FROM aiprep_tool_project_context WHERE user_id = %s", (session_id,))
+            cursor.execute("SELECT id FROM aiprep_tool_project_context WHERE candidate_id = %s", (real_candidate_id,))
             has_project = cursor.fetchone() is not None
 
             # 3. Check case studies
-            cursor.execute("SELECT id FROM aiprep_tool_case_studies WHERE user_id = %s", (session_id,))
+            cursor.execute("SELECT id FROM aiprep_tool_case_studies WHERE candidate_id = %s", (real_candidate_id,))
             case_studies = cursor.fetchall()
 
             return {
