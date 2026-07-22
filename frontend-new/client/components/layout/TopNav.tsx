@@ -2,7 +2,7 @@ import React from "react";
 import { LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,11 +34,13 @@ export function TopNav({ readiness }: TopNavProps) {
       <div className="flex-1 min-w-0" />
 
       {/* Centered Title */}
-      <div className="absolute left-1/2 transform -translate-x-1/2 z-10">
-        <h1 className="text-lg font-semibold text-foreground truncate">
-          Interview Preparation
-        </h1>
-      </div>
+      {useLocation().pathname === "/intro-select" && (
+        <div className="absolute left-1/2 transform -translate-x-1/2 z-10">
+          <h1 className="text-lg font-semibold text-foreground truncate">
+            Interview Preparation
+          </h1>
+        </div>
+      )}
 
       {/* Right Section */}
       <div className="flex items-center gap-4 ml-4">
