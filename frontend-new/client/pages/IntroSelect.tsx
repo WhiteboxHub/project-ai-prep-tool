@@ -38,6 +38,7 @@ export default function IntroSelect() {
   const [jdText, setJdText] = useState("");
   const [hasHistory, setHasHistory] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(true);
+  const [showModeModal, setShowModeModal] = useState(false);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -87,16 +88,21 @@ export default function IntroSelect() {
     );
   }
 
-  const handleStart = async () => {
+  const handleStartClick = () => {
     if (!selectedType) return;
     if (selectedType === "jd-specific" && !jdText.trim()) return;
-    
-    sessionStorage.setItem("introType", selectedType);
+    setShowModeModal(true);
+  };
+
+  const handleSelectMode = (mode: "video" | "audio") => {
+    sessionStorage.setItem("introType", selectedType || "general");
+    sessionStorage.setItem("interviewMode", mode);
     if (selectedType === "jd-specific") {
       sessionStorage.setItem("jobDescription", jdText.trim());
     } else {
       sessionStorage.removeItem("jobDescription");
     }
+    setShowModeModal(false);
     navigate("/intro-practice");
   };
 
@@ -156,7 +162,7 @@ export default function IntroSelect() {
               </AnimatePresence>
 
               <motion.button whileHover={selectedType ? { scale: 1.02 } : {}} whileTap={selectedType ? { scale: 0.98 } : {}}
-                onClick={handleStart} disabled={!selectedType || (selectedType === "jd-specific" && !jdText.trim())}
+                onClick={handleStartClick} disabled={!selectedType || (selectedType === "jd-specific" && !jdText.trim())}
                 className={`w-full py-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all ${selectedType && (selectedType !== "jd-specific" || jdText.trim()) ? "bg-gradient-to-r from-primary to-secondary text-white shadow-lg glow-primary" : "bg-white/5 text-muted-foreground cursor-not-allowed"}`}>
                 Enter Intro Practice <ChevronRight className="w-5 h-5" />
               </motion.button>
@@ -165,6 +171,65 @@ export default function IntroSelect() {
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showModeModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-card border border-border/60 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-6 relative"
+            >
+              <div className="text-center space-y-2">
+                <h3 className="text-2xl font-bold text-foreground">Select Interview Format</h3>
+                <p className="text-sm text-muted-foreground">Choose how you would like to conduct your practice session.</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                {/* Video Option */}
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => handleSelectMode("video")}
+                  className="p-5 rounded-2xl border-2 border-primary/40 bg-gradient-to-br from-primary/10 via-card to-secondary/10 hover:border-primary text-left flex flex-col items-center text-center space-y-3 transition-all group"
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-foreground text-lg">Video Interview</h4>
+                    <p className="text-xs text-muted-foreground mt-1">Includes camera & microphone checks and visual evaluation</p>
+                  </div>
+                </motion.button>
+
+                {/* Audio Option */}
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => handleSelectMode("audio")}
+                  className="p-5 rounded-2xl border-2 border-purple-500/40 bg-gradient-to-br from-purple-500/10 via-card to-fuchsia-500/10 hover:border-purple-500 text-left flex flex-col items-center text-center space-y-3 transition-all group"
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-purple-500/20 flex items-center justify-center text-purple-400 group-hover:scale-110 transition-transform">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-foreground text-lg">Audio Only</h4>
+                    <p className="text-xs text-muted-foreground mt-1">Includes microphone checks only without camera setup</p>
+                  </div>
+                </motion.button>
+              </div>
+
+              <button 
+                onClick={() => setShowModeModal(false)}
+                className="w-full py-2.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors"
+              >
+                Cancel
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {hasHistory && showScrollButton && (
         <AnimatePresence>

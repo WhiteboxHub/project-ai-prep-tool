@@ -189,6 +189,13 @@ export default function MyHistory() {
       });
   }, [sessionId, currentPage, filterSessionType, filterDate, filterStatus]);
 
+  const getAttemptMode = (attempt: any): "audio" | "video" => {
+    const raw = typeof attempt.raw_response === "string" ? JSON.parse(attempt.raw_response || "{}") : (attempt.raw_response || {});
+    if (raw.interview_mode === "audio") return "audio";
+    if (raw.interview_mode === "video") return "video";
+    return attempt.video_url ? "video" : "audio";
+  };
+
   if (loading && history.length === 0) {
     return (
       <MainLayout>
@@ -209,7 +216,6 @@ export default function MyHistory() {
               Your introduction practice attempts, recordings, transcripts, and AI feedback.
             </p>
           </div>
-
         </div>
 
         {error && (
@@ -384,56 +390,59 @@ export default function MyHistory() {
                     </td>
                   </tr>
                 ) : (
-                  history.map((item, i) => (
-                    <tr 
-                      key={item.id || i} 
-                      onClick={() => setSelectedRowId(item.id)}
-                      className={`transition-colors cursor-pointer ${
-                        selectedRowId === item.id 
-                          ? "bg-primary/15 hover:bg-primary/20" 
-                          : "hover:bg-primary/5"
-                      }`}
-                    >
-                      <td className="px-6 py-2 font-semibold text-foreground whitespace-nowrap border-r border-b border-border/20">
-                        {(currentPage - 1) * 30 + i + 1}
-                      </td>
-                      <td className="px-6 py-2 text-muted-foreground whitespace-nowrap border-r border-b border-border/20">
-                        {fmtDate(item.created_at)}
-                      </td>
-                      <td className="px-6 py-2 text-muted-foreground whitespace-nowrap border-r border-b border-border/20">
-                        <div className="flex items-center gap-1.5">
-                          {item.video_url ? (
-                            <>
-                              <Video className="h-4 w-4 text-primary" />
-                              <span>Video Recording</span>
-                            </>
-                          ) : (
-                            <>
-                              <FileText className="h-4 w-4 text-muted-foreground" />
-                              <span>Text Attempt</span>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-2 text-center whitespace-nowrap border-r border-b border-border/20">
-                        <span
-                          className={`text-xs font-semibold ${
-                            item.score >= 75 ? "text-green-400" : "text-amber-400"
-                          }`}
-                        >
-                          {item.score >= 75 ? "Passed" : "Retry"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-2 text-center whitespace-nowrap text-xs border-b border-border/20">
-                        <Link
-                          to={`/history/intro-detail/${item.id}`}
-                          className="inline-flex items-center gap-1.5 rounded-full bg-primary hover:bg-primary/90 px-5 py-1.5 font-bold text-white shadow-md shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
-                        >
-                          View
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
+                  history.map((item, i) => {
+                    const mode = getAttemptMode(item);
+                    return (
+                      <tr 
+                        key={item.id || i} 
+                        onClick={() => setSelectedRowId(item.id)}
+                        className={`transition-colors cursor-pointer ${
+                          selectedRowId === item.id 
+                            ? "bg-primary/15 hover:bg-primary/20" 
+                            : "hover:bg-primary/5"
+                        }`}
+                      >
+                        <td className="px-6 py-2 font-semibold text-foreground whitespace-nowrap border-r border-b border-border/20">
+                          {(currentPage - 1) * 30 + i + 1}
+                        </td>
+                        <td className="px-6 py-2 text-muted-foreground whitespace-nowrap border-r border-b border-border/20">
+                          {fmtDate(item.created_at)}
+                        </td>
+                        <td className="px-6 py-2 text-muted-foreground whitespace-nowrap border-r border-b border-border/20">
+                          <div className="flex items-center gap-1.5">
+                            {mode === "video" ? (
+                              <>
+                                <Video className="h-4 w-4 text-primary" />
+                                <span>Video Interview</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                                <span>Audio Interview</span>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-2 text-center whitespace-nowrap border-r border-b border-border/20">
+                          <span
+                            className={`text-xs font-semibold ${
+                              item.score >= 75 ? "text-green-400" : "text-amber-400"
+                            }`}
+                          >
+                            {item.score >= 75 ? "Passed" : "Retry"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-2 text-center whitespace-nowrap text-xs border-b border-border/20">
+                          <Link
+                            to={`/history/intro-detail/${item.id}`}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-primary hover:bg-primary/90 px-5 py-1.5 font-bold text-white shadow-md shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                          >
+                            View
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

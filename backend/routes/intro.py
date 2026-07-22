@@ -77,7 +77,8 @@ async def evaluate_audio_intro(
     vision_metrics: str = Form(None),
     intro_type: str = Form("general"),
     job_description: str = Form(""),
-    recording_id: str = Form(None)
+    recording_id: str = Form(None),
+    interview_mode: str = Form("video")
 ):
     conn = None
     file_path = None
@@ -161,9 +162,11 @@ async def evaluate_audio_intro(
             }
             
         raw_response = eval_result.get("raw_response", eval_result)
-        if isinstance(raw_response, dict):
-            raw_response["transcript"] = raw_text
-            raw_response["corrected_transcript"] = corrected_text
+        if not isinstance(raw_response, dict):
+            raw_response = dict(eval_result)
+        raw_response["transcript"] = raw_text
+        raw_response["corrected_transcript"] = corrected_text
+        raw_response["interview_mode"] = interview_mode
             
         db_type = "intro_jd" if intro_type == "jd-specific" else "intro"
 

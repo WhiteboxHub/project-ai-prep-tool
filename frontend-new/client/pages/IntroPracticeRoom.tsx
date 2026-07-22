@@ -22,8 +22,11 @@ export default function IntroPracticeRoom() {
   const { sessionId, candidateName, initials } = useAuth();
   const { pipeline, loading: pipelineLoading } = usePipeline();
 
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isCameraOn, setIsCameraOn] = useState(true);
+  const interviewMode = sessionStorage.getItem("interviewMode") || "video";
+  const isAudioOnly = interviewMode === "audio";
+
+  const [isMicOn, setIsMicOn] = useState(!isAudioOnly);
+  const [isCameraOn, setIsCameraOn] = useState(!isAudioOnly);
   const [isAISpeaking, setIsAISpeaking] = useState(false);
   const [focusedPanel, setFocusedPanel] = useState<"candidate" | "ai" | null>(null);
 
@@ -31,14 +34,32 @@ export default function IntroPracticeRoom() {
   const {
     stream, audioError, videoError, audioState, videoState,
     requestAudio, requestVideo, toggleVideo, toggleAudio, isSpeaking: isCandidateSpeaking
-  } = useMediaStream(true);
+  } = useMediaStream(true, !isAudioOnly);
 
 
   const [transcript, setTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [messages, setMessages] = useState<{id: string, role: "ai"|"user", text: string}[]>([]);
   const [recording, setRecording] = useState(false);
-  const { recordVisionResults, getVisionSummary, showLookAwayWarning } = useVisionSessionAnalytics({ enabled: recording });
+  const [isPaused, setIsPaused] = useState(false);
+  const { recordVisionResults, getVisionSummary, showLookAwayWarning } = useVisionSessionAnalytics({ enabled: recording && !isPaused });
+
+  const togglePause = () => {
+    if (!recording) return;
+    if (isPaused) {
+      // Resume
+      setIsPaused(false);
+      if (recognitionRef.current) {
+        try { recognitionRef.current.start(); } catch (e) {}
+      }
+    } else {
+      // Pause
+      setIsPaused(true);
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+      }
+    }
+  };
 
   const [loading, setLoading] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
@@ -319,7 +340,7 @@ export default function IntroPracticeRoom() {
       // fallback to the full videoWebm blob only if audio-only blob is not present
       const uploadBlob = audioBlob || finalBlob;
       const localId = recordingIdRef.current || "";
-      const res = await evaluateIntro(sessionId, uploadBlob, introType, jdText, JSON.stringify(getVisionSummary()), localId);
+      const res = await evaluateIntro(sessionId, uploadBlob, introType, jdText, JSON.stringify(getVisionSummary()), localId, interviewMode);
       setResult(res);
 
       if (localId && res && res.id) {
@@ -406,12 +427,13 @@ export default function IntroPracticeRoom() {
     if (!ready) return;
 
     // ─────────────────────────────────────────────────────────────
-    // STEP 2: Request screen share FIRST
-    // This removes the time delay between when SpeechRecognition starts
-    // and when MediaRecorder starts.
+    // STEP 2: Request screen share (Video Mode only)
     // ─────────────────────────────────────────────────────────────
     let activeVideoTrack: MediaStreamTrack | null = null;
-    if (screenTrackRef.current && screenTrackRef.current.readyState === "live") {
+    if (isAudioOnly) {
+      // Audio-only mode does not ask for screen share or record video tracks
+      activeVideoTrack = null;
+    } else if (screenTrackRef.current && screenTrackRef.current.readyState === "live") {
       activeVideoTrack = screenTrackRef.current;
     } else if (!hasAskedScreenShareRef.current) {
       hasAskedScreenShareRef.current = true;
@@ -453,6 +475,15 @@ export default function IntroPracticeRoom() {
       interimRef.current = "";
       setRecordedVideoUrl(null);
       setMessages([{ role: "ai", id: "welcome", text: "Welcome back! Ready for another try?" }]);
+    }
+
+    // Ensure microphone audio track is enabled on start
+    if (!isMicOn) {
+      setIsMicOn(true);
+      toggleAudio(true);
+    }
+    if (stream) {
+      stream.getAudioTracks().forEach(t => { t.enabled = true; });
     }
 
     const rec = new SR();
@@ -816,14 +847,26 @@ export default function IntroPracticeRoom() {
 
       <EvaluationLoadingScreen isVisible={loading || isFinalizing} />
 
-      {/* Title */}
-      <h3 className="absolute top-6 left-6 font-semibold text-foreground text-lg z-50">
-        Intro Practice
-      </h3>
+      {/* Top Left Header Controls */}
+      <div className="absolute top-6 left-6 z-50 flex items-center gap-3">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={handleExit}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white shadow-md shadow-primary/20 border border-primary/30 text-xs font-bold transition-all cursor-pointer hover:shadow-lg"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+          <span>Back to Home</span>
+        </motion.button>
+        <span className="text-muted-foreground/50 text-sm font-semibold">|</span>
+        <h3 className="font-bold text-foreground text-lg tracking-tight">
+          Intro Practice
+        </h3>
+      </div>
 
-      {/* Vision Warning Popup */}
+      {/* Vision Warning Popup (Video Mode only) */}
       <AnimatePresence>
-        {showLookAwayWarning && (
+        {!isAudioOnly && showLookAwayWarning && (
           <motion.div
             initial={{ opacity: 0, y: -20, x: "-50%" }}
             animate={{ opacity: 1, y: 0, x: "-50%" }}
@@ -836,24 +879,86 @@ export default function IntroPracticeRoom() {
         )}
       </AnimatePresence>
 
-      {/* Left side: Video Panels */}
-      <div className="flex-1 p-6 flex flex-col items-center justify-center relative transition-all w-full mt-8">
-        <div className="hidden md:flex gap-6 w-full h-full max-h-[calc(100vh-180px)]">
-          <div className={`transition-all duration-500 ease-in-out ${focusedPanel === "candidate" ? "flex-1" : focusedPanel === "ai" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>
+      {/* Main Video Grid */}
+      <div className="flex-1 p-6 flex flex-col items-center justify-center relative transition-all w-full mt-4 pb-20">
+        <div className="hidden md:flex gap-6 w-full h-full max-h-[calc(100vh-160px)]">
+          {/* Candidate Panel container with inline bottom Google Meet style control overlay */}
+          <div className={`relative transition-all duration-500 ease-in-out ${focusedPanel === "candidate" ? "flex-1" : focusedPanel === "ai" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>
             <VideoPanel 
               title={candidateName} 
               isMuted={!isMicOn} 
               isCameraOff={!isCameraOn} 
+              hideCamera={isAudioOnly}
               initials={initials} 
               isCandidate={true} 
               isSpeaking={isCandidateSpeaking && recording}
               isExpanded={focusedPanel === "candidate"}
               onExpand={() => setFocusedPanel(p => p === "candidate" ? null : "candidate")}
               mediaStream={stream}
-              enableVision={isCameraOn}
+              enableVision={!isAudioOnly && isCameraOn}
               onVisionResults={recordVisionResults}
             />
+
+            {/* Bottom-anchored Controls directly inside Candidate Video box (Google Meet Style) */}
+            <div className="absolute bottom-4 left-0 right-0 z-30 flex flex-col items-center gap-2 px-4 pointer-events-auto">
+              {/* Device status chips */}
+              {(audioState === "denied" || (!isAudioOnly && videoState === "denied")) && (
+                <div className="flex items-center justify-center gap-2 flex-wrap mb-1">
+                  {audioState === "denied" && (
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-card/90 border border-amber-500/30 backdrop-blur-md">
+                      <MicOff className="w-3 h-3 text-amber-400" />
+                      <span className="text-[10px] text-amber-300 font-medium">Mic unavailable</span>
+                      <button onClick={requestAudio} className="ml-0.5 text-[10px] text-amber-400 underline transition-colors">retry</button>
+                    </div>
+                  )}
+                  {!isAudioOnly && videoState === "denied" && (
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-card/90 border border-amber-500/30 backdrop-blur-md">
+                      <VideoOff className="w-3 h-3 text-amber-400" />
+                      <span className="text-[10px] text-amber-300 font-medium">Camera unavailable</span>
+                      <button onClick={requestVideo} className="ml-0.5 text-[10px] text-amber-400 underline transition-colors">retry</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <ControlBar
+                hideCamera={isAudioOnly}
+                onToggleMic={(enabled) => {
+                  setIsMicOn(enabled);
+                  toggleAudio(enabled);
+                }}
+                onToggleCamera={(enabled) => {
+                  setIsCameraOn(enabled);
+                  toggleVideo(enabled);
+                }}
+                onRecordToggle={(!result && !loading && !isFinalizing) ? () => {
+                  if (recording) {
+                    setIsPaused(false);
+                    stopRecognition();
+                  } else {
+                    setIsPaused(false);
+                    startRecognition();
+                  }
+                } : undefined}
+                onPauseToggle={togglePause}
+                isRecording={recording || isFinalizing}
+                isPaused={isPaused}
+                onSubmit={(!loading && !isFinalizing && (recording || transcript)) ? () => {
+                  stopRecognition(0, (blob) => submitAnswer(blob));
+                } : undefined}
+                isAudioDenied={audioState === "denied"}
+                isVideoDenied={!isAudioOnly && videoState === "denied"}
+                onRetryAudio={requestAudio}
+                onRetryVideo={requestVideo}
+                wrapperClassName="relative"
+                hasAttempt={!!result}
+                onRetry={(!loading && !isFinalizing) ? handleRetry : undefined}
+                hasTranscript={!!transcript}
+                mediaStream={stream}
+              />
+            </div>
           </div>
+
           <div className={`transition-all duration-500 ease-in-out flex flex-col relative overflow-hidden rounded-2xl border-2 ${isAISpeaking ? "border-primary/50 shadow-2xl shadow-primary/30" : "border-border/30"} bg-card ${focusedPanel === "ai" ? "flex-1" : focusedPanel === "candidate" ? "w-1/3 max-w-[300px] opacity-70 hover:opacity-100" : "w-1/2"}`}>
             {renderAICoachPane()}
           </div>
@@ -862,15 +967,13 @@ export default function IntroPracticeRoom() {
           {renderAICoachPane()}
         </div>
 
-        {/* ── ControlBar ONLY (Center Bottom) ── */}
-        <div className="absolute bottom-6 left-0 right-0 px-6 z-40 flex flex-col items-center gap-4">
+        {/* Floating alerts / notifications */}
+        <div className="absolute top-2 left-0 right-0 px-6 z-40 flex flex-col items-center gap-2 pointer-events-none">
           {error && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm max-w-3xl mx-auto">
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm max-w-3xl mx-auto pointer-events-auto">
               <span className="w-4 h-4 flex-shrink-0">!</span>{error}
             </div>
           )}
-
-          {/* Chat Interface removed from here - now inside AI Coach Panel */}
 
           {/* ── Small Silence Popup ── */}
           <AnimatePresence>
@@ -879,7 +982,7 @@ export default function IntroPracticeRoom() {
                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                className="flex items-center gap-4 px-4 py-3 rounded-full bg-card/90 border border-amber-500/20 backdrop-blur-md shadow-xl"
+                className="flex items-center gap-4 px-4 py-3 rounded-full bg-card/90 border border-amber-500/20 backdrop-blur-md shadow-xl pointer-events-auto"
               >
                 <div className="flex items-center gap-2 text-sm text-foreground font-medium">
                   <span className="relative flex h-2 w-2">
@@ -913,63 +1016,6 @@ export default function IntroPracticeRoom() {
               </motion.div>
             )}
           </AnimatePresence>
-
-          {/* Device status chips — above ControlBar */}
-          {(audioState === "denied" || videoState === "denied") && (
-            <div className="flex items-center justify-center gap-2 flex-wrap">
-              {audioState === "denied" && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card/80 border border-amber-500/25 backdrop-blur-sm">
-                  <MicOff className="w-3 h-3 text-amber-400" />
-                  <span className="text-[11px] text-amber-300/90 font-medium">Mic unavailable</span>
-                  <button
-                    onClick={requestAudio}
-                    className="ml-0.5 text-[10px] text-amber-400/80 hover:text-amber-300 underline underline-offset-2 transition-colors"
-                  >
-                    retry
-                  </button>
-                </div>
-              )}
-              {videoState === "denied" && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card/80 border border-amber-500/25 backdrop-blur-sm">
-                  <VideoOff className="w-3 h-3 text-amber-400" />
-                  <span className="text-[11px] text-amber-300/90 font-medium">Camera unavailable</span>
-                  <button
-                    onClick={requestVideo}
-                    className="ml-0.5 text-[10px] text-amber-400/80 hover:text-amber-300 underline underline-offset-2 transition-colors"
-                  >
-                    retry
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          <ControlBar
-            onToggleMic={(enabled) => {
-              setIsMicOn(enabled);
-              toggleAudio(enabled);
-            }}
-            onToggleCamera={(enabled) => {
-              setIsCameraOn(enabled);
-              toggleVideo(enabled);
-            }}
-            onRecordToggle={(!result && !loading && !isFinalizing) ? () => {
-              if (recording) stopRecognition();
-              else startRecognition();
-            } : undefined}
-            onSubmit={(!result && !loading && !isFinalizing && recording) ? () => {
-              stopRecognition(0, (blob) => submitAnswer(blob));
-            } : undefined}
-            isRecording={recording || isFinalizing}
-            isAudioDenied={audioState === "denied"}
-            isVideoDenied={videoState === "denied"}
-            onRetryAudio={requestAudio}
-            onRetryVideo={requestVideo}
-            wrapperClassName="relative"
-            onRetry={(!loading && !isFinalizing) ? handleRetry : undefined}
-            hasTranscript={!!transcript}
-            mediaStream={stream}
-          />
         </div>
       </div>
     </div>

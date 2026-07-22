@@ -17,6 +17,7 @@ interface VideoPanelProps {
   mediaStream?: MediaStream | null;
   enableVision?: boolean;
   onVisionResults?: (results: VisionResults) => void;
+  hideCamera?: boolean;
 }
 
 export function VideoPanel({
@@ -31,6 +32,7 @@ export function VideoPanel({
   mediaStream,
   enableVision,
   onVisionResults,
+  hideCamera,
 }: VideoPanelProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const shouldTrackVision = !!enableVision && !!mediaStream && !isCameraOff;
@@ -137,7 +139,7 @@ export function VideoPanel({
             <MicOff className="w-4 h-4" />
           </motion.div>
         )}
-        {isCameraOff && (
+        {isCameraOff && !hideCamera && (
           <div className="p-1.5 rounded-lg bg-red-500/20 text-red-400" title="Camera Off">
             <Camera className="w-4 h-4" />
           </div>
