@@ -12,7 +12,7 @@ export default function IntroDetail() {
   const { sessionId } = useAuth();
   const location = useLocation();
   const isFromHistory = location.pathname.startsWith("/history/");
-  const backPath = isFromHistory ? "/history" : "/intro-select";
+  const backPath = isFromHistory ? "/history" : "/intro-select#previous-attempts-section";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState<any>(null);
@@ -28,6 +28,7 @@ export default function IntroDetail() {
   };
 
   useEffect(() => {
+    window.scrollTo(0, 0);
     if (!sessionId || !id) return;
     
     setLoading(true);
