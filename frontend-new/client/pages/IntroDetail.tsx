@@ -238,16 +238,8 @@ export default function IntroDetail() {
                 </p>
               </div>
 
-              {/* Description Box containing Overall Score summary & Transcript */}
+              {/* Description Box containing Transcript */}
               <div className="bg-card/40 border border-border/30 p-6 rounded-2xl space-y-4">
-                <div className="flex items-center justify-between pb-4 border-b border-border/30">
-                  <div className="flex items-center gap-3">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${hasPassed ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-amber-500/20 text-amber-500 border-amber-500/30"}`}>
-                      {hasPassed ? <><CheckCircle2 className="w-3.5 h-3.5" /> Passed</> : <><Target className="w-3.5 h-3.5" /> Needs Work</>}
-                    </span>
-                  </div>
-                </div>
-
                 {parsedResp.transcript && (
                   <div className="space-y-2">
                     <h3 className="text-sm font-bold text-foreground">Transcript</h3>
@@ -260,31 +252,8 @@ export default function IntroDetail() {
 
             </div>
 
-            {/* Right Sidebar Column: Evaluation Breakdown, Strengths, Improvement, Suggestions */}
+            {/* Right Sidebar Column: Strengths, Improvement, Suggestions */}
             <div className="lg:col-span-4 space-y-6">
-              
-              {/* Score Breakdown (YouTube List Item Style) */}
-              {Object.keys(dimensions).length > 0 && (
-                <div className="bg-card/20 p-5 rounded-2xl border border-border/30 space-y-4">
-                  <h3 className="font-bold text-sm text-foreground">Performance Breakdown</h3>
-                  <div className="space-y-3.5">
-                    {Object.entries(dimensions).map(([key, val]: [string, any]) => (
-                      <div key={key} className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-semibold">
-                          <span className="capitalize text-muted-foreground">{key.replace(/_/g, " ")}</span>
-                          <span className="text-foreground">{val}%</span>
-                        </div>
-                        <div className="w-full bg-border/40 h-1.5 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full bg-gradient-to-r ${val >= 75 ? "from-green-500 to-emerald-400" : "from-amber-500 to-orange-400"}`} 
-                            style={{ width: `${val}%` }} 
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Strengths List */}
               {strengths.length > 0 && (
