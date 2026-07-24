@@ -43,14 +43,22 @@ def _get_candidate_id_from_marketing(cursor, marketing_id: int) -> Optional[int]
 def fetch_resume_raw(session_id: str) -> Any:
     """
     Returns raw JSON column value (dict/str) or None.
-    session_id = str(candidate.id)
-    Priority: candidate_resume.resume_json > candidate_marketing.candidate_json
+    session_id = str(candidate_marketing.id).
+    Resolves candidate_marketing.id -> candidate.id before querying.
     """
     if not session_id or session_id == "null": return None
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cid = int(session_id)
+            session_int = int(session_id)
+
+            # session_id is candidate_marketing.id — resolve to real candidate.id first
+            cursor.execute(
+                "SELECT candidate_id FROM candidate_marketing WHERE id = %s LIMIT 1",
+                (session_int,),
+            )
+            cm_row = cursor.fetchone()
+            real_candidate_id = cm_row["candidate_id"] if cm_row else session_int
 
             cursor.execute(
                 """
@@ -60,7 +68,7 @@ def fetch_resume_raw(session_id: str) -> Any:
                 ORDER BY id DESC
                 LIMIT 1
                 """,
-                (cid,),
+                (real_candidate_id,),
             )
             row = cursor.fetchone()
             if row:
@@ -77,18 +85,28 @@ def fetch_resume_dict(session_id: str) -> Optional[dict]:
 
 def save_resume_for_session(session_id: str, resume_data: dict) -> None:
     """
-    Save resume JSON to candidate_marketing.candidate_json (keyed by candidate.id).
-    session_id = str(candidate.id)
+    Save resume JSON to candidate_marketing.candidate_json.
+    session_id = str(candidate_marketing.id).
+    Resolves candidate_marketing.id -> candidate.id before saving.
     """
     resume_json_str = json.dumps(resume_data)
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cid = int(session_id)
+            session_int = int(session_id)
 
+            # session_id is candidate_marketing.id — resolve to real candidate.id first
+            cursor.execute(
+                "SELECT candidate_id FROM candidate_marketing WHERE id = %s LIMIT 1",
+                (session_int,),
+            )
+            cm_row = cursor.fetchone()
+            real_candidate_id = cm_row["candidate_id"] if cm_row else session_int
+
+            # Find the active marketing row for this candidate to update
             cursor.execute(
                 "SELECT id FROM candidate_marketing WHERE candidate_id = %s ORDER BY id DESC LIMIT 1",
-                (cid,),
+                (real_candidate_id,),
             )
             row = cursor.fetchone()
             if row:
@@ -101,14 +119,13 @@ def save_resume_for_session(session_id: str, resume_data: dict) -> None:
                     (resume_json_str, row["id"]),
                 )
             else:
-                # If there is no marketing row, we must create one.
-                # Marketing requires start_date. Use current date.
+                # No marketing row exists yet — create one
                 cursor.execute(
                     """
                     INSERT INTO candidate_marketing (candidate_id, start_date, status, candidate_json)
                     VALUES (%s, CURDATE(), 'active', %s)
                     """,
-                    (cid, resume_json_str),
+                    (real_candidate_id, resume_json_str),
                 )
         conn.commit()
     finally:
