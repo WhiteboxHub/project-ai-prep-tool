@@ -574,7 +574,7 @@ def get_intro_history(
             query_params.extend([limit, offset])
 
             cursor.execute(f"""
-                SELECT id, score, feedback, raw_response, type, created_at, video_url
+                SELECT id, score, passed, feedback, raw_response, type, created_at, video_url
                 FROM aiprep_tool_evaluations
                 WHERE {where_str}
                 ORDER BY created_at DESC

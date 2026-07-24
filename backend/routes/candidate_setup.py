@@ -456,8 +456,8 @@ def sync_data(token: str):
             raise HTTPException(status_code=401, detail="Invalid or expired token")
 
         # Check 5-minute TTL
-        token_age = datetime.utcnow() - row["created_at"].replace(tzinfo=None)
-        if token_age > timedelta(minutes=5):
+        token_age_seconds = abs((datetime.now() - row["created_at"].replace(tzinfo=None)).total_seconds())
+        if token_age_seconds > 300:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "DELETE FROM prep_tokens WHERE token = %s", (token,)

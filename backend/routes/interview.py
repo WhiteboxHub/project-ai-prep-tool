@@ -226,13 +226,16 @@ async def complete_interview(data: CompleteRequest):
     }}
     """
     
-    res_str = await call_llm_with_context(
-        user_id=data.session_id,
-        prompt=prompt,
-        system_prompt="You are a Principal AI Architect and Executive Recruiter generating a final interview performance report.",
-        api_key=api_key,
-        response_format="json_object"
-    )
+    try:
+        res_str = await call_llm_with_context(
+            user_id=data.session_id,
+            prompt=prompt,
+            system_prompt="You are a Principal AI Architect and Executive Recruiter generating a final interview performance report.",
+            api_key=api_key,
+            response_format="json_object"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     
     from services.evaluator import safe_parse_json
     final_report = safe_parse_json(res_str)

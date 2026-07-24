@@ -40,8 +40,33 @@ def init_db():
         with conn.cursor() as cursor:
 
             # ---------------------------
-            # 1. CANDIDATES / PROJECT CONTEXT placeholder
+            # 1. CANDIDATE, AUTHUSER, CANDIDATE_MARKETING
             # ---------------------------
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS candidate (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    full_name VARCHAR(255),
+                    email VARCHAR(255) UNIQUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS authuser (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    uname VARCHAR(255) UNIQUE NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS candidate_marketing (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    candidate_id INT NOT NULL,
+                    status VARCHAR(50) DEFAULT 'active',
+                    email VARCHAR(255),
+                    candidate_json JSON,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
             # ---------------------------
             # 2. PROJECT CONTEXT (uses candidate_id INT)
@@ -126,11 +151,13 @@ def init_db():
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS aiprep_tool_case_studies (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    candidate_id INT NOT NULL,
+                    candidate_id INT NULL,
+                    user_id VARCHAR(255) NULL,
                     content TEXT,
                     topic VARCHAR(255),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_case_study_candidate (candidate_id)
+                    INDEX idx_case_study_candidate (candidate_id),
+                    INDEX idx_case_study_user (user_id)
                 )
             """)
 

@@ -17,3 +17,6 @@ python-jose[cryptography]==3.3.0
 requests==2.31.0
 jellyfish==1.2.1
 imageio-ffmpeg>=0.5.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=5.0.0

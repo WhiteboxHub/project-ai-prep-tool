@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
@@ -22,6 +23,11 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./client"),
       "@shared": path.resolve(__dirname, "./shared"),
     },
+  },
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./client/test.setup.ts"],
+    globals: true,
   },
 }));
 
