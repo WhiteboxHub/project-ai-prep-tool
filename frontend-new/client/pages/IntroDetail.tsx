@@ -245,9 +245,6 @@ export default function IntroDetail() {
                     <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${hasPassed ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-amber-500/20 text-amber-500 border-amber-500/30"}`}>
                       {hasPassed ? <><CheckCircle2 className="w-3.5 h-3.5" /> Passed</> : <><Target className="w-3.5 h-3.5" /> Needs Work</>}
                     </span>
-                    <span className="text-sm font-semibold text-foreground">
-                      Score: {data.score}/100
-                    </span>
                   </div>
                 </div>
 

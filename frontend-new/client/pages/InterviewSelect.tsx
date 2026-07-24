@@ -45,22 +45,6 @@ export default function InterviewSelect() {
     );
   }
 
-  if (pipeline.interview === "locked") {
-    return (
-      <MainLayout>
-        <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-white/5 border border-border/50 flex items-center justify-center">
-            <Lock className="w-8 h-8 text-muted-foreground" />
-          </div>
-          <h2 className="text-2xl font-bold text-foreground">Interview Locked</h2>
-          <p className="text-muted-foreground max-w-md">Please go to the Intro Section and complete your introduction practice to unlock the interview. That is the required flow.</p>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => navigate("/intro-select")} className="px-6 py-2 bg-primary/20 hover:bg-primary/30 text-primary font-semibold rounded-lg mt-4 smooth-transition">
-            Go to Intro Practice
-          </motion.button>
-        </div>
-      </MainLayout>
-    );
-  }
 
   const handleStart = async () => {
     if (!selectedType || !selectedDifficulty) return;
