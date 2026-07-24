@@ -49,6 +49,10 @@ technical_gaps may ONLY contain items whose topic_checklist status is "missing" 
 
 Example of the exact error to avoid: candidate says "with guardrails for safety" — this is COVERED. Do not write "you missed guardrails" — that directly contradicts the transcript.
 
+MACHINE-CHECKABLE KEY REQUIREMENT: Every entry in technical_gaps and corrections MUST include a "topic_key" field with the EXACT, verbatim key used for that topic in topic_checklist — not a paraphrase. An automated backend validator cross-checks every claim against topic_checklist by exact key lookup; a mismatched key means the claim gets silently dropped before the candidate sees it.
+
+RESUME-CLAIM EVIDENCE RULE: This evidence discipline also applies to RESUME_CONTEXT claims. Do NOT write "your resume shows X" or "resume shows no relevant experience" unless you can quote/paraphrase the exact supporting line from RESUME_CONTEXT. If a skill is genuinely absent from RESUME_CONTEXT, say "not found in your resume" rather than the stronger claim "no relevant experience" — resume text can be incomplete, not authoritative. Include a "resume_evidence" field (quote or null) on any resume-referencing claim.
+
 ===========================================
 ANSWER-SHEET CORRECTIONS (SHOWN FIRST — THE PRIMARY OUTPUT)
 ===========================================
@@ -168,6 +172,7 @@ This JSON is inserted directly into a database row with columns: score (int), pa
     "corrections": [
       {
         "topic": "Exact topic/requirement name",
+        "topic_key": "EXACT verbatim key matching this topic's entry in raw_response.topic_checklist — required for backend validation",
         "pipeline_stage": "e.g. 'RAG — Ingestion' or 'Agentic — Memory Layer'",
         "priority": "must_have | nice_to_have | general",
         "verdict": "correct | partial | missing",
@@ -178,14 +183,16 @@ This JSON is inserted directly into a database row with columns: score (int), pa
       "Specific thing they mentioned well — the exact technical reasoning given, not just that a tool was named — tied to what the JD actually cares about (e.g. 'Explained the hybrid retrieval tradeoff — named the specific failure mode that motivated it — directly relevant to this JD's retrieval-quality focus'). Naming a tool with no explanation does not qualify as a strength."
     ],
     "technical_gaps": {
-      "JD-Specific Must-Haves": ["Terse callout for missed must-have skills, e.g. 'You missed guardrails — this JD lists safety/guardrails as a must-have, resume shows you built them.'"],
-      "GenAI Fundamentals": ["Terse callout, same style"],
-      "RAG": ["Terse callout, same style"],
-      "Agentic AI": ["Terse callout, same style"],
-      "MLOps & Infra": ["Terse callout, same style"]
+      "JD-Specific Must-Haves": [
+        {"topic_key": "EXACT key matching topic_checklist", "note": "Terse callout for missed must-have skills, e.g. 'You missed guardrails — this JD lists safety/guardrails as a must-have, resume shows you built them.'", "resume_evidence": "quote or null"}
+      ],
+      "GenAI Fundamentals": [{"topic_key": "EXACT key", "note": "Terse callout, same style", "resume_evidence": "quote or null"}],
+      "RAG": [{"topic_key": "EXACT key", "note": "Terse callout, same style", "resume_evidence": "quote or null"}],
+      "Agentic AI": [{"topic_key": "EXACT key", "note": "Terse callout, same style", "resume_evidence": "quote or null"}],
+      "MLOps & Infra": [{"topic_key": "EXACT key", "note": "Terse callout, same style", "resume_evidence": "quote or null"}]
     },
     "communication_notes": ["Short, direct delivery notes only, kept separate from technical gaps"],
-    "ai_suggestions": ["How the candidate should reframe/add content specifically to better fit THIS JD — terse, not generic advice"]
+    "ai_suggestions": ["How the candidate should reframe/add content specifically to better fit THIS JD — terse, not generic advice. CONSTRAINT: must correspond to an entry already in technical_gaps (same topic_key) — do not introduce new claims here."]
   },
   "raw_response": {
     "jd_summary": {

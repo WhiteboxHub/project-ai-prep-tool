@@ -31,10 +31,18 @@ export default function IntroResult() {
   let technicalGapsList: string[] = [];
   if (technicalGapsRaw) {
     if (Array.isArray(technicalGapsRaw)) {
-      technicalGapsList = technicalGapsRaw;
+      technicalGapsList = technicalGapsRaw.map(item => typeof item === 'string' ? item : (item.note || ""));
     } else if (typeof technicalGapsRaw === "object") {
       Object.values(technicalGapsRaw).forEach((val: any) => {
-        if (Array.isArray(val)) technicalGapsList.push(...val);
+        if (Array.isArray(val)) {
+          val.forEach((item: any) => {
+            if (typeof item === "string") {
+              technicalGapsList.push(item);
+            } else if (item && typeof item === "object" && item.note) {
+              technicalGapsList.push(item.note);
+            }
+          });
+        }
       });
     }
   }

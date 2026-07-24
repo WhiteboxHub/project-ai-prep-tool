@@ -103,10 +103,19 @@ export default function IntroDetail() {
   const techGapsRaw = innerFeedback.technical_gaps || parsedFeed.technical_gaps || parsedResp.technical_gaps || parsedResp.evaluation?.technical_gaps;
   let techGapsList: string[] = [];
   if (techGapsRaw) {
-    if (Array.isArray(techGapsRaw)) techGapsList = techGapsRaw;
-    else if (typeof techGapsRaw === "object") {
+    if (Array.isArray(techGapsRaw)) {
+      techGapsList = techGapsRaw.map(item => typeof item === 'string' ? item : (item.note || ""));
+    } else if (typeof techGapsRaw === "object") {
       Object.values(techGapsRaw).forEach((val: any) => {
-        if (Array.isArray(val)) techGapsList.push(...val);
+        if (Array.isArray(val)) {
+          val.forEach((item: any) => {
+            if (typeof item === "string") {
+              techGapsList.push(item);
+            } else if (item && typeof item === "object" && item.note) {
+              techGapsList.push(item.note);
+            }
+          });
+        }
       });
     }
   }

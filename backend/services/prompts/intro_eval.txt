@@ -47,6 +47,10 @@ technical_gaps may ONLY contain items whose topic_checklist status is "missing" 
 
 Example of the exact error to avoid: a candidate says "with guardrails for safety" in their transcript. This means guardrails is COVERED. Do not write "no mention of guardrails" — that directly contradicts the transcript and is a hallucination.
 
+MACHINE-CHECKABLE KEY REQUIREMENT: Every entry in technical_gaps and every entry in corrections MUST include a "topic_key" field whose value is the EXACT, verbatim key used for that topic in topic_checklist (e.g. "guardrails", "chunking_strategy", "retrieval_evaluation" — not a paraphrase, not a display label). This is used by an automated backend validator to cross-check every claim against topic_checklist by exact key lookup, not by reading your prose. If you write a claim about "guardrails" but the topic_checklist key is "guardrails_safety", the validator will fail to match them and the claim will be silently dropped from what the candidate sees — so the topic_key must be identical, character for character, to the key you used in topic_checklist for that same topic.
+
+RESUME-CLAIM EVIDENCE RULE: This same evidence discipline applies to any claim about RESUME_CONTEXT, not just TRANSCRIPT. You MUST NOT write "your resume shows X" or "your resume shows no Y" unless you can quote or closely paraphrase the exact line from RESUME_CONTEXT that supports it. If RESUME_CONTEXT does not mention a skill at all, say so factually ("not found in your resume") rather than affirmatively claiming "resume shows no relevant experience" — the latter is a stronger, less certain claim than the evidence supports, and resume text can be incomplete rather than authoritative on what a candidate actually knows. Any resume-referencing claim in technical_gaps or corrections must include a "resume_evidence" field: either the quoted/paraphrased resume line, or null if genuinely absent from RESUME_CONTEXT.
+
 ===========================================
 ANSWER-SHEET CORRECTIONS (SHOWN FIRST — THE PRIMARY OUTPUT)
 ===========================================
@@ -222,6 +226,7 @@ This JSON is inserted directly into a database row with columns: score (int), pa
     "corrections": [
       {
         "topic": "Exact topic name, e.g. 'Chunking Strategy' or 'Guardrails'",
+        "topic_key": "EXACT verbatim key matching this topic's entry in raw_response.topic_checklist — required for backend validation, must match character-for-character",
         "pipeline_stage": "e.g. 'RAG — Ingestion' or 'Agentic — Memory Layer'",
         "verdict": "correct | partial | missing",
         "note": "What they said (quote/paraphrase) and what's right or missing, in the direct mock-interviewer voice — e.g. 'Partial — named Docling for chunking, but gave no chunk size, overlap, or strategy reasoning.'"
@@ -231,16 +236,24 @@ This JSON is inserted directly into a database row with columns: score (int), pa
       "Specific thing they mentioned well, referencing the actual project/tool by name and the exact technical reasoning they gave — not just that they named a tool, but what they explained about it (e.g. 'Correctly explained WHY hybrid retrieval was chosen over semantic-only — named the specific failure mode (missed exact product codes) that motivated the keyword component'). If a tool was only named with no explanation, it does NOT qualify as a strength — put it in tech_stack_named_but_shallow instead."
     ],
     "technical_gaps": {
-      "GenAI Fundamentals": ["Terse callout, e.g. 'You missed fine-tuning — your resume shows RoBERTa fine-tuning work, never mentioned.'"],
-      "RAG": ["Terse callout, e.g. 'You missed guardrails — implemented per your resume, not mentioned.'"],
-      "Agentic AI": ["Terse callout, e.g. 'No mention of memory management — your Phase 2 system has short/long-term memory.'"],
-      "MLOps & Infra": ["Terse callout in the same style"]
+      "GenAI Fundamentals": [
+        {"topic_key": "EXACT key matching topic_checklist, e.g. 'fine_tuning'", "note": "Terse callout, e.g. 'You missed fine-tuning — your resume shows RoBERTa fine-tuning work, never mentioned.'", "resume_evidence": "Quoted/paraphrased resume line supporting this claim, or null if genuinely absent from resume"}
+      ],
+      "RAG": [
+        {"topic_key": "EXACT key, e.g. 'guardrails'", "note": "Terse callout in the same style", "resume_evidence": "quote or null"}
+      ],
+      "Agentic AI": [
+        {"topic_key": "EXACT key, e.g. 'memory_management'", "note": "Terse callout in the same style", "resume_evidence": "quote or null"}
+      ],
+      "MLOps & Infra": [
+        {"topic_key": "EXACT key", "note": "Terse callout in the same style", "resume_evidence": "quote or null"}
+      ]
     },
     "communication_notes": ["Short, direct delivery notes — structure/clarity/pacing only, kept separate from technical gaps, e.g. 'Ran long without pausing — hard to follow the RAG-to-agentic transition.'"],
     "tech_stack_mentioned": ["list of specific tools/frameworks/techniques the candidate explicitly named"],
     "tech_stack_named_but_shallow": ["tools mentioned by name only, with no explanation of why/how they were used"],
     "ai_suggestions": [
-      "Concrete, personalized suggestion the candidate can apply next attempt — terse, not generic interview advice"
+      "Concrete, personalized suggestion the candidate can apply next attempt — terse, not generic interview advice. CONSTRAINT: every suggestion here must correspond to an entry already present in technical_gaps (same topic_key). Do NOT introduce any new claim, gap, or resume reference in ai_suggestions that wasn't already validated in technical_gaps above — this field may only rephrase/action-ify existing gaps, never originate new ones."
     ]
   },
   "raw_response": {
