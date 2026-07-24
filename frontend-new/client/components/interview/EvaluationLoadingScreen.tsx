@@ -12,7 +12,6 @@ export function EvaluationLoadingScreen({ isVisible }: EvaluationLoadingScreenPr
   const steps = [
     { icon: FileText, text: "Transcribing your speech" },
     { icon: FileSearch, text: "Matching with your resume" },
-    { icon: Target, text: "AI Scoring" },
     { icon: Sparkles, text: "Generating personalized feedback" }
   ];
 
@@ -20,9 +19,8 @@ export function EvaluationLoadingScreen({ isVisible }: EvaluationLoadingScreenPr
     if (isVisible) {
       setCurrentStep(0);
       const timers = [
-        setTimeout(() => setCurrentStep(1), 3000),
-        setTimeout(() => setCurrentStep(2), 6000),
-        setTimeout(() => setCurrentStep(3), 9000),
+        setTimeout(() => setCurrentStep(1), 4000),
+        setTimeout(() => setCurrentStep(2), 8000),
       ];
       return () => timers.forEach(clearTimeout);
     }

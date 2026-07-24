@@ -142,64 +142,24 @@ export default function IntroResult() {
           </motion.div>
         )}
 
-        {/* 2-Column Split Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.3fr] gap-6 items-start">
-          
-          {/* Left Column: Score & Breakdown */}
-          <div className="space-y-6">
-            {/* Score Card */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }} 
-              animate={{ opacity: 1, y: 0 }} 
-              className={`glass-card p-5 rounded-2xl border flex items-center justify-between gap-6 ${hasPassed ? "border-green-500/30 bg-gradient-to-br from-green-500/10 to-transparent" : "border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent"}`}
-            >
-              <div>
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border mb-2.5 ${hasPassed ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-amber-500/20 text-amber-500 border-amber-500/30"}`}>
-                  {hasPassed ? <><CheckCircle2 className="w-3 h-3" /> Passed</> : <><Target className="w-3 h-3" /> Needs Practice</>}
-                </span>
-                <p className="text-[10px] text-muted-foreground leading-relaxed">Overall performance score based on technical depth and delivery quality.</p>
+        {/* Main Content Layout */}
+        <div className="space-y-6">
+          {/* Camera Presence */}
+          {hasVisionFeedback && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="glass-card p-5 rounded-2xl border border-border/50">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-primary">
+                  <Eye className="w-5 h-5" />
+                  <h3 className="font-bold text-sm">Camera Presence</h3>
+                </div>
               </div>
-              <div className="text-right flex-shrink-0">
-                <h2 className="text-4xl font-extrabold text-foreground tracking-tighter leading-none">{scoreNum}<span className="text-lg text-muted-foreground font-medium">/100</span></h2>
-              </div>
+              {visionFeedback.summary && (
+                <p className="text-xs text-muted-foreground leading-relaxed mt-3">{visionFeedback.summary}</p>
+              )}
             </motion.div>
+          )}
 
-            {/* Camera Presence */}
-            {hasVisionFeedback && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="glass-card p-5 rounded-2xl border border-border/50">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-2 text-primary">
-                    <Eye className="w-5 h-5" />
-                    <h3 className="font-bold text-sm">Camera Presence</h3>
-                  </div>
-                </div>
-                {visionFeedback.summary && (
-                  <p className="text-xs text-muted-foreground leading-relaxed mt-3">{visionFeedback.summary}</p>
-                )}
-              </motion.div>
-            )}
-
-            {/* Evaluation Breakdown */}
-            {Object.keys(dimensions).length > 0 && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-card p-6 rounded-2xl border border-border/50">
-                <h3 className="font-bold text-sm text-foreground mb-4">Evaluation Breakdown</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {Object.entries(dimensions).map(([key, val]: [string, any]) => (
-                    <div key={key} className="bg-card/40 border border-border/50 p-4 rounded-xl text-center shadow-sm">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
-                        {key.replace(/_/g, " ")}
-                      </p>
-                      <div className="text-2xl font-black text-foreground">
-                        {val}<span className="text-xs text-muted-foreground font-medium">/100</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </div>
-
-          {/* Right Column: Insights */}
+          {/* Insights & Feedback */}
           <div className="space-y-6">
             {(whyScoreIsLow.length > 0 || highestImpactMistakes.length > 0 || nextAttemptInstructions.length > 0) && (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 rounded-2xl border border-border/50">
