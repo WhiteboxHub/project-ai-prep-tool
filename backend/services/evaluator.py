@@ -87,6 +87,7 @@
 
 import os
 import json
+import re
 from services.llm_service import call_llm_with_context
 
 
@@ -338,21 +339,23 @@ def validate_and_correct_consistency(eval_result: dict) -> dict:
             if not isinstance(corr, dict) or "topic" not in corr:
                 continue
             
-            corr_topic = corr["topic"]
-            if not isinstance(corr_topic, str):
-                continue
-            norm_corr_topic = normalize_name(corr_topic)
+            corr_topic = corr.get("topic")
+            corr_topic_key = corr.get("topic_key")
             
-            # Find matching checklist item
+            # Find matching checklist item by EXACT KEY
             checklist_match = None
-            if norm_corr_topic in normalized_checklist:
-                checklist_match = normalized_checklist[norm_corr_topic]
-            else:
-                # Try finding substring match
-                for norm_check_key, check_val in normalized_checklist.items():
-                    if norm_corr_topic in norm_check_key or norm_check_key in norm_corr_topic:
-                        checklist_match = check_val
-                        break
+            if corr_topic_key and isinstance(corr_topic_key, str):
+                checklist_match = normalized_checklist.get(normalize_name(corr_topic_key))
+            elif corr_topic and isinstance(corr_topic, str):
+                # Fallback to fuzzy match if LLM missed topic_key
+                norm_corr_topic = normalize_name(corr_topic)
+                if norm_corr_topic in normalized_checklist:
+                    checklist_match = normalized_checklist[norm_corr_topic]
+                else:
+                    for norm_check_key, check_val in normalized_checklist.items():
+                        if norm_corr_topic in norm_check_key or norm_check_key in norm_corr_topic:
+                            checklist_match = check_val
+                            break
             
             if checklist_match:
                 status = checklist_match["status"]
@@ -365,10 +368,15 @@ def validate_and_correct_consistency(eval_result: dict) -> dict:
                     # If it was marked correct but now missing, clear disingenuous note/add placeholder
                     if expected_verdict == "missing" and actual_verdict == "correct":
                         corr["note"] = f"Missing — no mention of {corr_topic} was found in the transcript."
+                    # If it was marked missing but is actually covered, clear the hallucination note
+                    elif expected_verdict == "correct" and actual_verdict == "missing":
+                        corr["note"] = f"Covered — {corr_topic} was successfully mentioned in the transcript."
 
     # 4. Enforce consistency in curated technical_gaps by pruning hallucinated gaps
     # If any item in technical_gaps corresponds to a 'covered' checklist item, we must prune/remove it.
     technical_gaps = feedback.get("technical_gaps", {})
+    resume_analysis = raw_response.get("resume_gap_analysis") or raw_response.get("resume_match") or {}
+
     if isinstance(technical_gaps, dict):
         pruned_gaps = {}
         for category, gaps_list in technical_gaps.items():
@@ -377,21 +385,59 @@ def validate_and_correct_consistency(eval_result: dict) -> dict:
                 continue
             
             new_gaps_list = []
-            for gap_text in gaps_list:
-                if not isinstance(gap_text, str):
+            for gap in gaps_list:
+                topic_key = None
+                rest_of_text = ""
+                
+                if isinstance(gap, dict):
+                    topic_key = gap.get("topic_key")
+                    rest_of_text = gap.get("note", "")
+                elif isinstance(gap, str):
+                    # Fallback for old string format with prefix
+                    match = re.match(r'^\[([^\]]+)\]\s*(.*)', gap.strip())
+                    if match:
+                        topic_key, rest_of_text = match.groups()
+                    else:
+                        print(f"[WARNING] Hallucination Pruned (Strict Mode): Dropping '{gap}' as it lacks a [topic_key] prefix or object format.")
+                        continue
+                else:
                     continue
+                
+                if not topic_key or not isinstance(topic_key, str):
+                    continue
+                    
+                norm_topic_key = normalize_name(topic_key)
+                
                 # Check if this gap text refers to any 'covered' topic in the checklist
                 is_hallucinated = False
-                for norm_check_key, check_val in normalized_checklist.items():
-                    if check_val["status"] == "covered":
-                        check_key_lower = check_val["key"].lower().replace("_", " ")
-                        if check_key_lower in gap_text.lower() or check_key_lower.replace(" ", "") in gap_text.lower():
-                            is_hallucinated = True
-                            print(f"[WARNING] Hallucination Pruned: Removed '{gap_text}' from '{category}' because '{check_val['key']}' is marked 'covered' in the checklist.")
+                if norm_topic_key in normalized_checklist:
+                    if normalized_checklist[norm_topic_key]["status"] == "covered":
+                        is_hallucinated = True
+                        print(f"[WARNING] Hallucination Pruned: Removed gap for '{topic_key}' because it is marked 'covered' in the checklist.")
+                
+                # Resume Claim Validation
+                if not is_hallucinated and ("resume" in rest_of_text.lower() or "resume shows" in rest_of_text.lower()):
+                    found_in_resume_gaps = False
+                    for key, val in resume_analysis.items():
+                        if isinstance(val, list) and key in ["missed_entirely", "communication_gap", "genuine_gap"]:
+                            for item in val:
+                                if isinstance(item, str):
+                                    if topic_key.lower().replace("_", " ") in item.lower() or norm_topic_key in normalize_name(item):
+                                        found_in_resume_gaps = True
+                                        break
+                        if found_in_resume_gaps:
                             break
+                            
+                    if not found_in_resume_gaps:
+                        is_hallucinated = True
+                        print(f"[WARNING] Resume Claim Pruned: Removed gap for '{topic_key}' because it was NOT found in resume gap analysis as a valid gap.")
                 
                 if not is_hallucinated:
-                    new_gaps_list.append(gap_text)
+                    # Append the original object or stripped string
+                    if isinstance(gap, dict):
+                        new_gaps_list.append(gap)
+                    else:
+                        new_gaps_list.append(rest_of_text.strip())
             
             pruned_gaps[category] = new_gaps_list
         feedback["technical_gaps"] = pruned_gaps
