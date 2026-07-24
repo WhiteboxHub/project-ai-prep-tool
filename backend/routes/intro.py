@@ -527,28 +527,59 @@ Generate the introduction.
 # 📜 HISTORY (FIXED)
 # -----------------------------------
 @router.get("/history")
-def get_intro_history(session_id: str, page: int = 1, limit: int = 20):
+def get_intro_history(
+    session_id: str,
+    page: int = 1,
+    limit: int = 20,
+    session_type: str = None,
+    date: str = None,
+    status: str = None
+):
     conn = None
     try:
         conn = get_db_connection()
         offset = (page - 1) * limit
 
+        # Base filter conditions
+        where_clauses = ["user_id = %s", "type IN ('intro', 'intro_jd', 'intro_eval', 'intro_eval_jd')"]
+        params = [session_id]
+
+        if session_type == "video":
+            where_clauses.append("video_url IS NOT NULL AND video_url != ''")
+        elif session_type == "audio":
+            where_clauses.append("(video_url IS NULL OR video_url = '')")
+
+        if date:
+            where_clauses.append("DATE(created_at) = %s")
+            params.append(date)
+
+        if status == "pass":
+            where_clauses.append("score >= 75")
+        elif status == "fail":
+            where_clauses.append("(score < 75 OR score IS NULL)")
+
+        where_str = " AND ".join(where_clauses)
+
         with conn.cursor() as cursor:
             # Total count for pagination
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT COUNT(*) as total
                 FROM aiprep_tool_evaluations
-                WHERE user_id = %s AND type IN ('intro', 'intro_jd', 'intro_eval', 'intro_eval_jd')
-            """, (session_id,))
+                WHERE {where_str}
+            """, tuple(params))
             total_count = cursor.fetchone()["total"]
 
-            cursor.execute("""
+            # Add limit & offset params
+            query_params = list(params)
+            query_params.extend([limit, offset])
+
+            cursor.execute(f"""
                 SELECT id, score, feedback, raw_response, type, created_at, video_url
                 FROM aiprep_tool_evaluations
-                WHERE user_id = %s AND type IN ('intro', 'intro_jd', 'intro_eval', 'intro_eval_jd')
+                WHERE {where_str}
                 ORDER BY created_at DESC
                 LIMIT %s OFFSET %s
-            """, (session_id, limit, offset))
+            """, tuple(query_params))
 
             rows = [_serialize_intro_row(row) for row in cursor.fetchall()]
 
