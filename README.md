@@ -57,10 +57,12 @@ generated runtime artifacts.
 This project uses `pnpm`.
 
 ```powershell
+
 cd frontend-new
 corepack enable
 pnpm install
 pnpm run dev
+
 ```
 
 Default frontend dev server:
