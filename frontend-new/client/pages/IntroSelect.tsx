@@ -76,20 +76,6 @@ export default function IntroSelect() {
     );
   }
 
-  if (pipeline.intro === "locked") {
-    return (
-      <MainLayout>
-        <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-white/5 border border-border/50 flex items-center justify-center">
-            <Lock className="w-8 h-8 text-muted-foreground" />
-          </div>
-          <h2 className="text-2xl font-bold text-foreground">Practice Locked</h2>
-          <p className="text-muted-foreground max-w-md">Please go back to the Whitebox Learning platform and update your setup to unlock the introduction practice.</p>
-        </div>
-      </MainLayout>
-    );
-  }
-
   const handleStartClick = () => {
     if (!selectedType) return;
     if (selectedType === "jd-specific" && !jdText.trim()) return;
