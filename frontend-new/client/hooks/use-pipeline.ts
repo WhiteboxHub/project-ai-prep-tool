@@ -39,7 +39,7 @@ export function usePipeline() {
         const newPipeline: PipelineStatus = {
           setup: hasResume && hasApiKey ? "completed" : "pending",
           intro: hasResume && hasApiKey ? (hasIntroPassed ? "completed" : "ready") : "locked",
-          interview: hasIntroPassed ? "ready" : "locked",
+          interview: hasResume && hasApiKey ? "ready" : "locked",
         };
 
         setPipeline(newPipeline);
@@ -47,7 +47,7 @@ export function usePipeline() {
         let score = 0;
         if (newPipeline.setup === "completed") score += 34;
         if (newPipeline.intro === "completed") score += 33;
-        if (newPipeline.interview !== "locked") score += 33;
+        if (newPipeline.interview === "ready" || newPipeline.interview === "completed") score += 33;
         setReadiness(score);
 
       } catch (e) {
