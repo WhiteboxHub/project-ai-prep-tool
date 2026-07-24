@@ -289,10 +289,18 @@ export default function IntroSelect() {
                   let techGapsList: string[] = [];
                   if (techGapsRaw) {
                     if (Array.isArray(techGapsRaw)) {
-                      techGapsList = techGapsRaw;
+                      techGapsList = techGapsRaw.map(item => typeof item === 'string' ? item : (item.note || ""));
                     } else if (typeof techGapsRaw === "object") {
                       Object.values(techGapsRaw).forEach((val: any) => {
-                        if (Array.isArray(val)) techGapsList.push(...val);
+                        if (Array.isArray(val)) {
+                          val.forEach((item: any) => {
+                            if (typeof item === "string") {
+                              techGapsList.push(item);
+                            } else if (item && typeof item === "object" && item.note) {
+                              techGapsList.push(item.note);
+                            }
+                          });
+                        }
                       });
                     }
                   }
