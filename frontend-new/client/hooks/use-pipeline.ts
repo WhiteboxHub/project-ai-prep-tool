@@ -12,7 +12,7 @@ export function usePipeline() {
   const { sessionId } = useAuth();
   const [loading, setLoading] = useState(true);
   const [pipeline, setPipeline] = useState<PipelineStatus>({
-    setup: "pending", intro: "ready", interview: "locked",
+    setup: "pending", intro: "ready", interview: "ready",
   });
   const [readiness, setReadiness] = useState(0);
 
@@ -39,7 +39,7 @@ export function usePipeline() {
         const newPipeline: PipelineStatus = {
           setup: hasResume && hasApiKey ? "completed" : "pending",
           intro: hasIntroPassed ? "completed" : "ready",
-          interview: hasIntroPassed ? "ready" : "locked",
+          interview: "ready",
         };
 
         setPipeline(newPipeline);
