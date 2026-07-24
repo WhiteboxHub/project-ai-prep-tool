@@ -148,7 +148,7 @@ merge to main
 
 ### Required GitHub Secrets
 
-Add these secrets in GitHub repository settings:
+Add these secrets in GitHub repository settings (**Settings > Secrets and variables > Actions**):
 
 ```text
 GCP_PROJECT_ID
@@ -156,6 +156,8 @@ GCP_REGION
 GCP_SERVICE_ACCOUNT_KEY
 ARTIFACT_REGISTRY_REPO
 BACKEND_SERVICE_NAME
+FRONTEND_SERVICE_NAME
+VITE_API_URL
 ```
 
 Example values:
@@ -164,10 +166,13 @@ Example values:
 GCP_REGION=us-central1
 ARTIFACT_REGISTRY_REPO=ai-prep
 BACKEND_SERVICE_NAME=ai-prep-backend
+FRONTEND_SERVICE_NAME=ai-prep-frontend
+VITE_API_URL=https://ai-prep-backend-xyz-uc.a.run.app
 ```
 
 The service account behind `GCP_SERVICE_ACCOUNT_KEY` needs permission to push to
-Artifact Registry and deploy the backend Cloud Run service.
+Artifact Registry and deploy Cloud Run services.
+
 
 ### Backend Runtime Secrets
 
