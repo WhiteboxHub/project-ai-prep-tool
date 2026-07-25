@@ -4,11 +4,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Loader2,
-  CheckCircle2, AlertCircle, ArrowRight, Volume2, Camera, Lock
+  CheckCircle2, AlertCircle, ArrowRight, Volume2, Camera, Lock, Sparkles
 } from "lucide-react";
 import { VideoPanel } from "@/components/interview/VideoPanel";
 import { ControlBar } from "@/components/interview/ControlBar";
 import { CopilotPanel } from "@/components/interview/CopilotPanel";
+import { AssessmentConsentModal } from "@/components/interview/AssessmentConsentModal";
 import { getStageQuestions, evaluateLiveAnswer, completeInterview } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { usePipeline } from "@/hooks/use-pipeline";
@@ -96,6 +97,10 @@ export default function InterviewRoom() {
     window.speechSynthesis.speak(utt);
   }, []);
 
+  const [showConsentModal, setShowConsentModal] = useState(true);
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const hasSpokenQuestionRef = useRef(false);
+
   useEffect(() => {
     if (!sessionId) return;
     const init = async () => {
@@ -105,21 +110,25 @@ export default function InterviewRoom() {
         const q = data.question || data.questions?.[0] || "Tell me about yourself and your background.";
         setCurrentQuestion(q);
         setMessages([{ role: "ai", text: q }]);
-        speak(q);
       } catch (e) {
         const fallback = "Welcome! Let's start with: Tell me about yourself and your experience.";
         setCurrentQuestion(fallback);
         setMessages([{ role: "ai", text: fallback }]);
-        speak(fallback);
       } finally {
         setInitLoading(false);
       }
     };
     init();
-  }, [sessionId, speak, type, diff]);
+  }, [sessionId, type, diff]);
 
   // ── Speech Recognition ────────────────────────────────────────────────────
   const startRecognition = () => {
+    setSessionStarted(true);
+    if (!hasSpokenQuestionRef.current && currentQuestion) {
+      hasSpokenQuestionRef.current = true;
+      speak(currentQuestion);
+    }
+
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) { setError("Speech recognition not supported. Use Chrome."); return; }
     const rec = new SR();
@@ -304,9 +313,21 @@ export default function InterviewRoom() {
 
 
   return (
-    <div className="w-screen h-screen bg-gradient-to-br from-background via-card/30 to-background overflow-hidden">
+    <div className="w-screen h-screen bg-gradient-to-br from-background via-card/30 to-background overflow-hidden flex relative">
 
-      {/* Loading overlay */}
+      {/* Pre-session Assessment Permission & Consent Modal */}
+      <AnimatePresence>
+        {showConsentModal && (
+          <AssessmentConsentModal
+            mode="video"
+            title="Interview Verification & Device Consent"
+            onConsentGranted={() => setShowConsentModal(false)}
+            onCancel={() => navigate("/interview-select")}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Main Grid: Video Stream Left, Copilot Right */}
       {initLoading && (
         <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
           <div className="text-center space-y-3">
@@ -397,6 +418,26 @@ export default function InterviewRoom() {
 
         {/* Floating Live Transcript Indicator */}
         <AnimatePresence>
+          {!sessionStarted && !recording && !showConsentModal && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="glass-card px-6 py-3 rounded-2xl border border-primary/40 flex items-center justify-between gap-4 shadow-2xl backdrop-blur-xl max-w-xl w-full"
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary animate-pulse flex-shrink-0" />
+                <span className="text-xs sm:text-sm text-foreground font-semibold">
+                  Ready to begin? Click <strong className="text-primary font-bold">"Start Session"</strong> below.
+                </span>
+              </div>
+              <button
+                onClick={() => startRecognition()}
+                className="px-4 py-1.5 rounded-full bg-gradient-to-r from-primary to-secondary text-white text-xs font-bold shadow-md hover:scale-105 transition-all cursor-pointer whitespace-nowrap"
+              >
+                Start Session
+              </button>
+            </motion.div>
+          )}
+
           {transcript && (
             <motion.div 
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}

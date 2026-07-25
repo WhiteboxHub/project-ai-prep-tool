@@ -10,7 +10,7 @@ import { evaluateIntro, evaluateIntroText, getDynamicTemplate, getResumeSummary 
 import { useAuth } from "@/lib/AuthContext";
 import { usePipeline } from "@/hooks/use-pipeline";
 import { useMediaStream } from "@/hooks/useMediaStream";
-import { MainLayout } from "@/components/layout/MainLayout";
+import { AssessmentConsentModal } from "@/components/interview/AssessmentConsentModal";
 import { saveRecording, approveRecording } from "@/lib/indexedDB";
 import { toast } from "sonner";
 import type { VisionResults } from "@/lib/huggingFaceVision";
@@ -132,17 +132,16 @@ export default function IntroPracticeRoom() {
     window.speechSynthesis.speak(utt);
   }, []);
 
+  const [showConsentModal, setShowConsentModal] = useState(true);
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const hasSpokenWelcomeRef = useRef(false);
+
   useEffect(() => {
     if (!sessionId) return;
     getDynamicTemplate(sessionId).then((d) => {
       setTemplate(d.template || d.script || "");
     }).catch(() => {});
-    
-    // Initial welcome
-    setTimeout(() => {
-      speak("Welcome to your introduction practice. Whenever you're ready, tell me about yourself and your background.");
-    }, 1000);
-  }, [sessionId, speak]);
+  }, [sessionId]);
 
   // ── Pre-session health check ────────────────────────────────────────────────
   const checkSessionReady = async (): Promise<boolean> => {
@@ -493,9 +492,15 @@ export default function IntroPracticeRoom() {
 
     rec.onstart = async () => {
       // ───────────────────────────────────────────────────────────
-      // STEP 4: Mic is confirmed live — now start recorder immediately
+      // STEP 4: Mic is confirmed live — now start recorder & speak greeting
       // ───────────────────────────────────────────────────────────
       setRecording(true);
+      setSessionStarted(true);
+
+      if (!hasSpokenWelcomeRef.current) {
+        hasSpokenWelcomeRef.current = true;
+        speak("Welcome to your introduction practice. Whenever you're ready, tell me about yourself and your background.");
+      }
       
       const currentVideoTrack = screenTrackRef.current;
 
@@ -833,6 +838,18 @@ export default function IntroPracticeRoom() {
 
       <EvaluationLoadingScreen isVisible={loading || isFinalizing} />
 
+      {/* Pre-session Assessment Permission & Consent Modal */}
+      <AnimatePresence>
+        {showConsentModal && (
+          <AssessmentConsentModal
+            mode={isAudioOnly ? "audio" : "video"}
+            title="Intro Practice Verification & Consent"
+            onConsentGranted={() => setShowConsentModal(false)}
+            onCancel={() => navigate("/intro-select")}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Top Left Header Controls */}
       <div className="absolute top-6 left-6 z-50 flex items-center gap-3">
         <motion.button
@@ -955,6 +972,28 @@ export default function IntroPracticeRoom() {
 
         {/* Floating alerts / notifications */}
         <div className="absolute top-2 left-0 right-0 px-6 z-40 flex flex-col items-center gap-2 pointer-events-none">
+          <AnimatePresence>
+            {!sessionStarted && !recording && !showConsentModal && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="flex items-center gap-3 px-5 py-2.5 rounded-full bg-primary/20 border border-primary/40 backdrop-blur-md shadow-lg pointer-events-auto"
+              >
+                <Sparkles className="w-4 h-4 text-primary animate-pulse" />
+                <span className="text-xs sm:text-sm font-semibold text-foreground">
+                  Ready to practice? Click <strong className="text-primary font-bold">"Start Session"</strong> below to begin.
+                </span>
+                <button
+                  onClick={() => startRecognition()}
+                  className="ml-2 px-3 py-1 rounded-full bg-gradient-to-r from-primary to-secondary text-white text-xs font-bold shadow-md hover:scale-105 transition-all cursor-pointer"
+                >
+                  Start Session
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm max-w-3xl mx-auto pointer-events-auto">
               <span className="w-4 h-4 flex-shrink-0">!</span>{error}
