@@ -24,10 +24,18 @@ let _audioRequestInFlight: Promise<MediaStream | null> | null = null;
 let _videoRequestInFlight: Promise<MediaStream | null> | null = null;
 
 // ─── Pure device request functions ─────────────────────────────────────────
-async function acquireMicStream(): Promise<MediaStream | null> {
+async function acquireMicStream(deviceId?: string): Promise<MediaStream | null> {
   // Return cached stream if tracks are still live
   if (_audioStreamCache && _audioStreamCache.getAudioTracks().some(t => t.readyState === "live")) {
-    return _audioStreamCache;
+    if (!deviceId) return _audioStreamCache;
+    const currentTrack = _audioStreamCache.getAudioTracks()[0];
+    const settings = currentTrack.getSettings();
+    if (settings.deviceId === deviceId) {
+      return _audioStreamCache;
+    } else {
+      _audioStreamCache.getTracks().forEach(t => t.stop());
+      _audioStreamCache = null;
+    }
   }
   // De-duplicate in-flight requests (Strict Mode safe)
   if (_audioRequestInFlight) return _audioRequestInFlight;
@@ -37,13 +45,18 @@ async function acquireMicStream(): Promise<MediaStream | null> {
   //   2. If that fails (NotFoundError / OverconstrainedError on macOS), retry with plain { audio: true }
   //   3. On retry, wait 300ms for CoreAudio to release the previous failed lock
   const runAudioRequest = async (): Promise<MediaStream> => {
+    const constraints: MediaTrackConstraints = {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: true,
+    };
+    if (deviceId) {
+      constraints.deviceId = { exact: deviceId };
+    }
+
     try {
       return await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: true,
-        },
+        audio: constraints,
       });
     } catch (firstErr: any) {
       if (
@@ -53,7 +66,7 @@ async function acquireMicStream(): Promise<MediaStream | null> {
       ) {
         // Wait for OS audio subsystem to recover before retrying
         await new Promise(r => setTimeout(r, 300));
-        return navigator.mediaDevices.getUserMedia({ audio: true });
+        return navigator.mediaDevices.getUserMedia({ audio: deviceId ? { deviceId: { exact: deviceId } } : true });
       }
       throw firstErr;
     }
@@ -156,6 +169,24 @@ export function useMediaStream(requestOnMount = true, initialAudioEnabled = true
   const [videoError, setVideoError] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
 
+  const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
+  const [selectedMicId, setSelectedMicId] = useState<string>("");
+
+  const enumerateDevices = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const mics = devices.filter(d => d.kind === "audioinput");
+      setAvailableMics(mics);
+      if (mics.length > 0 && !selectedMicId) {
+        const activeId = _audioStreamCache?.getAudioTracks()[0]?.getSettings().deviceId;
+        setSelectedMicId(activeId || mics[0].deviceId);
+      }
+    } catch (e) {
+      console.warn("[useMediaStream] enumerateDevices error", e);
+    }
+  }, [selectedMicId]);
+
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -187,7 +218,7 @@ export function useMediaStream(requestOnMount = true, initialAudioEnabled = true
   }, []);
 
   // ── Microphone ─────────────────────────────────────────────────────────
-  const requestAudio = useCallback(async () => {
+  const requestAudio = useCallback(async (deviceId?: string) => {
     if (!navigator?.mediaDevices?.getUserMedia) {
       setMicPermission("unavailable");
       setAudioError("Browser does not support media devices.");
@@ -196,7 +227,7 @@ export function useMediaStream(requestOnMount = true, initialAudioEnabled = true
     setMicPermission("requesting");
     setAudioError("");
     try {
-      const audioStream = await acquireMicStream();
+      const audioStream = await acquireMicStream(deviceId);
       if (!mountedRef.current) return;
       setMicPermission("granted");
       if (audioStream) {
@@ -214,6 +245,7 @@ export function useMediaStream(requestOnMount = true, initialAudioEnabled = true
       }
       setMicEnabled(initialAudioEnabled);
       rebuildStream();
+      enumerateDevices();
     } catch (err: any) {
       if (!mountedRef.current) return;
       const { state, message } = classifyError(err);
@@ -222,7 +254,12 @@ export function useMediaStream(requestOnMount = true, initialAudioEnabled = true
       // Log as warn-level — this is expected when no mic is connected
       console.warn("[useMediaStream] Microphone:", err?.name, err?.message);
     }
-  }, [rebuildStream, initialAudioEnabled]);
+  }, [rebuildStream, initialAudioEnabled, enumerateDevices]);
+
+  const switchMicrophone = useCallback(async (deviceId: string) => {
+    setSelectedMicId(deviceId);
+    await requestAudio(deviceId);
+  }, [requestAudio]);
 
   // ── Camera ─────────────────────────────────────────────────────────────
   const requestVideo = useCallback(async () => {
@@ -303,7 +340,7 @@ export function useMediaStream(requestOnMount = true, initialAudioEnabled = true
         const average = sum / dataArray.length;
 
         // Debounce thresholding
-        if (average > 2) { // 2 is an ultra-low threshold to catch the quietest voices but ignore pure digital zero
+        if (average > 8) { // 8 is a threshold to catch real voices but ignore ambient room noise/fans
           speakingFrames++;
           silenceFrames = 0;
           if (speakingFrames > 3) setIsSpeaking(true);
@@ -393,5 +430,8 @@ export function useMediaStream(requestOnMount = true, initialAudioEnabled = true
     stopMedia,
     toggleAudio,
     toggleVideo,
+    availableMics,
+    selectedMicId,
+    switchMicrophone,
   };
 }

@@ -7,11 +7,15 @@ import { VoiceVerification } from "./VoiceVerification";
 
 interface IntroPhaseDeviceCheckProps {
   onContinue: () => void;
+  onBack?: () => void;
   stream: MediaStream | null;
   audioState: string;
   videoState: string;
   isAudioOnly: boolean;
   isCandidateSpeaking: boolean;
+  availableMics?: MediaDeviceInfo[];
+  selectedMicId?: string;
+  onMicChange?: (deviceId: string) => void;
 }
 
 type CheckId = "camera" | "face" | "mic" | "voice" | "network";
@@ -26,11 +30,15 @@ interface Check {
 
 export function IntroPhaseDeviceCheck({
   onContinue,
+  onBack,
   stream,
   audioState,
   videoState,
   isAudioOnly,
   isCandidateSpeaking,
+  availableMics = [],
+  selectedMicId = "",
+  onMicChange,
 }: IntroPhaseDeviceCheckProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -155,7 +163,15 @@ export function IntroPhaseDeviceCheck({
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-background via-card/30 to-background flex items-center justify-center p-6">
+    <div className="min-h-screen w-full bg-gradient-to-br from-background via-card/30 to-background flex flex-col items-center justify-center p-6 relative">
+      {onBack && (
+        <button 
+          onClick={onBack}
+          className="absolute top-6 left-6 p-2 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors z-50"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="rotate-180"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </button>
+      )}
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
@@ -206,9 +222,14 @@ export function IntroPhaseDeviceCheck({
                   <VoiceVerification
                     stream={stream}
                     isSpeaking={isCandidateSpeaking}
+                    availableMics={availableMics}
+                    selectedMicId={selectedMicId}
+                    onMicChange={onMicChange}
                     onVerified={() => {
                       setPassedChecks(prev => new Set(prev).add("voice"));
-                      setActiveCheckIndex(idx => idx + 1);
+                      setTimeout(() => {
+                        setActiveCheckIndex(idx => idx + 1);
+                      }, 1500);
                     }}
                     title={check.label}
                     description={check.instructionMsg}

@@ -173,6 +173,9 @@ export default function IntroPracticeRoom() {
     requestAudio,
     requestVideo,
     isSpeaking: isCandidateSpeaking,
+    availableMics,
+    selectedMicId,
+    switchMicrophone,
   } = useMediaStream(false, true);
 
   // Vision analytics — active only during recording
@@ -372,6 +375,7 @@ export default function IntroPracticeRoom() {
           <motion.div key="PERMISSION_REQUEST" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pt-12">
             <IntroPhasePermission
               onGranted={handlePermissionsGranted}
+              onBack={() => setPhase("WELCOME")}
               requestAudio={requestAudio}
               requestVideo={requestVideo}
               audioState={audioState}
@@ -379,6 +383,9 @@ export default function IntroPracticeRoom() {
               isAudioOnly={isAudioOnly}
               stream={stream}
               isCandidateSpeaking={isCandidateSpeaking}
+              availableMics={availableMics}
+              selectedMicId={selectedMicId}
+              onMicChange={switchMicrophone}
             />
           </motion.div>
         )}
@@ -387,24 +394,34 @@ export default function IntroPracticeRoom() {
           <motion.div key="DEVICE_CHECK" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pt-12">
             <IntroPhaseDeviceCheck
               onContinue={handleDeviceCheckContinue}
+              onBack={() => setPhase("PERMISSION_REQUEST")}
               stream={stream}
               audioState={audioState}
               videoState={videoState}
               isAudioOnly={isAudioOnly}
               isCandidateSpeaking={isCandidateSpeaking}
+              availableMics={availableMics}
+              selectedMicId={selectedMicId}
+              onMicChange={switchMicrophone}
             />
           </motion.div>
         )}
 
         {phase === "INTERVIEW_TIPS" && (
           <motion.div key="INTERVIEW_TIPS" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pt-12">
-            <IntroPhaseInterviewTips onReady={handleTipsReady} />
+            <IntroPhaseInterviewTips 
+              onReady={handleTipsReady} 
+              onBack={() => setPhase("DEVICE_CHECK")}
+            />
           </motion.div>
         )}
 
         {phase === "READY_CONFIRMATION" && (
           <motion.div key="READY_CONFIRMATION" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pt-12">
-            <IntroPhaseReadyConfirmation onBeginInterview={handleBeginInterview} />
+            <IntroPhaseReadyConfirmation 
+              onBeginInterview={handleBeginInterview} 
+              onBack={() => setPhase("INTERVIEW_TIPS")}
+            />
           </motion.div>
         )}
 

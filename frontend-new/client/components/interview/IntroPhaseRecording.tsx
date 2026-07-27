@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertCircle, Mic } from "lucide-react";
 import { VideoPanel } from "@/components/interview/VideoPanel";
-import { saveRecording } from "@/lib/indexedDB";
 import { toast } from "sonner";
+import { saveRecording } from "@/lib/indexedDB";
+import { getVisionCoaching } from "@/lib/visionCoaching";
+import { useMicrophoneLevel } from "@/hooks/useMicrophoneLevel";
 import { useAudioVisualizer } from "@/hooks/useAudioVisualizer";
 import type { VisionResults } from "@/lib/huggingFaceVision";
 import fixWebmDuration from "fix-webm-duration";
@@ -36,7 +38,12 @@ export function IntroPhaseRecording({
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [stopping, setStopping] = useState(false);
   const [silenceWarning, setSilenceWarning] = useState(false);
+  const [showStartBanner, setShowStartBanner] = useState(true);
+
+  // We use the audio visualizer for the zig-zag EQ bars
   const audioLevels = useAudioVisualizer(stream, 7);
+  // We still use microphone level to reliably detect sustained speech volume
+  const level = useMicrophoneLevel(stream);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRecorderRef = useRef<MediaRecorder | null>(null);
@@ -71,7 +78,6 @@ export function IntroPhaseRecording({
   }, []);
 
   // Show prominent start banner for 8 seconds
-  const [showStartBanner, setShowStartBanner] = useState(true);
   useEffect(() => {
     const t = setTimeout(() => setShowStartBanner(false), 8000);
     return () => clearTimeout(t);
@@ -355,13 +361,13 @@ export function IntroPhaseRecording({
                 </div>
               </div>
               {/* Visualizer bars */}
-              <div className="flex items-end gap-1.5 h-12">
-                {audioLevels.map((level, i) => (
+              <div className="flex items-end justify-center gap-2 h-16 mt-8">
+                {audioLevels.map((val, i) => (
                   <motion.div
                     key={i}
-                    animate={{ height: isCandidateSpeaking ? `${level * 100}%` : "15%" }}
-                    transition={{ type: "spring", bounce: 0, duration: 0.1 }}
-                    className={`w-2 rounded-full ${isCandidateSpeaking ? 'bg-primary' : 'bg-muted/50'}`}
+                    className="w-3 bg-primary rounded-full"
+                    animate={{ height: `${val * 100}%` }}
+                    transition={{ type: "tween", ease: "linear", duration: 0.05 }}
                   />
                 ))}
               </div>

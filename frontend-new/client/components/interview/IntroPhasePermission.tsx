@@ -5,6 +5,7 @@ import { VoiceVerification } from "./VoiceVerification";
 
 interface IntroPhasePermissionProps {
   onGranted: () => void;
+  onBack?: () => void;
   requestAudio: () => Promise<void> | void;
   requestVideo: () => Promise<void> | void;
   audioState: string;
@@ -12,10 +13,14 @@ interface IntroPhasePermissionProps {
   isAudioOnly: boolean;
   stream: MediaStream | null;
   isCandidateSpeaking: boolean;
+  availableMics?: MediaDeviceInfo[];
+  selectedMicId?: string;
+  onMicChange?: (deviceId: string) => void;
 }
 
 export function IntroPhasePermission({
   onGranted,
+  onBack,
   requestAudio,
   requestVideo,
   audioState,
@@ -23,6 +28,9 @@ export function IntroPhasePermission({
   isAudioOnly,
   stream,
   isCandidateSpeaking,
+  availableMics = [],
+  selectedMicId = "",
+  onMicChange,
 }: IntroPhasePermissionProps) {
   const [requesting, setRequesting] = useState(false);
   const [attempted, setAttempted] = useState(false);
@@ -50,6 +58,8 @@ export function IntroPhasePermission({
     const videoOk = isAudioOnly || videoState === "granted";
     if (audioOk && videoOk && attempted) {
       setPermissionsGranted(true);
+    } else {
+      setPermissionsGranted(false);
     }
   }, [audioState, videoState, attempted, isAudioOnly]);
 
@@ -81,7 +91,15 @@ export function IntroPhasePermission({
       ];
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-background via-card/30 to-background flex items-center justify-center p-6">
+    <div className="min-h-screen w-full bg-gradient-to-br from-background via-card/30 to-background flex flex-col items-center justify-center p-6 relative">
+      {onBack && (
+        <button 
+          onClick={onBack}
+          className="absolute top-6 left-6 p-2 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowRight className="w-5 h-5 rotate-180" />
+        </button>
+      )}
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
@@ -98,10 +116,14 @@ export function IntroPhasePermission({
         {/* Title */}
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold text-foreground">
-            {isAudioOnly ? "We need your microphone" : "We need your camera and microphone"}
+            {!permissionsGranted 
+              ? (isAudioOnly ? "We need your microphone" : "We need your camera and microphone")
+              : "Devices Connected"}
           </h1>
           <p className="text-muted-foreground text-sm leading-relaxed">
-            Your recordings are only used to generate interview feedback. Nothing is shared or stored publicly.
+            {!permissionsGranted
+              ? "Your recordings are only used to generate interview feedback. Nothing is shared or stored publicly."
+              : "Please speak a few words to verify your microphone is working correctly."}
           </p>
         </div>
 
@@ -201,6 +223,9 @@ export function IntroPhasePermission({
                 stream={stream}
                 isSpeaking={isCandidateSpeaking}
                 onVerified={() => setVoiceVerified(true)}
+                availableMics={availableMics}
+                selectedMicId={selectedMicId}
+                onMicChange={onMicChange}
               />
               
               <button

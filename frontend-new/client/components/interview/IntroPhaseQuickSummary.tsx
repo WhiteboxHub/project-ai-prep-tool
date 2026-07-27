@@ -65,8 +65,18 @@ export function IntroPhaseQuickSummary({ result, onViewDetails }: IntroPhaseQuic
           </motion.div>
         </div>
 
-
-
+        {/* Score Ring */}
+        <div className="flex justify-center">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.3, type: "spring" }}
+            className={`w-32 h-32 rounded-full flex flex-col items-center justify-center border-4 bg-gradient-to-br ${scoreGradient(scoreNum)}`}
+          >
+            <span className={`text-4xl font-black ${scoreColor(scoreNum)}`}>{scoreNum}</span>
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-1">Score</span>
+          </motion.div>
+        </div>
         {/* Encouragement */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
