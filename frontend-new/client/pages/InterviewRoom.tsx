@@ -325,7 +325,7 @@ export default function InterviewRoom() {
           >
             <MicOff className="w-3 h-3 text-amber-400 flex-shrink-0" />
             <span className="text-[11px] text-amber-300 font-medium">Mic unavailable</span>
-            <button onClick={requestAudio} className="ml-1 text-[10px] text-amber-400 underline hover:text-amber-200 transition-colors">
+            <button onClick={() => requestAudio()} className="ml-1 text-[10px] text-amber-400 underline hover:text-amber-200 transition-colors">
               retry
             </button>
           </motion.div>
