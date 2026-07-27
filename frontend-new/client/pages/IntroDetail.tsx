@@ -210,16 +210,16 @@ export default function IntroDetail() {
               <div className="aspect-video bg-black/95 rounded-2xl overflow-hidden shadow-xl border border-border/20">
                 {videoSrc ? (
                   isLocalVideo ? (
-                    <video src={videoSrc} controls autoPlay className="w-full h-full object-contain" />
+                    <video src={videoSrc} controls className="w-full h-full object-contain" />
                   ) : getYouTubeId(videoSrc) ? (
                     <iframe
                       className="w-full h-full"
-                      src={`https://www.youtube.com/embed/${getYouTubeId(videoSrc)}?autoplay=1`}
+                      src={`https://www.youtube.com/embed/${getYouTubeId(videoSrc)}`}
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                       allowFullScreen
                     ></iframe>
                   ) : (
-                    <video src={`${import.meta.env.VITE_API_URL || ""}${videoSrc}`} controls autoPlay className="w-full h-full object-contain" />
+                    <video src={`${import.meta.env.VITE_API_URL || ""}${videoSrc}`} controls className="w-full h-full object-contain" />
                   )
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
