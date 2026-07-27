@@ -25,6 +25,13 @@ currently enabled only for the backend.
 | Documents | PyMuPDF and python-docx |
 | Deployment-ready | Dockerfiles for both frontend and backend |
 
+## Features
+
+- **Introduction Practice (UX Revamp):** A fully guided, 14-phase interactive interview experience built as a robust state machine. It includes automatic device checks, webcam-only recording (no screen sharing for better UX), live transcriptions, silence detection, and AI-driven debriefs.
+- **Resume-Based Mock Interviews:** AI generates personalized technical questions based on the candidate's resume and job description.
+- **Detailed AI Evaluation:** The backend uses Whisper for high-accuracy speech-to-text, HuggingFace for vision analytics (eye contact, centering), and OpenAI/Gemini for deep technical coverage analysis, extracting specific gaps and hallucination-free feedback.
+- **Feedback & Reports:** Comprehensive score breakdowns covering delivery (communication, confidence, structure) and technical completeness.
+
 ## Backend
 
 ```powershell

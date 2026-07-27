@@ -34,9 +34,12 @@ export interface VisionEyeEstimate {
   calibrated: boolean;
 }
 
+export type VisionEmotion = "happy" | "sad" | "angry" | "neutral";
+
 export interface VisionFaceDetection {
   bounds: { x: number; y: number; width: number; height: number };
   eye: VisionEyeEstimate | null;
+  emotion: VisionEmotion;
 }
 
 export interface VisionResults {
@@ -173,6 +176,7 @@ export class HuggingFaceVisionTracker {
       const faces = faceResults.map(({ landmarks, blendshapes }) => ({
         bounds: getFaceBounds(landmarks, this.video.videoWidth, this.video.videoHeight),
         eye: this.estimateEyeMovement(landmarks, blendshapes),
+        emotion: estimateEmotion(blendshapes, landmarks),
       }));
 
       if (this.objectModel && now - this.lastObjectRun > this.objectIntervalMs) {
@@ -363,6 +367,42 @@ function estimateBlendshapeGaze(blendshapes: Array<{ categoryName: string; score
     lookingAway: strongest.score > strongest.threshold,
     score: strongest.score,
   };
+}
+
+function estimateEmotion(
+  blendshapes: Array<{ categoryName: string; score?: number }>, 
+  landmarks: Point[]
+): VisionEmotion {
+  const scores = Object.fromEntries(blendshapes.map((shape) => [shape.categoryName, shape.score ?? 0]));
+  
+  const smileScore = (scores.mouthSmileLeft ?? 0) + (scores.mouthSmileRight ?? 0);
+  const frownScore = (scores.mouthFrownLeft ?? 0) + (scores.mouthFrownRight ?? 0);
+  const angryScore = (scores.browDownLeft ?? 0) + (scores.browDownRight ?? 0);
+
+  if (smileScore > 0.15) return "happy";
+  if (angryScore > 0.2) return "angry";
+  if (frownScore > 0.15) return "sad";
+  
+  // Geometric Fallback for subtle expressions
+  if (landmarks && landmarks.length > 300) {
+    const leftCorner = landmarks[61];
+    const rightCorner = landmarks[291];
+    const topLip = landmarks[13];
+    const bottomLip = landmarks[14];
+    
+    // Average Y of mouth corners
+    const cornersY = (leftCorner.y + rightCorner.y) / 2;
+    // Center of mouth Y
+    const centerY = (topLip.y + bottomLip.y) / 2;
+    
+    // If corners are significantly higher than the center -> smile
+    if (centerY - cornersY > 0.015) return "happy";
+    
+    // If corners are significantly lower than the center -> sad/frown
+    if (cornersY - centerY > 0.01) return "sad";
+  }
+  
+  return "neutral";
 }
 
 function getFaceBounds(landmarks: Point[], width: number, height: number) {

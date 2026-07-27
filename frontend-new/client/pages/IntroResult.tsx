@@ -1,6 +1,6 @@
 import React from "react";
-import { useLocation, Link, Navigate } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Target, Lightbulb, TrendingUp, Eye, AlertCircle } from "lucide-react";
+import { useLocation, Link, Navigate, useNavigate } from "react-router-dom";
+import { ArrowLeft, CheckCircle2, Target, Lightbulb, TrendingUp, Eye, AlertCircle, RotateCcw, Download, ArrowRight, Home } from "lucide-react";
 import { motion } from "framer-motion";
 
 const asList = (value: any): string[] => {
@@ -12,6 +12,7 @@ const asList = (value: any): string[] => {
 
 export default function IntroResult() {
   const location = useLocation();
+  const navigate = useNavigate();
   const result = location.state?.result;
 
   if (!result) {
@@ -63,7 +64,8 @@ export default function IntroResult() {
   const nextAttemptInstructions = asList(scoreReasons.next_attempt_instructions);
   const visionFeedback = innerFeedback.vision_feedback || evalData.vision_feedback || {};
   const visionAnalytics = rawResponse.visionAnalytics || result.evaluation?.visionAnalytics || null;
-  const hasVisionFeedback = !!visionAnalytics || !!visionFeedback.summary || asList(visionFeedback.mistakes).length > 0 || asList(visionFeedback.improvements).length > 0;
+  const isAudioOnly = sessionStorage.getItem("interviewMode") === "audio";
+  const hasVisionFeedback = !isAudioOnly && (!!visionAnalytics || !!visionFeedback.summary || asList(visionFeedback.mistakes).length > 0 || asList(visionFeedback.improvements).length > 0);
 
   return (
     <div className="min-h-screen bg-background p-6 md:p-8 overflow-y-auto">
@@ -256,6 +258,70 @@ export default function IntroResult() {
           </div>
 
         </div>
+
+        {/* ── Next Actions (Phase 14) ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="glass-card p-6 rounded-2xl border border-border/50 space-y-4"
+        >
+          <h3 className="font-bold text-base text-foreground">What would you like to do next?</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <button
+              onClick={() => navigate("/intro-select")}
+              className="flex items-center gap-3 p-4 rounded-xl border border-border/50 bg-card/30 hover:bg-primary/10 hover:border-primary/30 text-left transition-all group"
+            >
+              <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                <RotateCcw className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground text-sm">Practice Again</p>
+                <p className="text-muted-foreground text-xs mt-0.5">Record a new introduction</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-3 p-4 rounded-xl border border-border/50 bg-card/30 hover:bg-emerald-500/10 hover:border-emerald-500/30 text-left transition-all group"
+            >
+              <div className="p-2 rounded-lg bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors">
+                <Download className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground text-sm">Download Report</p>
+                <p className="text-muted-foreground text-xs mt-0.5">Save your feedback as PDF</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => navigate("/interview-select")}
+              className="flex items-center gap-3 p-4 rounded-xl border border-border/50 bg-card/30 hover:bg-violet-500/10 hover:border-violet-500/30 text-left transition-all group"
+            >
+              <div className="p-2 rounded-lg bg-violet-500/10 group-hover:bg-violet-500/20 transition-colors">
+                <ArrowRight className="w-4 h-4 text-violet-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground text-sm">Mock Interview</p>
+                <p className="text-muted-foreground text-xs mt-0.5">Continue to interview practice</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => navigate("/")}
+              className="flex items-center gap-3 p-4 rounded-xl border border-border/50 bg-card/30 hover:bg-muted/50 text-left transition-all group"
+            >
+              <div className="p-2 rounded-lg bg-muted/50 group-hover:bg-muted transition-colors">
+                <Home className="w-4 h-4 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground text-sm">Return to Dashboard</p>
+                <p className="text-muted-foreground text-xs mt-0.5">Back to the main menu</p>
+              </div>
+            </button>
+          </div>
+        </motion.div>
+
       </div>
     </div>
   );

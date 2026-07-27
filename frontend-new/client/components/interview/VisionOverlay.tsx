@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
-import { Eye, ScanFace } from "lucide-react";
+import { Eye, ScanFace, Smile } from "lucide-react";
 import type { VisionResults } from "@/lib/huggingFaceVision";
+import { getVisionCoaching } from "@/lib/visionCoaching";
 
 interface VisionOverlayProps {
   results: VisionResults;
@@ -53,16 +54,22 @@ export function VisionOverlay({ results, status, error, videoRef }: VisionOverla
         },
         viewport,
       );
+      const coaching = getVisionCoaching(results, video.videoWidth, video.videoHeight);
+      
       const isLookingAtScreen = eye && !eye.lookingAway;
       
-      ctx.shadowColor = isLookingAtScreen ? 'rgba(34,197,94,0.4)' : 'rgba(255,48,69,0.4)';
+      ctx.shadowColor = coaching.isPerfect ? 'rgba(34,197,94,0.4)' : 'rgba(255,48,69,0.4)';
       ctx.shadowBlur = 15;
+      
+      const emotion = results.faces[0]?.emotion;
+      const baseMessage = coaching.message || "CENTERED";
       
       drawBox(
         ctx, 
         box, 
-        isLookingAtScreen ? FACE_LOOKING : FACE_WARNING, 
-        isLookingAtScreen ? "CENTERED" : "PLEASE LOOK INTO THE CAMERA"
+        coaching.isPerfect ? FACE_LOOKING : FACE_WARNING, 
+        baseMessage,
+        emotion
       );
       
       ctx.shadowBlur = 0; // reset
@@ -70,6 +77,7 @@ export function VisionOverlay({ results, status, error, videoRef }: VisionOverla
   }, [results, status, videoRef]);
 
   const primaryEye = results.faces[0]?.eye;
+  const primaryEmotion = results.faces[0]?.emotion;
   const faceCount = results.faces.length;
   const objectCount = results.objects.length;
 
@@ -102,13 +110,34 @@ function drawBox(
   box: { x: number; y: number; width: number; height: number },
   color: string,
   label?: string,
+  emotion?: string,
 ) {
   ctx.strokeStyle = color;
-  ctx.fillStyle = color;
   ctx.strokeRect(box.x, box.y, box.width, box.height);
-  if (!label) return;
+  
+  if (!label && !emotion) return;
   const labelY = Math.max(14, box.y - 5);
-  ctx.fillText(label, box.x, labelY);
+  
+  let currentX = box.x;
+  
+  if (emotion) {
+    const emotionStr = `[${emotion.toUpperCase()}] `;
+    if (emotion === "happy") {
+      ctx.fillStyle = "#22c55e"; // green
+    } else if (emotion === "angry" || emotion === "sad") {
+      ctx.fillStyle = "#ff3045"; // red
+    } else {
+      ctx.fillStyle = "#d4d4d8"; // light gray for neutral
+    }
+    
+    ctx.fillText(emotionStr, currentX, labelY);
+    currentX += ctx.measureText(emotionStr).width;
+  }
+  
+  if (label) {
+    ctx.fillStyle = color;
+    ctx.fillText(label, currentX, labelY);
+  }
 }
 
 function getObjectCoverViewport(videoWidth: number, videoHeight: number, containerWidth: number, containerHeight: number) {
