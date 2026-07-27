@@ -27,7 +27,11 @@ currently enabled only for the backend.
 
 ## Features
 
-- **Introduction Practice (UX Revamp):** A fully guided, 14-phase interactive interview experience built as a robust state machine. It includes automatic device checks, webcam-only recording (no screen sharing for better UX), live transcriptions, silence detection, and AI-driven debriefs.
+- **Introduction Practice (UX Revamp):** A fully guided, interactive interview experience built as a robust state machine. It includes automatic device checks, seamless back-navigation, webcam-only recording (no screen sharing for better UX), live transcriptions, silence detection, and AI-driven debriefs.
+- **Live Device Readiness & Coaching:** 
+  - **Camera Coaching:** Uses Hugging Face MediaPipe to analyze live video frames and provides real-time coaching (e.g., "Move slightly left", "Only one person should be visible") to ensure perfect face framing before the interview begins.
+  - **Microphone Testing:** Real-time Web Audio API integration with a live zig-zag EQ visualizer to confirm voice input.
+  - **Device Hot-Swapping:** Automatic microphone enumeration and dropdown selection, instantly hot-swapping audio streams without breaking permissions or active constraints.
 - **Resume-Based Mock Interviews:** AI generates personalized technical questions based on the candidate's resume and job description.
 - **Detailed AI Evaluation:** The backend uses Whisper for high-accuracy speech-to-text, HuggingFace for vision analytics (eye contact, centering), and OpenAI/Gemini for deep technical coverage analysis, extracting specific gaps and hallucination-free feedback.
 - **Feedback & Reports:** Comprehensive score breakdowns covering delivery (communication, confidence, structure) and technical completeness.
