@@ -59,8 +59,6 @@ export function IntroPhaseDeviceCheck({
     videoRef,
   });
 
-    videoRef,
-  });
 
   // Wire up video preview
   useEffect(() => {
@@ -260,18 +258,6 @@ export function IntroPhaseDeviceCheck({
                         <p className="text-xs text-muted-foreground animate-pulse">
                           {check.instructionMsg}
                         </p>
-                      )}
-                      {check.id === "voice" && (
-                        <div className="flex items-end gap-1 h-6">
-                          {audioLevels.map((level, idx) => (
-                            <motion.div
-                              key={idx}
-                              animate={{ height: isCandidateSpeaking ? `${level * 100}%` : "10%" }}
-                              transition={{ type: "spring", bounce: 0, duration: 0.1 }}
-                              className={`w-1.5 rounded-full ${isCandidateSpeaking ? 'bg-primary' : 'bg-primary/20'}`}
-                            />
-                          ))}
-                        </div>
                       )}
                     </div>
                   )}
