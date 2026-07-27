@@ -16,7 +16,7 @@ interface VideoPanelProps {
   onExpand?: () => void;
   mediaStream?: MediaStream | null;
   enableVision?: boolean;
-  onVisionResults?: (results: VisionResults) => void;
+  onVisionResults?: (results: VisionResults, width?: number, height?: number) => void;
   hideCamera?: boolean;
 }
 
@@ -53,7 +53,13 @@ export function VideoPanel({
   }, [mediaStream]);
 
   useEffect(() => {
-    if (shouldTrackVision) onVisionResults?.(visionResults);
+    if (shouldTrackVision) {
+      onVisionResults?.(
+        visionResults, 
+        videoRef.current?.videoWidth, 
+        videoRef.current?.videoHeight
+      );
+    }
   }, [onVisionResults, shouldTrackVision, visionResults]);
 
   return (
@@ -61,7 +67,7 @@ export function VideoPanel({
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
-      className={`relative rounded-2xl overflow-hidden border-2 ${
+      className={`relative rounded-2xl overflow-hidden border-2 w-full ${
         isSpeaking && !isMuted ? "border-primary/50 shadow-2xl shadow-primary/30" : "border-border/30"
       } smooth-transition h-full min-h-[300px] sm:min-h-[400px] flex items-center justify-center bg-gradient-to-br from-card/80 to-card/40`}
     >
