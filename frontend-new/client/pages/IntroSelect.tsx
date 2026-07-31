@@ -42,19 +42,6 @@ export default function IntroSelect() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [showScrollButton, setShowScrollButton] = useState(true);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 150) {
-        setShowScrollButton(false);
-      } else {
-        setShowScrollButton(true);
-      }
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -102,9 +89,18 @@ export default function IntroSelect() {
         {currentPage === 1 && (
           <div className="min-h-[calc(100vh-8.5rem)] flex flex-col justify-center pb-12">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-2 text-center max-w-2xl mx-auto relative">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-4">
-                <Sparkles className="w-4 h-4 text-primary" />
-                <span className="text-sm text-primary font-semibold">Intro Practice</span>
+              <div className="flex items-center justify-center gap-3 mb-4 flex-wrap">
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <span className="text-sm text-primary font-semibold">Intro Practice</span>
+                </div>
+                <button
+                  onClick={() => navigate("/history")}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary to-secondary text-white shadow-md shadow-primary/20 hover:shadow-primary/30 border border-primary/20 hover:scale-105 active:scale-95 transition-all duration-300 text-sm font-semibold cursor-pointer"
+                >
+                  <span>View Previous Feedback</span>
+                  <ChevronRight className="w-4 h-4 text-white" />
+                </button>
               </div>
               <h2 className="text-3xl md:text-4xl font-bold text-foreground">Choose Your Introduction Format</h2>
               <p className="text-muted-foreground text-lg">Choose between a general introduction or tailor it to a specific job description.</p>
@@ -222,25 +218,6 @@ export default function IntroSelect() {
             </div>
           )}
         </AnimatePresence>
-
-        {history.length > 0 && showScrollButton && (
-          <AnimatePresence>
-            <motion.div
-              initial={{ opacity: 0, y: 20, x: "-50%" }}
-              animate={{ opacity: 1, y: 0, x: "-50%" }}
-              exit={{ opacity: 0, y: 20, x: "-50%" }}
-              className="fixed bottom-6 left-[calc(50%+32px)] z-20"
-            >
-              <button
-                onClick={() => navigate("/history")}
-                className="flex items-center gap-2.5 px-5 py-3 rounded-full bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/30 hover:shadow-primary/40 border border-primary/20 hover:scale-105 active:scale-95 transition-all duration-300 text-xs font-bold cursor-pointer"
-              >
-                <span>View Previous Feedback</span>
-                <ChevronRight className="w-4 h-4 text-white mt-0.5" />
-              </button>
-            </motion.div>
-          </AnimatePresence>
-        )}
       </div>
     </MainLayout>
   );
